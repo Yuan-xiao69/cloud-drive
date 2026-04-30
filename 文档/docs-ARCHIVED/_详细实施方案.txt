@@ -1,0 +1,1878 @@
+# 项目详细实施方案 v2.0
+# 制定时间：2026-04-24
+# 状态：待审核
+# 目标：让 AI 能够完全按照方案执行开发
+
+================================================================================
+第一部分：项目概述与设计参考
+================================================================================
+
+## 1.1 设计参考
+
+本方案参考 GitHub 官方实现，设计以下核心功能模块：
+
+### GitHub 参考功能
+
+| GitHub 功能 | 本项目对应 | 说明 |
+|------------|-----------|------|
+| Repository Files | 仓库文件管理 | 类 Windows 资源管理器 |
+| Fork | Fork 申请 | 需要审批 |
+| Star/Watch | Star/Watch | 已有 |
+| Issues | 讨论区 | 扩展 |
+| Pull Requests | Fork 申请 | 增强 |
+| Git LFS | 大文件存储 | MinIO |
+| Notifications | 通知系统 | 增强 |
+| Settings | 设置面板 | 已有 |
+
+### 参考链接
+
+- GitHub API: https://docs.github.com/en/rest
+- GitHub 文件浏览: https://docs.github.com/en/repositories/working-with-files
+- GitHub Fork: https://docs.github.com/en/get-started/quickstart/fork-a-repo
+
+## 1.2 技术规范
+
+### 代码规范
+
+```yaml
+# .eslintrc.yml
+extends:
+  - next/core-web-vitals
+  - plugin:@typescript-eslint/recommended
+  - plugin:react/recommended
+
+rules:
+  '@typescript-eslint/no-explicit-any': error
+  '@typescript-eslint/no-unused-vars': error
+  'no-console': warn
+  'prefer-const': error
+  'no-var': error
+```
+
+### 命名规范
+
+| 类型 | 规范 | 示例 |
+|------|------|------|
+| 文件 | kebab-case | `file-manager.tsx` |
+| 组件 | PascalCase | `FileManager.tsx` |
+| 函数 | camelCase | `handleFileUpload` |
+| 常量 | UPPER_SNAKE | `MAX_FILE_SIZE` |
+| 类型 | PascalCase | `FileItem` |
+| API 路由 | kebab-case | `/api/file-upload` |
+| 数据库表 | snake_case | `repo_file` |
+| 数据库字段 | snake_case | `file_name` |
+
+### Git 提交规范
+
+```
+<type>(<scope>): <subject>
+
+# type: feat|fix|docs|style|refactor|test|chore
+# scope: api|ui|db|auth|repo|notification
+
+# 示例
+feat(repo): 添加文件资源管理器组件
+fix(api): 修复上传文件大小限制
+docs(readme): 更新 README
+```
+
+================================================================================
+第二部分：数据库详细设计
+================================================================================
+
+## 2.1 ER 图
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│    User     │────<│ Repository  │────<│  RepoFile   │
+└─────────────┘     └─────────────┘     └─────────────┘
+      │                   │                   │
+      │                   │                   │
+      ▼                   ▼                   ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│UserPenalty  │     │ForkRequest  │     │ FileVersion │
+└─────────────┘     └─────────────┘     └─────────────┘
+      │
+      ▼
+┌─────────────┐
+│   Appeal    │
+└─────────────┘
+```
+
+## 2.2 数据表详细定义
+
+### 2.2.1 RepoFile（仓库文件）【新建】
+
+```prisma
+/// 仓库文件表 - 替代原有的 RepoItem
+/// 支持文件夹和文件，路径层级通过 parentId 实现
+model RepoFile {
+  id          String    @id @default(cuid())
+  repoId      String    @map("repo_id")
+  parentId    String?   @map("parent_id")  // null 表示根目录
+  name        String    @map("file_name")   @db.VarChar(255)
+  type        String    @map("file_type")   @db.VarChar(20)  // 'file' | 'folder'
+  size        Int       @default(0)         @map("file_size")
+  mimeType    String?   @map("mime_type")   @db.VarChar(100)
+  content     String?   @db.Text            // 小文件直接存储内容
+  storageKey  String?   @map("storage_key") @db.VarChar(500)  // MinIO 路径
+  hash        String?   @db.VarChar(64)    // SHA256 用于去重
+  depth       Int       @default(0)         @map("folder_depth")
+  path        String    @db.VarChar(2000)   // 完整路径如 /src/components/Button.tsx
+  sortOrder   Int       @default(0)         @map("sort_order")
+  isDeleted   Boolean   @default(false)      @map("is_deleted")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedBy   String?   @map("deleted_by")
+  createdAt   DateTime  @default(now())     @map("created_at")
+  updatedAt   DateTime  @updatedAt          @map("updated_at")
+
+  // 关系
+  repo        Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  parent      RepoFile?  @relation("FileParent", fields: [parentId], references: [id])
+  children    RepoFile[]  @relation("FileParent")
+  versions    FileVersion[]
+  shareLinks  ShareLink[]
+
+  // 索引
+  @@index([repoId, parentId])
+  @@index([repoId, type])
+  @@index([repoId, path])
+  @@index([hash])
+  @@map("repo_file")
+}
+
+/// 文件版本历史
+model FileVersion {
+  id          String   @id @default(cuid())
+  fileId      String   @map("file_id")
+  content     String?  @db.Text
+  storageKey  String?  @map("storage_key")  @db.VarChar(500)
+  size        Int      @default(0)           @map("file_size")
+  hash        String   @db.VarChar(64)
+  message     String?  @db.Text              // 版本说明
+  createdBy   String   @map("created_by")
+  createdAt   DateTime @default(now())      @map("created_at")
+
+  file        RepoFile  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([fileId, createdAt])
+  @@map("file_version")
+}
+
+/// 分享链接
+model ShareLink {
+  id          String    @id @default(cuid())
+  fileId      String?   @map("file_id")
+  folderId    String?   @map("folder_id")
+  token       String    @unique  @db.VarChar(64)
+  password    String?   @db.VarChar(255)    // bcrypt 加密
+  maxViews    Int?      @map("max_views")
+  viewCount   Int       @default(0)         @map("view_count")
+  expiresAt   DateTime? @map("expires_at")
+  createdBy   String    @map("created_by")
+  createdAt   DateTime  @default(now())      @map("created_at")
+
+  file        RepoFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folder      RepoFile? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@map("share_link")
+}
+
+/// Fork 申请
+model ForkRequest {
+  id          String    @id @default(cuid())
+  repoId      String    @map("repo_id")
+  requesterId String    @map("requester_id")
+  message     String?   @db.Text
+  status      String    @default("pending")  @db.VarChar(20)
+                                                    // pending|approved|rejected|expired
+  note        String?   @db.Text              // 审批备注
+  processedBy String?   @map("processed_by")
+  processedAt DateTime? @map("processed_at")
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now())        @map("created_at")
+  updatedAt   DateTime  @updatedAt             @map("updated_at")
+
+  repo        Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  requester   User       @relation(fields: [requesterId], references: [id])
+
+  @@index([repoId, status])
+  @@index([requesterId])
+  @@map("fork_request")
+}
+```
+
+### 2.2.2 现有表扩展
+
+```prisma
+/// 在现有 Repository 表中添加字段
+model Repository {
+  // ... 现有字段 ...
+
+  // 新增字段
+  visibility     String  @default("public") @map("visibility") @db.VarChar(20)
+                                                      // public|private|request
+  forkCount      Int     @default(0)          @map("fork_count")
+  storageUsed    BigInt  @default(0)          @map("storage_used")
+  storageLimit   BigInt  @default(10737418240) @map("storage_limit")  // 10GB
+  allowFork      Boolean @default(true)       @map("allow_fork")
+  isLocked       Boolean @default(false)      @map("is_locked")
+  isArchived     Boolean @default(false)      @map("is_archived")
+
+  // 关系扩展
+  files          RepoFile[]
+  forkRequests   ForkRequest[]
+  forkedFrom     Repository? @relation("RepoFork", fields: [forkedFromId], references: [id])
+  forks          Repository[] @relation("RepoFork")
+  forkedFromId   String?     @map("forked_from_id")
+}
+
+/// 在现有 Notification 表中添加字段
+model Notification {
+  // ... 现有字段 ...
+
+  // 新增字段
+  type        String  @default("user_notice")  @map("notif_type")
+                                                    // announcement|admin_notice|user_notice
+  priority    String  @default("normal")        @map("priority")
+                                                    // urgent|high|normal|low
+  isGlobal    Boolean @default(false)            @map("is_global")
+  showBanner  Boolean @default(false)            @map("show_banner")
+  bannerDismissed Boolean @default(false)         @map("banner_dismissed")
+  expiresAt   DateTime? @map("expires_at")
+}
+```
+
+## 2.3 数据库约束
+
+```sql
+-- 唯一约束
+ALTER TABLE repo_file ADD CONSTRAINT uk_repo_file_path UNIQUE (repo_id, path);
+ALTER TABLE share_link ADD CONSTRAINT uk_share_token UNIQUE (token);
+
+-- 检查约束
+ALTER TABLE repo_file ADD CONSTRAINT chk_file_type CHECK (file_type IN ('file', 'folder'));
+ALTER TABLE fork_request ADD CONSTRAINT chk_fork_status CHECK (status IN ('pending', 'approved', 'rejected', 'expired'));
+ALTER TABLE notification ADD CONSTRAINT chk_priority CHECK (priority IN ('urgent', 'high', 'normal', 'low'));
+
+-- 外键约束
+ALTER TABLE repo_file ADD CONSTRAINT fk_repo_file_repo FOREIGN KEY (repo_id) REFERENCES repository(id) ON DELETE CASCADE;
+ALTER TABLE repo_file ADD CONSTRAINT fk_repo_file_parent FOREIGN KEY (parent_id) REFERENCES repo_file(id) ON DELETE CASCADE;
+```
+
+================================================================================
+第三部分：API 详细设计
+================================================================================
+
+## 3.1 API 规范
+
+### 3.1.1 RESTful 规范
+
+```
+基础格式: /api/v1/{resource}/{id?}/{sub-resource?}
+
+请求格式:
+- Content-Type: application/json
+- Authorization: Bearer {token}
+
+响应格式:
+{
+  "success": boolean,
+  "data": any,
+  "message": string,
+  "errors": array,
+  "meta": {
+    "page": number,
+    "pageSize": number,
+    "total": number,
+    "totalPages": number
+  }
+}
+```
+
+### 3.1.2 HTTP 状态码
+
+| 状态码 | 含义 | 使用场景 |
+|--------|------|---------|
+| 200 | OK | 成功获取/更新 |
+| 201 | Created | 成功创建 |
+| 204 | No Content | 成功删除 |
+| 400 | Bad Request | 参数错误 |
+| 401 | Unauthorized | 未登录 |
+| 403 | Forbidden | 权限不足/被限制 |
+| 404 | Not Found | 资源不存在 |
+| 409 | Conflict | 资源冲突 |
+| 429 | Too Many Requests | 请求过于频繁 |
+| 500 | Internal Error | 服务器错误 |
+
+## 3.2 文件管理 API
+
+### 3.2.1 获取文件列表
+
+```
+GET /api/v1/repos/{owner}/{repo}/files
+
+Query Parameters:
+- parentId: string (可选, 默认根目录)
+- type: 'all' | 'file' | 'folder' (默认 'all')
+- sort: 'name' | 'size' | 'updated' (默认 'name')
+- order: 'asc' | 'desc' (默认 'asc')
+- page: number (默认 1)
+- pageSize: number (默认 50, 最大 100)
+
+Response 200:
+{
+  "success": true,
+  "data": [
+    {
+      "id": "clx123...",
+      "name": "src",
+      "type": "folder",
+      "size": 0,
+      "path": "/src",
+      "depth": 1,
+      "fileCount": 15,
+      "updatedAt": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": "clx456...",
+      "name": "README.md",
+      "type": "file",
+      "size": 2048,
+      "mimeType": "text/markdown",
+      "path": "/README.md",
+      "depth": 0,
+      "hash": "abc123...",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 50,
+    "total": 25,
+    "totalPages": 1
+  }
+}
+```
+
+### 3.2.2 创建文件/文件夹
+
+```
+POST /api/v1/repos/{owner}/{repo}/files
+
+Request Body:
+{
+  "parentId": string | null,  // null 表示在根目录创建
+  "name": string,              // 文件/文件夹名称
+  "type": "file" | "folder",
+  "content": string,           // 文件内容（type=file 时必需）
+  "message": string            // 创建说明（可选）
+}
+
+Response 201:
+{
+  "success": true,
+  "data": {
+    "id": "clx789...",
+    "name": "test.ts",
+    "type": "file",
+    "size": 1024,
+    "path": "/src/test.ts",
+    "createdAt": "2024-01-15T10:30:00Z"
+  }
+}
+
+Errors:
+400: 文件名不合法 / 文件已存在 / 父文件夹不存在
+403: 仓库已锁定 / 用户被限制创建文件
+404: 仓库不存在
+```
+
+### 3.2.3 获取文件详情
+
+```
+GET /api/v1/repos/{owner}/{repo}/files/{fileId}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "id": "clx456...",
+    "name": "README.md",
+    "type": "file",
+    "size": 2048,
+    "mimeType": "text/markdown",
+    "content": "# Project\n\nThis is...",
+    "path": "/README.md",
+    "depth": 0,
+    "hash": "abc123...",
+    "isDeleted": false,
+    "createdAt": "2024-01-01T00:00:00Z",
+    "updatedAt": "2024-01-15T10:30:00Z",
+    "version": 3,
+    "versions": [
+      {
+        "id": "v1",
+        "message": "Initial commit",
+        "createdAt": "2024-01-01T00:00:00Z"
+      },
+      {
+        "id": "v2",
+        "message": "Update README",
+        "createdAt": "2024-01-10T08:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+### 3.2.4 更新文件
+
+```
+PATCH /api/v1/repos/{owner}/{repo}/files/{fileId}
+
+Request Body:
+{
+  "name": string,        // 新名称（可选）
+  "content": string,     // 新内容（可选）
+  "message": string,     // 更新说明（必需 when content changed）
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "id": "clx456...",
+    "name": "README.md",
+    "size": 2560,
+    "hash": "def456...",
+    "version": 4,
+    "updatedAt": "2024-01-16T10:30:00Z"
+  }
+}
+```
+
+### 3.2.5 移动/重命名文件
+
+```
+POST /api/v1/repos/{owner}/{repo}/files/{fileId}/move
+
+Request Body:
+{
+  "targetParentId": string | null,  // 目标父文件夹，null 表示根目录
+  "name": string,                   // 新名称（可选，不改变则不填）
+  "message": string                 // 操作说明
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "id": "clx456...",
+    "name": "new-name.ts",
+    "parentId": "clx111...",
+    "path": "/src/new-name.ts",
+    "oldPath": "/src/old-name.ts",
+    "updatedAt": "2024-01-16T10:30:00Z"
+  }
+}
+
+Notes:
+- 如果是文件夹，会自动更新所有子文件的 path
+- 移动到已存在的同名文件夹会报错
+```
+
+### 3.2.6 复制文件
+
+```
+POST /api/v1/repos/{owner}/{repo}/files/{fileId}/copy
+
+Request Body:
+{
+  "targetParentId": string | null,
+  "name": string,  // 复制后的名称
+  "message": string
+}
+
+Response 201:
+{
+  "success": true,
+  "data": {
+    "id": "clx999...",
+    "name": "Button Copy.tsx",
+    "parentId": "clx111...",
+    "path": "/src/components/Button Copy.tsx",
+    "createdAt": "2024-01-16T10:30:00Z"
+  }
+}
+```
+
+### 3.2.7 删除文件（软删除）
+
+```
+DELETE /api/v1/repos/{owner}/{repo}/files/{fileId}
+
+Query Parameters:
+- permanent: boolean (默认 false, true 表示永久删除)
+
+Request Body:
+{
+  "message": string  // 删除说明
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "id": "clx456...",
+    "isDeleted": true,
+    "deletedAt": "2024-01-16T10:30:00Z",
+    "willPermanentDeleteAt": "2024-02-15T10:30:00Z"  // 30天后自动删除
+  }
+}
+
+Notes:
+- 文件夹删除会递归删除所有子文件
+- 删除后可恢复，有效期 30 天
+```
+
+### 3.2.8 恢复删除
+
+```
+POST /api/v1/repos/{owner}/{repo}/files/{fileId}/restore
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "id": "clx456...",
+    "isDeleted": false,
+    "deletedAt": null,
+    "restoredAt": "2024-01-16T11:00:00Z"
+  }
+}
+```
+
+## 3.3 上传 API
+
+### 3.3.1 初始化上传
+
+```
+POST /api/v1/repos/{owner}/{repo}/upload/init
+
+Request Body:
+{
+  "fileName": string,
+  "fileSize": number,
+  "parentId": string | null,
+  "hash": string  // 客户端计算的文件 hash
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "uploadId": "upload_123",
+    "fileId": "clx456...",
+    "shouldUpload": true,  // false 表示秒传成功（hash 已存在）
+    "chunks": [
+      { "index": 0, "size": 5242880 },
+      { "index": 1, "size": 5242880 },
+      { "index": 2, "size": 1024000 }
+    ]
+  }
+}
+```
+
+### 3.3.2 上传分片
+
+```
+POST /api/v1/repos/{owner}/{repo}/upload/{uploadId}/chunk
+
+Request Body: multipart/form-data
+- chunk: File
+- index: number
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "index": 1,
+    "uploaded": true,
+    "progress": 66  // 已上传百分比
+  }
+}
+```
+
+### 3.3.3 完成上传
+
+```
+POST /api/v1/repos/{owner}/{repo}/upload/{uploadId}/complete
+
+Request Body:
+{
+  "message": string  // 上传说明
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "fileId": "clx456...",
+    "name": "large-file.zip",
+    "size": 15728640,
+    "hash": "abc123...",
+    "createdAt": "2024-01-16T10:30:00Z"
+  }
+}
+```
+
+### 3.3.4 文件夹上传
+
+```
+POST /api/v1/repos/{owner}/{repo}/upload/folder
+
+Request Body:
+{
+  "parentId": string | null,
+  "structure": [
+    {
+      "name": "src",
+      "type": "folder",
+      "children": [
+        { "name": "index.ts", "type": "file" },
+        { "name": "components", "type": "folder", "children": [...] }
+      ]
+    },
+    { "name": "README.md", "type": "file" }
+  ]
+}
+
+Response 201:
+{
+  "success": true,
+  "data": {
+    "created": 15,
+    "failed": 0,
+    "files": [
+      { "name": "src", "type": "folder", "id": "clx001..." },
+      { "name": "index.ts", "type": "file", "id": "clx002..." }
+    ]
+  }
+}
+```
+
+## 3.4 Fork 申请 API
+
+### 3.4.1 申请 Fork
+
+```
+POST /api/v1/repos/{owner}/{repo}/fork-request
+
+Request Body:
+{
+  "message": string  // 申请说明
+}
+
+Response 201:
+{
+  "success": true,
+  "data": {
+    "id": "fr_123",
+    "status": "pending",
+    "createdAt": "2024-01-16T10:30:00Z",
+    "expiresAt": "2024-01-23T10:30:00Z"
+  }
+}
+
+Errors:
+400: 仓库不允许 Fork / 已存在待处理的申请
+403: 您已被禁言 / 您已被限制创建仓库
+404: 仓库不存在
+```
+
+### 3.4.2 获取申请列表（仓库所有者）
+
+```
+GET /api/v1/repos/{owner}/{repo}/fork-requests
+
+Query Parameters:
+- status: 'pending' | 'approved' | 'rejected' | 'expired' (默认 'pending')
+- page: number
+- pageSize: number
+
+Response 200:
+{
+  "success": true,
+  "data": [
+    {
+      "id": "fr_123",
+      "requester": {
+        "id": "user_456",
+        "username": "lisi",
+        "avatarUrl": "https://..."
+      },
+      "message": "想学习这个项目",
+      "status": "pending",
+      "createdAt": "2024-01-16T10:30:00Z"
+    }
+  ],
+  "meta": {...}
+}
+```
+
+### 3.4.3 审批 Fork 申请
+
+```
+PATCH /api/v1/repos/{owner}/{repo}/fork-requests/{requestId}
+
+Request Body:
+{
+  "action": "approve" | "reject",
+  "note": string  // 审批备注
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "id": "fr_123",
+    "status": "approved",
+    "processedAt": "2024-01-16T11:00:00Z",
+    "forkedRepo": {
+      "id": "repo_789",
+      "fullName": "lisi/my-project",
+      "url": "https://.../lisi/my-project"
+    }
+  }
+}
+```
+
+## 3.5 分享 API
+
+### 3.5.1 创建分享链接
+
+```
+POST /api/v1/share
+
+Request Body:
+{
+  "fileId": string,
+  "password": string,      // 可选
+  "maxViews": number,       // 可选，最大查看次数
+  "expiresAt": string      // 可选，过期时间 ISO 格式
+}
+
+Response 201:
+{
+  "success": true,
+  "data": {
+    "token": "abc123def456...",
+    "url": "https://domain.com/share/abc123def456",
+    "expiresAt": "2024-02-16T00:00:00Z"
+  }
+}
+```
+
+### 3.5.2 访问分享
+
+```
+GET /api/v1/share/{token}
+
+Query Parameters:
+- password: string  // 如果有密码
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "type": "file",
+    "name": "README.md",
+    "size": 2048,
+    "mimeType": "text/markdown",
+    "content": "# Project...",
+    "viewCount": 5
+  }
+}
+```
+
+## 3.6 通知 API
+
+### 3.6.1 发送系统公告
+
+```
+POST /api/v1/admin/announcements
+
+Request Body:
+{
+  "title": string,
+  "content": string,
+  "type": "info" | "warning" | "critical",
+  "priority": "urgent" | "high" | "normal" | "low",
+  "showBanner": boolean,
+  "dismissible": boolean,
+  "expiresAt": string | null
+}
+
+Response 201:
+{
+  "success": true,
+  "data": {
+    "id": "ann_123",
+    "title": "系统维护通知",
+    "createdAt": "2024-01-16T10:30:00Z",
+    "sentTo": "all_users"
+  }
+}
+```
+
+### 3.6.2 发送管理员通知
+
+```
+POST /api/v1/admin/notifications
+
+Request Body:
+{
+  "userId": string | "all",  // 指定用户或全体
+  "title": string,
+  "content": string,
+  "priority": "high" | "normal" | "low",
+  "linkUrl": string  // 可选，点击跳转链接
+}
+
+Response 201:
+{
+  "success": true,
+  "data": {
+    "id": "notif_456",
+    "sentTo": "all_users",
+    "count": 1250,
+    "createdAt": "2024-01-16T10:30:00Z"
+  }
+}
+```
+
+================================================================================
+第四部分：组件详细设计
+================================================================================
+
+## 4.1 文件资源管理器
+
+### 4.1.1 组件结构
+
+```
+FileExplorer
+├── FileExplorerHeader (头部工具栏)
+│   ├── Breadcrumb (面包屑)
+│   ├── ViewToggle (视图切换: 列表/网格)
+│   ├── SortDropdown (排序选择)
+│   └── Actions (新建/上传/更多)
+├── FileList (文件列表)
+│   ├── FileItem (文件/文件夹项)
+│   │   ├── FileIcon (文件图标)
+│   │   ├── FileName (文件名，可编辑)
+│   │   ├── FileSize (文件大小)
+│   │   └── FileActions (操作菜单)
+│   └── EmptyState (空状态)
+├── FileTree (文件树侧边栏)
+├── ContextMenu (右键菜单)
+├── FilePreview (文件预览面板)
+└── FileUpload (上传组件)
+```
+
+### 4.1.2 文件夹项组件
+
+```tsx
+// components/repo/FileItem.tsx
+interface FileItemProps {
+  file: {
+    id: string;
+    name: string;
+    type: 'file' | 'folder';
+    size: number;
+    mimeType?: string;
+    path: string;
+    updatedAt: string;
+    isDeleted?: boolean;
+  };
+  isSelected?: boolean;
+  isRenaming?: boolean;
+  onSelect: (id: string) => void;
+  onDoubleClick: (id: string) => void;
+  onContextMenu: (e: MouseEvent, id: string) => void;
+  onRename: (id: string, newName: string) => void;
+  onDelete: (id: string) => void;
+  onMove: (id: string) => void;
+  onCopy: (id: string) => void;
+  onDownload: (id: string) => void;
+  onShare: (id: string) => void;
+  onRestore?: (id: string) => void;  // 仅删除状态显示
+}
+
+function FileItem({
+  file,
+  isSelected,
+  isRenaming,
+  onSelect,
+  onDoubleClick,
+  onContextMenu,
+  onRename,
+  onDelete,
+  onMove,
+  onCopy,
+  onDownload,
+  onShare,
+  onRestore,
+}: FileItemProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [editName, setEditName] = useState(file.name);
+
+  // 文件图标映射
+  const getFileIcon = (name: string, mimeType?: string) => {
+    const ext = name.split('.').pop()?.toLowerCase();
+    const iconMap: Record<string, ReactNode> = {
+      // 文件夹
+      folder: <FolderIcon />,
+      // 图片
+      jpg: <ImageIcon />, jpeg: <ImageIcon />, png: <ImageIcon />, gif: <ImageIcon />, svg: <ImageIcon />,
+      // 代码
+      js: <CodeIcon />, ts: <CodeIcon />, jsx: <CodeIcon />, tsx: <CodeIcon />,
+      vue: <CodeIcon />, svelte: <CodeIcon />,
+      // 文档
+      md: <DocumentIcon />, txt: <DocumentIcon />, doc: <DocumentIcon />, pdf: <DocumentIcon />,
+      // 配置
+      json: <ConfigIcon />, yaml: <ConfigIcon />, yml: <ConfigIcon />, xml: <ConfigIcon />,
+      // 样式
+      css: <StyleIcon />, scss: <StyleIcon />, less: <StyleIcon />,
+      // 默认
+      default: <FileIcon />,
+    };
+    return iconMap[ext || 'default'];
+  };
+
+  return (
+    <div
+      className={cn('file-item', {
+        'is-selected': isSelected,
+        'is-deleted': file.isDeleted,
+      })}
+      onClick={() => onSelect(file.id)}
+      onDoubleClick={() => onDoubleClick(file.id)}
+      onContextMenu={(e) => onContextMenu(e, file.id)}
+      role="button"
+      tabIndex={0}
+    >
+      <div className="file-icon">
+        {getFileIcon(file.name, file.mimeType)}
+      </div>
+
+      <div className="file-info">
+        {isRenaming ? (
+          <input
+            ref={inputRef}
+            className="file-name-input"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={() => onRename(file.id, editName)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onRename(file.id, editName);
+              if (e.key === 'Escape') setEditName(file.name);
+            }}
+            autoFocus
+          />
+        ) : (
+          <span className="file-name">{file.name}</span>
+        )}
+        {file.type === 'folder' && (
+          <span className="file-count">0 项</span>
+        )}
+      </div>
+
+      <div className="file-meta">
+        <span className="file-size">
+          {file.type === 'file' ? formatFileSize(file.size) : '-'}
+        </span>
+        <span className="file-date">
+          {formatDate(file.updatedAt)}
+        </span>
+      </div>
+
+      {file.isDeleted && onRestore && (
+        <button
+          className="restore-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRestore(file.id);
+          }}
+        >
+          恢复
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+### 4.1.3 右键菜单组件
+
+```tsx
+// components/repo/ContextMenu.tsx
+interface ContextMenuProps {
+  x: number;
+  y: number;
+  file: FileItem;
+  onClose: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+  onMove: () => void;
+  onCopy: () => void;
+  onPaste: () => void;
+  onDownload: () => void;
+  onShare: () => void;
+  onView: () => void;
+  onRestore?: () => void;
+}
+
+function ContextMenu({
+  x,
+  y,
+  file,
+  onClose,
+  onRename,
+  onDelete,
+  onMove,
+  onCopy,
+  onPaste,
+  onDownload,
+  onShare,
+  onView,
+  onRestore,
+}: ContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [copiedFile, setCopiedFile] = useState<string | null>(null);
+
+  // 点击外部关闭
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  // 菜单位置调整（防止超出屏幕）
+  const adjustedPosition = useMemo(() => {
+    const menuWidth = 200;
+    const menuHeight = file.isDeleted ? 150 : 250;
+    return {
+      x: x + menuWidth > window.innerWidth ? x - menuWidth : x,
+      y: y + menuHeight > window.innerHeight ? y - menuHeight : y,
+    };
+  }, [x, y]);
+
+  const menuItems = [
+    { label: '打开', icon: <FolderOpenIcon />, action: onView, shortcut: 'Enter' },
+    { label: '重命名', icon: <EditIcon />, action: onRename, shortcut: 'F2' },
+    { type: 'divider' as const },
+    { label: '复制', icon: <CopyIcon />, action: () => { onCopy(); onClose(); }, shortcut: 'Ctrl+C' },
+    { label: '剪切', icon: <CutIcon />, action: onMove, shortcut: 'Ctrl+X' },
+    { label: '粘贴', icon: <PasteIcon />, action: onPaste, shortcut: 'Ctrl+V', disabled: !copiedFile },
+    { type: 'divider' as const },
+    { label: '下载', icon: <DownloadIcon />, action: onDownload, shortcut: 'Ctrl+S' },
+    { label: '分享', icon: <ShareIcon />, action: onShare },
+    { type: 'divider' as const },
+    { label: '删除', icon: <TrashIcon />, action: onDelete, shortcut: 'Del', danger: true },
+  ];
+
+  if (file.isDeleted) {
+    menuItems.unshift(
+      { label: '恢复', icon: <RestoreIcon />, action: onRestore || (() => {}), shortcut: 'R' }
+    );
+    // 删除已删除文件的菜单
+    const deleteIndex = menuItems.findIndex(item => item.label === '删除');
+    if (deleteIndex > -1) {
+      menuItems[deleteIndex] = { label: '永久删除', icon: <DeleteForeverIcon />, action: onDelete, danger: true };
+    }
+  }
+
+  return (
+    <div
+      ref={menuRef}
+      className="context-menu"
+      style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
+    >
+      {menuItems.map((item, index) =>
+        item.type === 'divider' ? (
+          <div key={index} className="context-menu-divider" />
+        ) : (
+          <button
+            key={index}
+            className={cn('context-menu-item', { danger: item.danger, disabled: item.disabled })}
+            onClick={() => { if (!item.disabled) item.action(); }}
+          >
+            <span className="menu-icon">{item.icon}</span>
+            <span className="menu-label">{item.label}</span>
+            {item.shortcut && <span className="menu-shortcut">{item.shortcut}</span>}
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+```
+
+### 4.1.4 拖拽排序组件
+
+```tsx
+// components/repo/DraggableFileList.tsx
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableFileItem({ file }: { file: FileItem }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: file.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <FileItem file={file} />
+    </div>
+  );
+}
+
+function DraggableFileList({
+  files,
+  onDragEnd,
+}: {
+  files: FileItem[];
+  onDragEnd: (oldIndex: number, newIndex: number) => void;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={(event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+          const oldIndex = files.findIndex((f) => f.id === active.id);
+          const newIndex = files.findIndex((f) => f.id === over.id);
+          onDragEnd(oldIndex, newIndex);
+        }
+      }}
+    >
+      <SortableContext items={files.map(f => f.id)} strategy={verticalListSortingStrategy}>
+        {files.map((file) => (
+          <SortableFileItem key={file.id} file={file} />
+        ))}
+      </SortableContext>
+    </DndContext>
+  );
+}
+```
+
+### 4.1.5 文件预览组件
+
+```tsx
+// components/repo/FilePreview.tsx
+interface FilePreviewProps {
+  file: FileItem;
+  onClose: () => void;
+}
+
+function FilePreview({ file, onClose }: FilePreviewProps) {
+  const [content, setContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadFileContent();
+  }, [file.id]);
+
+  const loadFileContent = async () => {
+    try {
+      const res = await fetch(`/api/v1/repos/${owner}/${repo}/files/${file.id}`);
+      const data = await res.json();
+      setContent(data.data.content);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderPreview = () => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+
+    // 图片预览
+    if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext || '')) {
+      return <ImagePreview src={content} alt={file.name} />;
+    }
+
+    // Markdown 预览
+    if (ext === 'md') {
+      return <MarkdownPreview content={content || ''} />;
+    }
+
+    // 代码预览
+    if (['js', 'ts', 'jsx', 'tsx', 'vue', 'css', 'scss', 'html', 'json', 'yaml'].includes(ext || '')) {
+      return (
+        <CodePreview
+          code={content || ''}
+          language={getLanguageFromExt(ext)}
+          showLineNumbers
+        />
+      );
+    }
+
+    // PDF 预览
+    if (ext === 'pdf') {
+      return <PdfPreview url={content} />;
+    }
+
+    // 视频预览
+    if (['mp4', 'webm', 'ogg'].includes(ext || '')) {
+      return <VideoPreview src={content} />;
+    }
+
+    // 音频预览
+    if (['mp3', 'wav', 'ogg'].includes(ext || '')) {
+      return <AudioPreview src={content} />;
+    }
+
+    // 纯文本预览
+    return <PlainTextPreview content={content || ''} />;
+  };
+
+  return (
+    <div className="file-preview">
+      <div className="preview-header">
+        <span className="preview-title">{file.name}</span>
+        <div className="preview-actions">
+          <button onClick={() => downloadFile(file.id)}>下载</button>
+          <button onClick={onClose}>关闭</button>
+        </div>
+      </div>
+      <div className="preview-content">
+        {loading ? <LoadingSpinner /> : renderPreview()}
+      </div>
+    </div>
+  );
+}
+```
+
+## 4.2 面包屑组件
+
+```tsx
+// components/layout/Breadcrumb.tsx
+interface BreadcrumbItem {
+  label: string;
+  href?: string;
+  icon?: ReactNode;
+}
+
+interface BreadcrumbProps {
+  items: BreadcrumbItem[];
+  maxItems?: number;  // 最多显示的数量，两端省略
+  separator?: string;
+  onClick?: (item: BreadcrumbItem, index: number) => void;
+}
+
+function Breadcrumb({
+  items,
+  maxItems = 5,
+  separator = '/',
+  onClick,
+}: BreadcrumbProps) {
+  const truncatedItems = useMemo(() => {
+    if (items.length <= maxItems) return items;
+
+    const first = items.slice(0, 1);
+    const last = items.slice(-(maxItems - 1));
+    return [...first, { label: '...' }, ...last];
+  }, [items, maxItems]);
+
+  return (
+    <nav className="breadcrumb" aria-label="面包屑导航">
+      {truncatedItems.map((item, index) => (
+        <span key={index} className="breadcrumb-item">
+          {index > 0 && <span className="separator">{separator}</span>}
+          {item.href ? (
+            <Link href={item.href} className="breadcrumb-link">
+              {item.icon && <span className="icon">{item.icon}</span>}
+              <span className="label">{truncate(item.label, 30)}</span>
+            </Link>
+          ) : (
+            <span className="breadcrumb-current">
+              {item.icon && <span className="icon">{item.icon}</span>}
+              <span className="label">{truncate(item.label, 30)}</span>
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+// 使用示例
+function RepoFilePage() {
+  const pathParts = pathname.split('/').filter(Boolean);
+
+  const breadcrumbs: BreadcrumbItem[] = [
+    { label: owner, href: `/${owner}` },
+    { label: repoName, href: `/${owner}/${repoName}` },
+    ...pathParts.slice(2).map((part, i) => ({
+      label: part,
+      href: `/${owner}/${repoName}/tree/main/${pathParts.slice(2, i + 3).join('/')}`,
+    })),
+  ];
+
+  return <Breadcrumb items={breadcrumbs} />;
+}
+```
+
+## 4.3 通知横幅组件
+
+```tsx
+// components/notification/AnnouncementBanner.tsx
+interface AnnouncementBannerProps {
+  announcement: {
+    id: string;
+    title: string;
+    content: string;
+    type: 'info' | 'warning' | 'critical';
+    dismissible: boolean;
+  };
+  onDismiss: (id: string) => void;
+  onViewDetails: (id: string) => void;
+}
+
+function AnnouncementBanner({ announcement, onDismiss, onViewDetails }: AnnouncementBannerProps) {
+  const typeStyles = {
+    info: { bg: 'bg-blue-50', text: 'text-blue-800', icon: InfoIcon },
+    warning: { bg: 'bg-yellow-50', text: 'text-yellow-800', icon: WarningIcon },
+    critical: { bg: 'bg-red-50', text: 'text-red-800', icon: CriticalIcon },
+  };
+
+  const style = typeStyles[announcement.type];
+  const Icon = style.icon;
+
+  return (
+    <div className={cn('banner', style.bg, style.text)} role="alert">
+      <div className="banner-content">
+        <Icon className="banner-icon" />
+        <div className="banner-text">
+          <strong>{announcement.title}</strong>
+          <span>{announcement.content}</span>
+        </div>
+        <div className="banner-actions">
+          <button onClick={() => onViewDetails(announcement.id)}>
+            查看详情
+          </button>
+          {announcement.dismissible && (
+            <button onClick={() => onDismiss(announcement.id)} aria-label="关闭">
+              <CloseIcon />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 全局公告横幅管理器
+function GlobalAnnouncementBanner() {
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // 获取当前应显示的公告
+    fetch('/api/v1/announcements/active')
+      .then(res => res.json())
+      .then(data => setAnnouncements(data.data));
+  }, []);
+
+  const handleDismiss = async (id: string) => {
+    await fetch(`/api/v1/announcements/${id}/dismiss`, { method: 'POST' });
+    setAnnouncements(prev => prev.filter(a => a.id !== id));
+  };
+
+  if (announcements.length === 0) return null;
+
+  return (
+    <div className="global-banners">
+      {announcements.map(ann => (
+        <AnnouncementBanner
+          key={ann.id}
+          announcement={ann}
+          onDismiss={handleDismiss}
+          onViewDetails={(id) => router.push(`/announcements/${id}`)}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+================================================================================
+第五部分：开发规范与质量检查清单
+================================================================================
+
+## 5.1 开发规范
+
+### 5.1.1 代码规范
+
+```yaml
+# .eslintrc.yml
+---
+env:
+  browser: true
+  es2021: true
+  node: true
+extends:
+  - next/core-web-vitals
+  - plugin:@typescript-eslint/recommended
+  - plugin:react/recommended
+  - plugin:react-hooks/recommended
+parser: '@typescript-eslint/parser'
+parserOptions:
+  ecmaVersion: latest
+  sourceType: module
+  ecmaFeatures:
+    jsx: true
+plugins:
+  - '@typescript-eslint'
+  - react
+  - react-hooks
+rules:
+  # 错误
+  'no-console': warn
+  'no-debugger': error
+  'no-unused-vars': off
+  '@typescript-eslint/no-unused-vars':
+    - error
+    - argsIgnorePattern: '^_'
+      varsIgnorePattern: '^_'
+  '@typescript-eslint/no-explicit-any': error
+  '@typescript-eslint/explicit-function-return-type': off
+  '@typescript-eslint/no-non-null-assertion': off
+  'prefer-const': error
+  'no-var': error
+  # React
+  'react/react-in-jsx-scope': off
+  'react/prop-types': off
+  'react-hooks/rules-of-hooks': error
+  'react-hooks/exhaustive-deps': warn
+  # Import
+  'import/order':
+    - error
+    - groups:
+        - builtin
+        - external
+        - internal
+        - parent
+        - sibling
+        - index
+      newlines-between: always
+  'import/no-unresolved': off
+```
+
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", "_*.js", "_*.ts", "**/*.backup.*"]
+}
+```
+
+### 5.1.2 提交规范
+
+```bash
+# .gitmessage.txt
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+#
+# Types:
+#   feat     - 新功能
+#   fix      - Bug 修复
+#   docs     - 文档更新
+#   style    - 代码格式（不影响功能）
+#   refactor - 重构（不是新功能也不是修复）
+#   test     - 测试相关
+#   chore    - 构建/工具相关
+#
+# Examples:
+#   feat(repo): 添加文件资源管理器组件
+#   fix(api): 修复上传文件大小限制
+#   docs(readme): 更新 README
+```
+
+### 5.1.3 Git 工作流
+
+```
+1. 从 main 创建功能分支
+   git checkout main
+   git pull origin main
+   git checkout -b feat/file-explorer
+
+2. 开发并提交
+   git add .
+   git commit -m "feat(repo): 添加文件资源管理器组件"
+
+3. 保持分支更新
+   git fetch origin
+   git rebase origin/main
+
+4. 推送并创建 PR
+   git push -u origin feat/file-explorer
+   # 在 GitHub/Gitea 创建 PR
+
+5. 代码审查后合并
+   # Squash and merge 保持提交历史整洁
+```
+
+## 5.2 质量检查清单
+
+### 5.2.1 功能开发检查清单
+
+```markdown
+## 功能开发检查清单
+
+### 代码规范
+- [ ] 遵循 ESLint 规则，无 error
+- [ ] 遵循 TypeScript 严格模式，无 `any` 类型
+- [ ] 遵循命名规范（文件、组件、函数、变量）
+- [ ] 添加必要的注释（JSDoc）
+- [ ] 无 console.log（调试代码已清理）
+
+### 功能实现
+- [ ] 功能完整实现，符合需求
+- [ ] 处理边界情况（空数据、错误状态）
+- [ ] 加载状态显示（Loading）
+- [ ] 错误处理（Error Boundary + try-catch）
+- [ ] 表单验证（前端 + 后端）
+- [ ] 权限检查（前端隐藏 + 后端验证）
+
+### API 设计
+- [ ] RESTful 规范
+- [ ] HTTP 状态码正确
+- [ ] 请求参数验证
+- [ ] 响应格式统一
+- [ ] 错误信息友好
+
+### 数据库
+- [ ] 数据验证（Prisma 校验）
+- [ ] 索引创建
+- [ ] 事务处理（复杂操作）
+- [ ] 软删除（重要数据）
+
+### 安全
+- [ ] XSS 防护（用户输入转义）
+- [ ] CSRF 防护
+- [ ] SQL 注入防护（Prisma 参数化查询）
+- [ ] 敏感信息不暴露
+- [ ] 权限验证（用户操作）
+
+### 测试
+- [ ] 单元测试（工具函数）
+- [ ] 组件测试（核心组件）
+- [ ] API 测试（关键接口）
+- [ ] E2E 测试（核心流程）
+
+### 性能
+- [ ] 懒加载（大组件/页面）
+- [ ] 图片优化（压缩/CDN）
+- [ ] 缓存（Redis/API 缓存）
+- [ ] 分页（大数据列表）
+- [ ] 虚拟滚动（长列表）
+
+### 体验
+- [ ] 加载状态
+- [ ] 空状态
+- [ ] 错误提示
+- [ ] 成功反馈
+- [ ] 响应式设计
+- [ ] 键盘支持
+```
+
+### 5.2.2 代码审查检查清单
+
+```markdown
+## 代码审查检查清单
+
+### 功能审查
+- [ ] 功能符合需求
+- [ ] 没有引入回归问题
+- [ ] 边界情况已处理
+- [ ] 用户体验流畅
+
+### 代码质量
+- [ ] 代码清晰易读
+- [ ] 无重复代码
+- [ ] 无死代码
+- [ ] 命名规范
+- [ ] 注释充分
+
+### 安全性
+- [ ] 用户输入验证
+- [ ] 权限检查
+- [ ] 敏感数据处理
+- [ ] API 安全
+
+### 性能
+- [ ] 无性能问题
+- [ ] 考虑大数据量
+- [ ] 合理使用缓存
+
+### 测试覆盖
+- [ ] 关键路径有测试
+- [ ] 测试可维护
+```
+
+## 5.3 自动化检查
+
+### 5.3.1 pre-commit Hook
+
+```yaml
+# .husky/pre-commit
+---
+name: pre-commit
+on:
+  - push
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run type check
+        run: npm run type-check
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Run build
+        run: npm run build
+```
+
+### 5.3.2 CI/CD 检查
+
+```yaml
+# .github/workflows/ci.yml
+---
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run type-check
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test
+      - uses: codecov/codecov-action@v3
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+```
+
+================================================================================
+第六部分：实施计划
+================================================================================
+
+## 6.1 Sprint 划分
+
+### Sprint 1: 数据库与 API 基础（1周）
+
+| 任务 | 描述 | 验收标准 |
+|------|------|---------|
+| 数据库迁移 | 创建 RepoFile, FileVersion, ShareLink, ForkRequest 表 | Prisma 生成成功 |
+| 文件 CRUD API | 实现文件创建/读取/更新/删除 | 通过 API 测试 |
+| 文件夹 API | 实现文件夹操作 | 支持嵌套 |
+| 权限验证 | 检查用户操作权限 | 边界情况通过 |
+
+### Sprint 2: 前端文件管理器（1周）
+
+| 任务 | 描述 | 验收标准 |
+|------|------|---------|
+| 组件开发 | FileExplorer, FileItem, ContextMenu | 组件完整 |
+| 文件操作 | 拖拽、排序、右键菜单 | 操作流畅 |
+| 文件预览 | 图片、代码、Markdown | 预览正常 |
+| 键盘支持 | 快捷键操作 | 与 VSCode 一致 |
+
+### Sprint 3: 上传系统（1周）
+
+| 任务 | 描述 | 验收标准 |
+|------|------|---------|
+| 分片上传 | 支持断点续传 | 大文件测试通过 |
+| 文件夹上传 | 递归上传 | 结构保持 |
+| 秒传 | Hash 去重 | 重复文件秒传 |
+| 进度显示 | 上传进度 | 体验良好 |
+
+### Sprint 4: Fork 与分享（1周）
+
+| 任务 | 描述 | 验收标准 |
+|------|------|---------|
+| Fork 申请 | 申请/审批流程 | 流程完整 |
+| 分享链接 | 创建/访问/删除 | 功能正常 |
+| 权限控制 | 私有仓库 Fork | 权限正确 |
+
+### Sprint 5: 通知与体验（1周）
+
+| 任务 | 描述 | 验收标准 |
+|------|------|---------|
+| 公告横幅 | 全局公告显示 | 显示正确 |
+| 面包屑导航 | 页面导航 | 层级正确 |
+| 快捷键 | 全局快捷键 | 响应正常 |
+| 管理面板 | 增强功能 | 操作流畅 |
+
+### Sprint 6: 测试与优化（1周）
+
+| 任务 | 描述 | 验收标准 |
+|------|------|---------|
+| 单元测试 | 核心逻辑测试 | 覆盖率 > 70% |
+| E2E 测试 | 关键流程测试 | 全部通过 |
+| 性能优化 | 加载优化 | 首屏 < 2s |
+| 安全审计 | 安全检查 | 无高危漏洞 |
+
+## 6.2 里程碑
+
+| 里程碑 | 日期 | 交付内容 |
+|--------|------|---------|
+| M1 | Week 2 | 文件管理 API 完成 |
+| M2 | Week 4 | 前端文件管理器完成 |
+| M3 | Week 5 | 上传和 Fork 完成 |
+| M4 | Week 6 | 通知和体验优化完成 |
+| M5 | Week 7 | 测试完成，系统可上线 |
+
+================================================================================
+第七部分：总结
+================================================================================
+
+## 7.1 交付物
+
+| 类型 | 内容 |
+|------|------|
+| 代码 | 完整的仓库文件管理功能 |
+| API | 20+ RESTful API 端点 |
+| 组件 | 10+ 可复用组件 |
+| 测试 | 单元测试 + E2E 测试 |
+| 文档 | API 文档 + 开发规范 |
+
+## 7.2 质量目标
+
+| 指标 | 目标 |
+|------|------|
+| 测试覆盖率 | > 70% |
+| 首屏加载 | < 2s |
+| API 响应 | < 500ms |
+| 代码规范 | ESLint 0 error |
+| 类型安全 | TypeScript strict |
+
+## 7.3 风险与应对
+
+| 风险 | 影响 | 应对 |
+|------|------|------|
+| 大文件上传性能 | 高 | 分片 + CDN |
+| 并发编辑冲突 | 中 | 乐观锁 + 冲突提示 |
+| 安全漏洞 | 高 | 安全审计 + 渗透测试 |
+| 浏览器兼容性 | 中 | 兼容性测试 |

@@ -1,0 +1,43 @@
+# 使用国内镜像
+FROM docker.m.daocloud.io/library/node:20-alpine
+
+# 安装基础工具
+RUN apk add --no-cache \
+    git \
+    curl \
+    bash \
+    mysql-client \
+    openssl \
+    && rm -rf /var/cache/apk/*
+
+# 创建工作目录
+WORKDIR /app
+
+# 设置 npm 镜像
+RUN npm config set registry https://registry.npmmirror.com
+
+# 复制依赖文件
+COPY package.json package-lock.json* ./
+
+# 安装依赖（在容器内执行）- 使用超时设置确保安装完成
+RUN npm install --legacy-peer-deps || npm install
+
+# 复制 prisma
+COPY prisma ./prisma
+
+# 复制源代码
+COPY src ./src
+COPY next.config.js tsconfig.json tailwind.config.ts postcss.config.js next-env.d.ts ./
+
+# 生成 Prisma Client
+RUN npx prisma generate
+
+# 修补 Next.js NormalizeError bug
+COPY _patch_next.js /tmp/_patch_next.js
+RUN node /tmp/_patch_next.js
+
+# 暴露端口
+EXPOSE 3000 9229
+
+# 启动命令
+CMD ["npm", "run", "dev"]

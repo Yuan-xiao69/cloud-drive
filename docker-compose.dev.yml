@@ -1,0 +1,56 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+      - "9229:9229"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/github_platform
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=github-platform-jwt-secret-2024
+      - JWT_REFRESH_SECRET=github-platform-refresh-secret-2024
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+      - NEXT_PUBLIC_USE_MOCK=false
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+      - ./public:/app/public
+      - node_modules:/app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["npm", "run", "dev"]
+    stdin_open: true
+    tty: true
+
+  db:
+    image: docker.m.daocloud.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: github_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+  node_modules:

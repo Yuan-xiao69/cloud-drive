@@ -1,0 +1,13 @@
+@echo off
+chcp 65001 >nul
+echo 安装依赖...
+call npm install
+echo.
+echo 生成 Prisma Client...
+call npx prisma generate
+echo.
+echo 推送数据库结构...
+call npx prisma db push
+echo.
+echo 启动开发服务器...
+npm run dev

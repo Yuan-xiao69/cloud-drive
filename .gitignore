@@ -1,0 +1,11 @@
+node_modules
+.next
+# 所有环境变量文件
+.env
+.env.*
+# 但保留 .env.example 模板
+!.env.example
+*.log
+.DS_Store
+coverage/
+container_backup/

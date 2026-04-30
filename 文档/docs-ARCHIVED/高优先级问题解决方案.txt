@@ -1,0 +1,487 @@
+================================================================================
+           高优先级问题解决方案 - 参考 GitHub 设计
+================================================================================
+
+文档版本: v1.0
+创建日期: 2026年4月26日
+参考系统: GitHub 成熟平台
+问题数量: 4个高优先级 + 4个中优先级
+
+================================================================================
+                           第一部分：问题分析
+================================================================================
+
+【GitHub 举报功能设计参考】
+
+1. 讨论/Issue/PR 举报入口位置：
+   - 在每个内容的标题栏右侧，或"..."菜单中
+   - 评论举报在评论右上角的"..."菜单中
+   - 需要登录后才能举报
+
+2. 仓库举报入口位置：
+   - 仓库首页的"⚙️ Settings" 或"..."菜单中
+   - 或在仓库描述下方添加举报链接
+
+3. 讨论列表举报入口：
+   - 每行右侧的"..."菜单中（已实现）
+
+================================================================================
+                           第二部分：现状检查结果
+================================================================================
+
+【已实现的举报功能】✅
+
+1. ✅ 讨论列表举报（discussions/page.tsx）- 使用 ActionMenu 组件
+2. ✅ 讨论评论举报（discussions/[id]/CommentSection.tsx）- 已实现
+3. ✅ 通用 ReportModal 组件 - 支持 6 种类型
+4. ✅ ActionMenu 组件 - 通用操作菜单
+
+【未实现的举报功能】❌
+
+1. ❌ 讨论详情页举报讨论本身（discussions/[id]/page.tsx）
+2. ❌ Issue 详情页举报 Issue 和评论（issues/[id]/page.tsx）
+3. ❌ PR 详情页举报 PR 和评论（pulls/[id]/page.tsx）
+4. ❌ 仓库主页举报仓库（[username]/[repoName]/page.tsx）
+5. ❌ 设置页面添加用户中心入口（settings/page.tsx）
+
+================================================================================
+                           第三部分：解决方案
+================================================================================
+
+【高优先级问题 1】讨论详情页添加讨论举报按钮
+--------------------------------------------------------------------------------
+
+位置：src/app/(main)/discussions/[id]/page.tsx
+
+问题：DiscussionReportButton.tsx 已存在但未被使用
+
+解决方案：
+
+1. 在 discussions/[id]/page.tsx 中导入并使用 DiscussionReportButton：
+
+```tsx
+// 在文件顶部添加导入
+import DiscussionReportButton from './DiscussionReportButton';
+
+// 在页面顶部区域添加举报按钮（在标题右侧）
+<div className="discussion-header">
+  <div className="discussion-title-row">
+    <h1 className="discussion-title">{discussion.title}</h1>
+    {/* 添加举报按钮 */}
+    {isLoggedIn && discussion.authorId !== currentUser?.id && (
+      <DiscussionReportButton
+        targetType="discussion"
+        targetId={discussion.id}
+        targetTitle={discussion.title}
+      />
+    )}
+  </div>
+  ...
+</div>
+```
+
+参考 GitHub 设计：举报按钮放在标题右侧，与编辑按钮平级，颜色较淡（不抢占主视觉）
+
+
+【高优先级问题 2】Issue 详情页添加举报功能
+--------------------------------------------------------------------------------
+
+位置：src/app/(main)/[username]/[repoName]/issues/[id]/page.tsx
+
+解决方案：创建 IssueReportButton 组件并集成
+
+1. 创建 src/app/(main)/[username]/[repoName]/issues/[id]/IssueReportButton.tsx：
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import ReportModal from '@/components/common/ReportModal';
+
+function FlagIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 1a.5.5 0 0 1 .5.5v.5h5a.5.5 0 0 1 0 1h-5v.5A1.5 1.5 0 0 1 7 4.5v1A1.5 1.5 0 0 1 8.5 7h2a.5.5 0 0 1 0 1h-2A2.5 2.5 0 0 1 6 5.5v-1A2.5 2.5 0 0 1 7.5 2H8V1.5A.5.5 0 0 1 8 1z" />
+    </svg>
+  );
+}
+
+export default function IssueReportButton({
+  targetType: initialType,
+  targetId,
+  targetTitle,
+}: {
+  targetType: 'issue' | 'comment';
+  targetId: string;
+  targetTitle?: string;
+}) {
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  return (
+    <>
+      <button
+        className="btn btn-outline"
+        onClick={() => setShowReportModal(true)}
+        title="举报"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          padding: '4px 12px',
+          fontSize: 13,
+          borderColor: 'var(--color-border-default)',
+          color: 'var(--color-fg-muted)',
+        }}
+      >
+        <FlagIcon size={14} />
+        举报
+      </button>
+      {showReportModal && (
+        <ReportModal
+          targetType={initialType}
+          targetId={targetId}
+          targetTitle={targetTitle}
+          onClose={() => setShowReportModal(false)}
+        />
+      )}
+    </>
+  );
+}
+```
+
+2. 在 Issue 页面集成：
+
+```tsx
+// 导入组件
+import IssueReportButton from './IssueReportButton';
+
+// Issue 标题区域添加举报按钮
+<div className="issue-header">
+  <h1 className="issue-title">
+    {issue.title}
+    <span className="issue-number">#{issue.number}</span>
+  </h1>
+  
+  {/* 举报按钮 - 标题右侧 */}
+  {isLoggedIn && issue.authorId !== currentUser?.id && (
+    <IssueReportButton
+      targetType="issue"
+      targetId={issue.id}
+      targetTitle={issue.title}
+    />
+  )}
+</div>
+```
+
+3. 评论举报按钮（复用 CommentSection 中的逻辑）：
+
+在 Issue 的 CommentSection.tsx 中添加举报按钮，参考 discussions/[id]/CommentSection.tsx 的实现
+
+
+【高优先级问题 3】PR 详情页添加举报功能
+--------------------------------------------------------------------------------
+
+位置：src/app/(main)/[username]/[repoName]/pulls/[id]/page.tsx
+
+解决方案：与 Issue 页面类似
+
+1. 创建 src/app/(main)/[username]/[repoName]/pulls/[id]/PullReportButton.tsx：
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import ReportModal from '@/components/common/ReportModal';
+
+export default function PullReportButton({
+  targetType: initialType,
+  targetId,
+  targetTitle,
+}: {
+  targetType: 'pullrequest' | 'comment';
+  targetId: string;
+  targetTitle?: string;
+}) {
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  return (
+    <>
+      <button
+        className="btn btn-outline"
+        onClick={() => setShowReportModal(true)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          padding: '4px 12px',
+          fontSize: 13,
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 1a.5.5 0 0 1 .5.5v.5h5a.5.5 0 0 1 0 1h-5v.5A1.5 1.5 0 0 1 7 4.5v1A1.5 1.5 0 0 1 8.5 7h2a.5.5 0 0 1 0 1h-2A2.5 2.5 0 0 1 6 5.5v-1A2.5 2.5 0 0 1 7.5 2H8V1.5A.5.5 0 0 1 8 1z" />
+        </svg>
+        举报
+      </button>
+      {showReportModal && (
+        <ReportModal
+          targetType={initialType}
+          targetId={targetId}
+          targetTitle={targetTitle}
+          onClose={() => setShowReportModal(false)}
+        />
+      )}
+    </>
+  );
+}
+```
+
+2. 在 PR 页面集成举报按钮
+
+
+【高优先级问题 4】仓库主页添加举报入口
+--------------------------------------------------------------------------------
+
+位置：src/app/(main)/[username]/[repoName]/page.tsx
+
+参考 GitHub：仓库举报入口放在仓库描述下方或 Settings 按钮附近
+
+解决方案：
+
+1. 创建举报按钮组件或直接在页面中添加：
+
+```tsx
+// 在仓库头部区域添加举报链接
+<div className="repo-header">
+  <div className="repo-title-row">
+    <h1 className="repo-name">
+      <span className="owner">{owner}</span>/{repo}
+    </h1>
+    <span className={`visibility-badge ${repo.visibility}`}>
+      {repo.visibility === 'public' ? '公开' : '私有'}
+    </span>
+  </div>
+  
+  {repo.description && (
+    <p className="repo-description">{repo.description}</p>
+  )}
+  
+  {/* 仓库统计和操作栏 */}
+  <div className="repo-meta">
+    {/* 原有内容... */}
+    
+    {/* 添加举报入口 */}
+    {isLoggedIn && ownerUsername !== currentUser?.username && (
+      <button
+        className="repo-action-link"
+        onClick={() => setShowRepoReportModal(true)}
+        style={{ color: 'var(--color-fg-muted)', fontSize: 13 }}
+      >
+        举报此仓库
+      </button>
+    )}
+  </div>
+  
+  {/* 举报弹窗 */}
+  {showRepoReportModal && (
+    <ReportModal
+      targetType="repository"
+      targetId={`${owner}/${repo}`}
+      targetTitle={`${owner}/${repo}`}
+      onClose={() => setShowRepoReportModal(false)}
+    />
+  )}
+</div>
+```
+
+参考 GitHub 设计：举报入口用文字链接形式，放在仓库统计栏的最后，字体较小，颜色较淡
+
+
+【中优先级问题 1】设置页面添加用户中心入口
+--------------------------------------------------------------------------------
+
+位置：src/app/(main)/settings/page.tsx
+
+参考 GitHub：用户设置页面有清晰的分组
+
+解决方案：添加「用户中心」分组，包含以下入口：
+
+```tsx
+// 添加新的设置分组
+const settingGroups = [
+  // ... 现有分组
+  {
+    title: '用户中心',
+    icon: '👤',
+    items: [
+      {
+        title: '我的申诉',
+        description: '查看我提交的申诉记录',
+        href: '/settings/appeals',
+        badge: pendingAppealsCount > 0 ? pendingAppealsCount : undefined,
+      },
+      {
+        title: '我的举报',
+        description: '查看我提交的举报记录',
+        href: '/settings/reports',
+        badge: pendingReportsCount > 0 ? pendingReportsCount : undefined,
+      },
+      {
+        title: '我的拉黑',
+        description: '管理我拉黑的用户列表',
+        href: '/settings/blocks',
+      },
+    ],
+  },
+];
+```
+
+需要在 API 层面实现：
+- GET /api/v1/me/appeals - 获取用户申诉列表
+- GET /api/v1/me/reports - 获取用户举报列表
+- GET /api/v1/me/blocks - 获取用户拉黑列表
+
+
+【中优先级问题 2-3】API 路由实现
+--------------------------------------------------------------------------------
+
+需要新建的 API 路由：
+
+1. src/app/api/v1/me/reports/route.ts - 用户举报列表
+
+```typescript
+export async function GET(req: NextRequest): Promise<Response> {
+  const authResult = await requireAuth(req);
+  if (isAuthError(authResult)) return authResult.error;
+
+  const { user } = authResult;
+  const { searchParams } = new URL(req.url);
+  const page = parseInt(searchParams.get('page') || '1');
+  const limit = parseInt(searchParams.get('limit') || '20');
+
+  const [reports, total] = await Promise.all([
+    prisma.report.findMany({
+      where: { reporterId: user.id },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.report.count({ where: { reporterId: user.id } }),
+  ]);
+
+  return paginated(reports, { page, limit, total });
+}
+```
+
+2. src/app/api/v1/me/blocks/route.ts - 用户拉黑列表
+
+```typescript
+export async function GET(req: NextRequest): Promise<Response> {
+  const authResult = await requireAuth(req);
+  if (isAuthError(authResult)) return authResult.error;
+
+  const { user } = authResult;
+  const { searchParams } = new URL(req.url);
+  const page = parseInt(searchParams.get('page') || '1');
+  const limit = parseInt(searchParams.get('limit') || '20');
+
+  const [blocks, total] = await Promise.all([
+    prisma.userBlock.findMany({
+      where: { blockerId: user.id },
+      include: { blocked: { select: { id: true, username: true, avatarUrl: true } } },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.userBlock.count({ where: { blockerId: user.id } }),
+  ]);
+
+  return paginated(blocks, { page, limit, total });
+}
+```
+
+================================================================================
+                           第四部分：实施清单
+================================================================================
+
+【高优先级 - 举报入口】
+
+| 序号 | 文件 | 操作 | 说明 |
+|------|------|------|------|
+| 1 | discussions/[id]/page.tsx | 修改 | 使用 DiscussionReportButton |
+| 2 | issues/[id]/page.tsx | 新建 | IssueReportButton.tsx |
+| 3 | issues/[id]/page.tsx | 修改 | 添加 Issue 举报按钮 |
+| 4 | issues/[id]/CommentSection.tsx | 修改 | 添加评论举报按钮 |
+| 5 | pulls/[id]/page.tsx | 新建 | PullReportButton.tsx |
+| 6 | pulls/[id]/page.tsx | 修改 | 添加 PR 举报按钮 |
+| 7 | pulls/[id]/CommentSection.tsx | 修改 | 添加评论举报按钮 |
+| 8 | [username]/[repoName]/page.tsx | 修改 | 添加仓库举报入口 |
+
+【中优先级 - 用户中心】
+
+| 序号 | 文件 | 操作 | 说明 |
+|------|------|------|------|
+| 9 | settings/page.tsx | 修改 | 添加用户中心分组 |
+| 10 | api/v1/me/reports/route.ts | 新建 | 用户举报列表 API |
+| 11 | api/v1/me/blocks/route.ts | 新建 | 用户拉黑列表 API |
+| 12 | api/v1/me/appeals/route.ts | 检查 | 确保已有（已确认存在）|
+
+================================================================================
+                           第五部分：设计规范
+================================================================================
+
+【举报入口视觉规范】
+
+1. 按钮样式（参考 GitHub）：
+   - 边框按钮风格（btn-outline）
+   - 颜色：灰色系（不抢占主视觉）
+   - 悬停：背景变淡灰色
+   - 字体：13px
+   - 内边距：4px 12px
+
+2. 位置规范：
+   - 讨论/Issue/PR：标题右侧，与「编辑」按钮平级
+   - 评论：评论右上角，或「回复」按钮旁
+   - 仓库：统计栏最后，文字链接形式
+
+3. 显示条件：
+   - 必须登录
+   - 不能举报自己的内容
+   - 举报按钮使用图标+文字「举报」
+
+【举报 Modal 交互规范】
+
+1. 举报原因选项（已有）：
+   - 垃圾信息
+   - 辱骂骚扰
+   - 不当内容
+   - 侵权内容
+   - 欺诈钓鱼
+   - 其他原因
+
+2. 提交后：
+   - 显示成功提示
+   - 1.5秒后自动关闭
+   - Toast 提示（可选）
+
+================================================================================
+                              文件变更清单
+================================================================================
+
+需要创建的文件（7个）：
+  src/app/(main)/[username]/[repoName]/issues/[id]/IssueReportButton.tsx
+  src/app/(main)/[username]/[repoName]/pulls/[id]/PullReportButton.tsx
+  src/app/api/v1/me/reports/route.ts
+  src/app/api/v1/me/blocks/route.ts
+
+需要修改的文件（8个）：
+  src/app/(main)/discussions/[id]/page.tsx
+  src/app/(main)/[username]/[repoName]/issues/[id]/page.tsx
+  src/app/(main)/[username]/[repoName]/issues/[id]/CommentSection.tsx
+  src/app/(main)/[username]/[repoName]/pulls/[id]/page.tsx
+  src/app/(main)/[username]/[repoName]/pulls/[id]/CommentSection.tsx
+  src/app/(main)/[username]/[repoName]/page.tsx
+  src/app/(main)/settings/page.tsx
+
+预计开发时间：2-3 小时
+
+================================================================================

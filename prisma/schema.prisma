@@ -1,0 +1,795 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  uid                String?              @map("uid") @db.VarChar(9) // 9位顺序编号，超级管理员uid为"000000000"
+  username           String               @unique @db.VarChar(39)
+  email              String               @unique @db.VarChar(255)
+  passwordHash       String               @map("password_hash") @db.VarChar(255)
+  bio                String?
+  avatarUrl          String?              @map("avatar_url") @db.VarChar(2000)
+  role               String               @default("user") @db.VarChar(20)
+  isBanned           Boolean              @default(false) @map("is_banned")
+  mfaEnabled         Boolean              @default(false) @map("mfa_enabled")
+  mfaSecret          String?              @map("mfa_secret") @db.VarChar(100)
+  location           String?              @db.VarChar(100)
+  website            String?              @db.VarChar(255)
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  notifyWatch        Boolean              @default(true) @map("notify_watch")
+  notifyReply        Boolean              @default(true) @map("notify_reply")
+  deletedAt          DateTime?            @map("deleted_at")
+  isSystem           Boolean              @default(false) @map("is_system")
+  auditLogs          AdminAuditLog[]
+  discussions        Discussion[]
+  discussionComments DiscussionComment[]
+  loginHistories     LoginHistory[]
+  handledReports     Report[]             @relation("Handler")
+  reports            Report[]             @relation("Reporter")
+  repositories       Repository[]
+  stars              Star[]
+  watchers           Watcher[]
+  issues             Issue[]
+  issueComments      IssueComment[]
+  pullRequests       PullRequest[]
+  prComments         PullRequestComment[]
+  activityLogs       UserActivityLog[]
+  notifications      Notification[]
+  sentNotifications  Notification[]       @relation("NotificationSender")
+  bans               UserBan[]            @relation("BannedUser")
+  bannedBy           UserBan[]            @relation("BannerAdmin")
+  penalties          UserPenalty[]        @relation("PenaltyUser")
+  penalizers         UserPenalty[]        @relation("PenaltyAdmin")
+  appeals            Appeal[]             @relation("AppealUser")
+  reviewers          Appeal[]             @relation("AppealReviewer")
+  shareLinks         ShareLink[]
+  forkRequests       ForkRequest[]        @relation("ForkRequester")
+  processedForks     ForkRequest[]        @relation("ForkProcessor")
+  followers          UserFollow[]         @relation("Following")
+  following          UserFollow[]         @relation("Follower")
+  discussionLikes    DiscussionLike[]
+  blockedBy          UserBlock[]          @relation("Blocked")
+  blockedUsers       UserBlock[]          @relation("Blocker")
+  apiKeys            ApiKey[]
+  webhooks           Webhook[]
+}
+
+// User Ban Table - 用户封禁记录
+model UserBan {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  bannerId    String    @map("banner_id") // 操作的管理员
+  reason      String    @db.Text // 封禁原因
+  banType     String    @default("permanent") @map("ban_type") @db.VarChar(20) // permanent: 永久, temporary: 临时
+  expiresAt   DateTime? @map("expires_at") // 封禁过期时间
+  isActive    Boolean   @default(true) @map("is_active")
+  unbanReason String?   @map("unban_reason") // 解封原因
+  unbannedAt  DateTime? @map("unbanned_at") // 解封时间
+  unbannedBy  String?   @map("unbanned_by") // 解封操作人
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  user        User      @relation("BannedUser", fields: [userId], references: [id], onDelete: Cascade)
+  banner      User      @relation("BannerAdmin", fields: [bannerId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([bannerId])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  senderId  String?  @map("sender_id")
+  type      String   @db.VarChar(20)
+  title     String   @db.VarChar(200)
+  content   String   @db.VarChar(2000)
+  linkUrl   String?  @map("link_url") @db.VarChar(500)
+  priority  String   @default("normal") @map("priority") @db.VarChar(10) // urgent/high/normal/low
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender    User?    @relation("NotificationSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([senderId])
+  @@index([priority])
+}
+
+model Repository {
+  id            String          @id @default(cuid())
+  ownerId       String          @map("owner_id")
+  name          String          @db.VarChar(100)
+  description   String?
+  visibility    Int             @default(1) // 0=私有, 1=公开
+  defaultBranch String          @default("main") @map("default_branch") @db.VarChar(50)
+  isFork        Boolean         @default(false) @map("is_fork")
+  forkedFromId  String?         @map("forked_from_id")
+  forkedFrom    Repository?     @relation("ForkRelation", fields: [forkedFromId], references: [id])
+  forks         Repository[]    @relation("ForkRelation")
+  starCount     Int             @default(0) @map("star_count")
+  forkCount     Int             @default(0) @map("fork_count")
+  watchCount    Int             @default(0) @map("watch_count")
+  viewCount     Int             @default(0) @map("view_count") // 仓库浏览量
+  language      String?         @db.VarChar(50)
+  isLocked      Boolean         @default(false) @map("is_locked") // 仓库锁定（禁止推送）
+  isArchived    Boolean         @default(false) @map("is_archived") // 仓库归档（只读）
+  deletedAt     DateTime?       @map("deleted_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  items         RepoItem[]
+  owner         User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  stars         Star[]
+  watchers      Watcher[]
+  shareLinks    ShareLink[]
+  issues        Issue[]
+  pullRequests  PullRequest[]   @relation("TargetRepo")
+  sourcePRs     PullRequest[]   @relation("SourceRepo")
+  branches      Branch[]
+  fileChunks    RepoFileChunk[]
+  forkRequests  ForkRequest[]
+  webhooks      Webhook[]       @relation("RepoWebhooks")
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
+model Branch {
+  id        String     @id @default(cuid())
+  repoId    String     @map("repo_id")
+  name      String     @db.VarChar(100)
+  isDefault Boolean    @default(false) @map("is_default")
+  createdAt DateTime   @default(now()) @map("created_at")
+  repo      Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  files     RepoItem[] // 关联该分支的文件
+  fileChunks RepoFileChunk[] // 关联该分支的分片上传
+
+  @@unique([repoId, name])
+  @@index([repoId])
+}
+
+model RepoItem {
+  id          String       @id @default(cuid())
+  repoId      String       @map("repo_id")
+  branchId    String?      @map("branch_id") // 关联分支，为空则属于 main 分支
+  parentId    String?      @map("parent_id")
+  name        String       @db.VarChar(255)
+  type        String       @db.VarChar(10)
+  content     String?
+  fileHash    String?      @map("file_hash") @db.VarChar(64)
+  fileSize    BigInt       @default(0) @map("file_size")
+  mimeType    String?      @map("mime_type") @db.VarChar(100)
+  storagePath String?      @map("storage_path") @db.VarChar(500)
+  linkUrl     String?      @map("link_url")
+  isDeleted   Boolean      @default(false) @map("is_deleted")
+  depth       Int          @default(0)     // 路径深度
+  path        String?      @db.VarChar(2000) // 完整路径
+  sortOrder   Int          @default(0)     // 排序序号
+  hash        String?      @map("hash")     @db.VarChar(64) // 内容哈希（与 fileHash 分开）
+  deletedAt   DateTime?    @map("deleted_at") // 删除时间
+  deletedBy   String?      @map("deleted_by") // 删除操作人
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  parent      RepoItem?    @relation("ParentChild", fields: [parentId], references: [id], onDelete: Cascade)
+  children    RepoItem[]   @relation("ParentChild")
+  repo        Repository   @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  branch      Branch?      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  versions    FileVersion[] // 文件版本历史
+
+  @@index([repoId, parentId])
+  @@index([repoId, branchId])
+  @@index([branchId, parentId])
+}
+
+// 文件版本历史 - 记录文件每次修改的快照
+model FileVersion {
+  id          String    @id @default(cuid())
+  fileId      String    @map("file_id") // 关联的 RepoItem ID
+  version     Int       @default(1) // 版本号
+  content     String?  @db.Text // 版本内容快照（可为 null 表示内容未变更）
+  fileHash    String?   @map("file_hash") @db.VarChar(64) // 内容哈希
+  fileSize    BigInt    @default(0) @map("file_size") // 文件大小
+  changeSize  BigInt    @default(0) @map("change_size") // 相比上一版本的变化大小（正数增加，负数减少）
+  message     String?   @map("version_message") @db.VarChar(500) // 版本说明
+  createdAt   DateTime  @default(now()) @map("created_at")
+  file        RepoItem  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, version])
+  @@index([fileId])
+  @@index([createdAt])
+}
+
+// 分片上传记录 - 存储大文件分片信息
+model RepoFileChunk {
+  id          String     @id @default(cuid())
+  repoId      String     @map("repo_id")
+  branchId    String?    @map("branch_id") // 关联分支
+  uploadId    String     @map("upload_id") @db.VarChar(100) // 上传会话ID
+  chunkIndex  Int        @map("chunk_index") // 分片序号
+  chunkHash   String     @map("chunk_hash") @db.VarChar(64) // 分片 SHA256
+  chunkData   String     @db.Text // 分片内容（base64）
+  chunkSize   Int        @map("chunk_size") // 分片大小
+  totalChunks Int        @map("total_chunks") // 总分片数
+  fileName    String     @map("file_name") @db.VarChar(255) // 文件名
+  parentPath  String     @map("parent_path") @db.VarChar(2000) // 父目录路径
+  totalSize   BigInt     @map("total_size") // 文件总大小
+  mimeType    String?    @map("mime_type") @db.VarChar(100)
+  userId      String     @map("user_id") // 上传用户
+  status      String     @default("pending") @map("status") @db.VarChar(20) // pending/completed/failed
+  expiresAt   DateTime   @map("expires_at") // 过期时间（1小时后自动清理）
+  createdAt   DateTime   @default(now()) @map("created_at")
+  repo        Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  branch      Branch?    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([uploadId, chunkIndex])
+  @@index([repoId])
+  @@index([uploadId])
+  @@index([branchId])
+  @@index([expiresAt])
+}
+
+model Star {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  repoId    String     @map("repo_id")
+  createdAt DateTime   @default(now()) @map("created_at")
+  repo      Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, repoId])
+}
+
+model Watcher {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  repoId    String     @map("repo_id")
+  createdAt DateTime   @default(now()) @map("created_at")
+  repo      Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, repoId])
+}
+
+model Discussion {
+  id        String              @id @default(cuid())
+  authorId  String              @map("author_id")
+  title     String              @db.VarChar(200)
+  content   String
+  category  String              @db.VarChar(20)
+  status    String              @default("open") @db.VarChar(20)
+  viewCount Int                 @default(0) @map("view_count")
+  isDeleted Boolean             @default(false) @map("is_deleted")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+  author    User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments  DiscussionComment[]
+  likes     DiscussionLike[]
+
+  @@index([authorId])
+  @@index([category])
+}
+
+model DiscussionComment {
+  id           String              @id @default(cuid())
+  discussionId String              @map("discussion_id")
+  authorId     String              @map("author_id")
+  content      String
+  parentId     String?             @map("parent_id")
+  isAccepted   Boolean             @default(false) @map("is_accepted")
+  isDeleted    Boolean             @default(false) @map("is_deleted")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  author       User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  discussion   Discussion          @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  parent       DiscussionComment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies      DiscussionComment[] @relation("CommentReplies")
+
+  @@index([discussionId, createdAt])
+}
+
+// DiscussionLike - 讨论点赞
+model DiscussionLike {
+  id           String     @id @default(cuid())
+  discussionId String     @map("discussion_id")
+  userId       String     @map("user_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  // 关系
+  discussion Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([discussionId, userId])
+  @@index([discussionId])
+  @@index([userId])
+}
+
+model Report {
+  id          String    @id @default(cuid())
+  reporterId  String    @map("reporter_id")
+  targetType  String    @map("target_type") @db.VarChar(20)
+  targetId    String    @map("target_id")
+  reason      String
+  status      String    @default("pending") @db.VarChar(20)
+  handlerId   String?   @map("handler_id")
+  handlerNote String?   @map("handler_note")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  handledAt   DateTime? @map("handled_at")
+  handler     User?     @relation("Handler", fields: [handlerId], references: [id])
+  reporter    User      @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  adminId    String   @map("admin_id")
+  userId     String?  @map("user_id") // 被操作用户 ID（可选）
+  actionType String   @map("action_type") @db.VarChar(50)
+  targetType String?  @map("target_type") @db.VarChar(50)
+  targetId   String?  @map("target_id") @db.VarChar(100)
+  details    Json?
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime @default(now()) @map("created_at")
+  admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent")
+  success   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id") @db.VarChar(100)
+  email     String   @db.VarChar(255)
+  code      String   @db.VarChar(6)
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email, code])
+  @@index([userId])
+}
+
+// System Config Table
+model SystemConfig {
+  key         String   @id
+  value       String   @db.Text
+  description String?  @map("description")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("system_config")
+}
+
+// Issue model
+model Issue {
+  id           String         @id @default(cuid())
+  repositoryId String         @map("repository_id")
+  authorId     String         @map("author_id")
+  title        String         @db.VarChar(255)
+  content      String
+  status       String         @default("open") @db.VarChar(20)
+  isDeleted    Boolean        @default(false) @map("is_deleted")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  repository   Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  author       User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments     IssueComment[]
+  labels       IssueLabel[]
+
+  @@index([repositoryId, status])
+  @@index([authorId])
+}
+
+model IssueComment {
+  id        String   @id @default(cuid())
+  issueId   String   @map("issue_id")
+  authorId  String   @map("author_id")
+  content   String
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+}
+
+model IssueLabel {
+  id      String @id @default(cuid())
+  issueId String @map("issue_id")
+  name    String @db.VarChar(50)
+  color   String @default("#0075ca") @db.VarChar(10)
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([issueId])
+}
+
+// PullRequest model
+model PullRequest {
+  id           String               @id @default(cuid())
+  repositoryId String               @map("repository_id")
+  authorId     String               @map("author_id")
+  title        String               @db.VarChar(255)
+  content      String
+  status       String               @default("open") @db.VarChar(20)
+  sourceBranch String               @map("source_branch") @db.VarChar(100)
+  targetBranch String               @map("target_branch") @db.VarChar(100)
+  sourceRepoId String?              @map("source_repo_id")
+  isDeleted    Boolean              @default(false) @map("is_deleted")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  repository   Repository           @relation("TargetRepo", fields: [repositoryId], references: [id], onDelete: Cascade)
+  author       User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  sourceRepo   Repository?          @relation("SourceRepo", fields: [sourceRepoId], references: [id])
+  comments     PullRequestComment[]
+
+  @@index([repositoryId, status])
+  @@index([authorId])
+}
+
+model PullRequestComment {
+  id            String      @id @default(cuid())
+  pullRequestId String      @map("pull_request_id")
+  authorId      String      @map("author_id")
+  content       String
+  isDeleted     Boolean     @default(false) @map("is_deleted")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  author        User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([pullRequestId, createdAt])
+}
+
+// 用户操作日志 - 记录所有用户操作
+model UserActivityLog {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  action     String   @db.VarChar(50) // 操作类型：upload, download, delete, create_repo, delete_repo, fork, star, etc.
+  targetType String   @map("target_type") // 目标类型：file, repo, discussion, issue, pullrequest, comment
+  targetId   String   @map("target_id") // 目标ID
+  targetName String?  @map("target_name") // 目标名称（如文件名、仓库名）
+  details    Json? // 详细信息
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent")
+  fileSize   BigInt?  @map("file_size") // 文件大小（下载/上传时）
+  status     String   @default("success") @db.VarChar(20) // success, failed
+  errorMsg   String?  @map("error_msg")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+// Hidden Content Table - 被隐藏的内容
+model HiddenContent {
+  id            String    @id @default(cuid())
+  targetType    String    @map("target_type") @db.VarChar(20) // repository, discussion, issue, pullrequest
+  targetId      String    @map("target_id")
+  reason        String    @db.Text // 隐藏原因
+  hiddenBy      String    @map("hidden_by") // 操作的管理员
+  isActive      Boolean   @default(true) @map("is_active")
+  restoredAt    DateTime? @map("restored_at") // 恢复时间
+  restoredBy    String?   @map("restored_by") // 恢复操作人
+  restoreReason String?   @map("restore_reason") // 恢复原因
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([targetType, targetId])
+  @@index([hiddenBy])
+  @@index([isActive])
+}
+
+// User Penalty Table - 用户处罚记录
+// 处罚类型：mute(禁言)、repo_limit(仓库限制)、storage_limit(存储限制)
+model UserPenalty {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id") // 被处罚用户
+  penaltyType  String    @map("penalty_type") @db.VarChar(30) // mute, repo_limit, storage_limit
+  reason       String    @db.Text // 处罚原因
+  value        Int       @default(0) // 限制值（禁言天数/仓库数量/存储MB）
+  appliedBy    String    @map("applied_by") // 操作的管理员
+  isActive     Boolean   @default(true) @map("is_active") // 是否生效
+  expiresAt    DateTime? @map("expires_at") // 过期时间（null=永久）
+  removedAt    DateTime? @map("removed_at") // 解除时间
+  removedBy    String?   @map("removed_by") // 解除操作人
+  removeReason String?   @map("remove_reason") // 解除原因
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  user         User      @relation("PenaltyUser", fields: [userId], references: [id], onDelete: Cascade)
+  applier      User      @relation("PenaltyAdmin", fields: [appliedBy], references: [id], onDelete: Cascade)
+  notes        PenaltyNote[]
+
+  @@index([userId])
+  @@index([penaltyType])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+// Penalty Template Table - 处罚模板
+model PenaltyTemplate {
+  id              String   @id @default(cuid())
+  name            String   @db.VarChar(100) // 模板名称
+  penaltyType     String   @map("penalty_type") @db.VarChar(30) // 处罚类型
+  defaultDuration Int?    @default(7) @map("default_duration") // 默认持续天数
+  reason          String   @db.Text // 默认处罚原因
+  description     String?  @db.Text // 模板描述
+  usageCount      Int      @default(0) @map("usage_count") // 使用次数
+  isActive        Boolean  @default(true) @map("is_active") // 是否启用
+  createdBy       String   @map("created_by") // 创建人
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([penaltyType])
+  @@index([isActive])
+}
+
+// Penalty Note Table - 处罚备注
+model PenaltyNote {
+  id        String   @id @default(cuid())
+  penaltyId String   @map("penalty_id") // 关联的处罚ID
+  content   String   @db.Text // 备注内容
+  createdBy String   @map("created_by") // 添加备注的管理员
+  createdAt DateTime @default(now()) @map("created_at")
+  penalty   UserPenalty @relation(fields: [penaltyId], references: [id], onDelete: Cascade)
+
+  @@index([penaltyId])
+}
+
+// Appeal Table - 用户申诉记录
+model Appeal {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id") // 申诉用户
+  appealType String    @map("appeal_type") @db.VarChar(20) // ban, hidden, penalty
+  targetId   String    @map("target_id") // 被申诉的内容/处罚ID
+  content    String    @db.Text // 申诉内容
+  status     String    @default("pending") @map("status") @db.VarChar(20) // pending, approved, rejected
+  reviewerId String?   @map("reviewer_id") // 审核管理员
+  reviewNote String?   @map("review_note") @db.Text // 审核备注
+  reviewedAt DateTime? @map("reviewed_at") // 审核时间
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  user       User      @relation("AppealUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer   User?     @relation("AppealReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([appealType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Announcement Table - 系统公告
+model Announcement {
+  id          String    @id @default(cuid())
+  title       String    @db.VarChar(200) // 标题
+  content     String    @db.Text // 内容
+  type        String    @default("info") @map("type") @db.VarChar(20) // info, warning, critical
+  priority    String    @default("normal") @map("priority") @db.VarChar(20) // low, normal, high, urgent
+  isActive    Boolean   @default(true) @map("is_active")
+  isPinned    Boolean   @default(false) @map("is_pinned")
+  publishedAt DateTime? @map("published_at") // 发布时间
+  expiresAt   DateTime? @map("expires_at") // 过期时间
+  createdBy   String    @map("created_by") // 创建人
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@index([isPinned])
+  @@index([expiresAt])
+}
+
+// SecurityEvent Table - 安全事件记录
+model SecurityEvent {
+  id         String    @id @default(cuid())
+  eventType  String    @map("event_type") @db.VarChar(50) // login_failed, brute_force, suspicious_ip, rate_limit, etc.
+  severity   String    @default("info") @db.VarChar(20) // info, warning, critical
+  userId     String?   @map("user_id") // 关联用户
+  ipAddress  String    @map("ip_address") @db.VarChar(45)
+  userAgent  String?   @map("user_agent")
+  details    Json? // 详细信息
+  status     String    @default("open") @db.VarChar(20) // open, investigated, resolved, false_positive
+  resolvedAt DateTime? @map("resolved_at")
+  resolvedBy String?   @map("resolved_by")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([eventType])
+  @@index([severity])
+  @@index([status])
+  @@index([ipAddress])
+  @@index([createdAt])
+}
+
+// IPBlacklist Table - IP 黑名单
+model IPBlacklist {
+  id        String    @id @default(cuid())
+  ipAddress String    @map("ip_address") @db.VarChar(45)
+  ipRange   String?   @map("ip_range") @db.VarChar(50) // CIDR format
+  reason    String    @db.Text
+  eventId   String?   @map("event_id") // 触发的事件
+  addedBy   String    @map("added_by") // 添加人
+  expiresAt DateTime? @map("expires_at") // 过期时间（null=永久）
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([ipAddress])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+// ShareLink Table - 分享链接
+model ShareLink {
+  id        String  @id @default(cuid())
+  token     String  @unique @map("token") @db.VarChar(64)
+  repoId    String  @map("repo_id")
+  creatorId String  @map("creator_id")
+  path      String? @db.VarChar(2000) // 指定路径，为空表示整个仓库
+
+  // 权限
+  permission String  @default("read") @map("permission") @db.VarChar(20) // read/download
+  password   String? @map("password") @db.VarChar(255) // 可选密码保护（bcrypt）
+
+  // 限制
+  expiresAt DateTime? @map("expires_at") // 过期时间
+  maxViews  Int?      @map("max_views") // 最大浏览次数
+  viewCount Int       @default(0) @map("view_count")
+
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  repo    Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  creator User       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([repoId])
+  @@index([creatorId])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+// ForkRequest - Fork 申请记录
+model ForkRequest {
+  id          String    @id @default(cuid())
+  repoId      String    @map("repo_id")
+  requesterId String    @map("requester_id")
+  message     String?   @db.Text // 申请说明
+  status      String    @default("pending") @map("status") @db.VarChar(20)
+  // pending|approved|rejected|expired
+  note        String?   @db.Text // 审批备注
+  processedBy String?   @map("processed_by") // 处理人
+  processedAt DateTime? @map("processed_at")
+  expiresAt   DateTime? @map("expires_at") // 过期时间
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // 关系
+  repo      Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  requester User       @relation("ForkRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  processor User?      @relation("ForkProcessor", fields: [processedBy], references: [id])
+
+  @@index([repoId, status])
+  @@index([requesterId])
+  @@index([expiresAt])
+  @@map("fork_request")
+}
+
+// UserFollow - 用户关注关系
+model UserFollow {
+  id          String   @id @default(cuid())
+  followerId  String   @map("follower_id") // 关注者
+  followingId String   @map("following_id") // 被关注者
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // 关系
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// User Block Table - 用户拉黑关系
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String   @map("blocker_id")   // 拉黑者
+  blockedId String   @map("blocked_id")   // 被拉黑者
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+// API Key Table - 用户 API 密钥
+model ApiKey {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  name         String    @db.VarChar(100) // 密钥名称，如 "Personal Access Token"
+  keyHash      String    @map("key_hash") @db.VarChar(64) // API Key 的 SHA256 哈希
+  keyPrefix     String    @map("key_prefix") @db.VarChar(8) // API Key 前缀（用于识别）
+  scopes       String[]  @default([]) // 权限范围：repo, issues, pullrequests, notifications, etc.
+  expiresAt    DateTime? @map("expires_at") // 过期时间（null=永不过期）
+  lastUsedAt   DateTime? @map("last_used_at") // 最后使用时间
+  lastIp       String?   @map("last_ip") @db.VarChar(45) // 最后使用 IP
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([keyHash])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+// Webhook Table - Webhook 配置
+model Webhook {
+  id          String    @id @default(cuid())
+  repoId      String?   @map("repo_id") // 关联仓库（null=全局 webhook）
+  userId      String    @map("user_id") // 创建者
+  name        String    @db.VarChar(100) // Webhook 名称
+  url         String    @db.VarChar(2000) // 回调 URL
+  secret      String?   @db.VarChar(255) // 签名密钥（可选）
+  contentType String    @default("json") @map("content_type") @db.VarChar(20) // json 或 form
+  events      String[]  @default(["push"]) // 触发事件：push, pull_request, issues, discussion, etc.
+  isActive    Boolean   @default(true) @map("is_active")
+  lastTriggeredAt DateTime? @map("last_triggered_at") // 最后触发时间
+  lastStatus  Int       @default(0) @map("last_status") // 最后状态码
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  repo  Repository? @relation("RepoWebhooks", fields: [repoId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([repoId])
+  @@index([userId])
+  @@index([isActive])
+}
+
+// WebhookDelivery Table - Webhook 投递记录
+model WebhookDelivery {
+  id          String    @id @default(cuid())
+  webhookId   String    @map("webhook_id")
+  event       String    @db.VarChar(50) // 事件类型
+  payload     String    @db.Text // 投递内容
+  response    String?   @db.Text // 响应内容
+  statusCode  Int?      @map("status_code") // HTTP 状态码
+  duration    Int?      @map("duration") // 耗时（毫秒）
+  success     Boolean   @default(true)
+  error       String?   @db.Text // 错误信息
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@index([createdAt])
+}

@@ -1,0 +1,391 @@
+// ============================================
+// English Translations
+// ============================================
+
+export const common = {
+  app: {
+    name: 'Code Platform',
+    tagline: 'Where developers build together',
+  },
+  nav: {
+    home: 'Home',
+    explore: 'Explore',
+    search: 'Search',
+    notifications: 'Notifications',
+    settings: 'Settings',
+    admin: 'Admin',
+  },
+  buttons: {
+    submit: 'Submit',
+    cancel: 'Cancel',
+    save: 'Save',
+    delete: 'Delete',
+    edit: 'Edit',
+    create: 'Create',
+    close: 'Close',
+    confirm: 'Confirm',
+    back: 'Back',
+    next: 'Next',
+    previous: 'Previous',
+    signIn: 'Sign In',
+    signUp: 'Sign Up',
+    signOut: 'Sign Out',
+  },
+  status: {
+    loading: 'Loading...',
+    saving: 'Saving...',
+    deleting: 'Deleting...',
+    success: 'Success',
+    error: 'Error',
+    empty: 'No data',
+  },
+  pagination: {
+    page: 'Page',
+    of: 'of',
+    perPage: 'per page',
+    total: 'Total',
+    showing: 'Showing',
+  },
+  time: {
+    justNow: 'just now',
+    minutesAgo: '{{count}} minute ago',
+    minutesAgo_plural: '{{count}} minutes ago',
+    hoursAgo: '{{count}} hour ago',
+    hoursAgo_plural: '{{count}} hours ago',
+    daysAgo: '{{count}} day ago',
+    daysAgo_plural: '{{count}} days ago',
+    weeksAgo: '{{count}} week ago',
+    weeksAgo_plural: '{{count}} weeks ago',
+    monthsAgo: '{{count}} month ago',
+    monthsAgo_plural: '{{count}} months ago',
+    yearsAgo: '{{count}} year ago',
+    yearsAgo_plural: '{{count}} years ago',
+  },
+  user: {
+    profile: 'Profile',
+    repositories: 'Repositories',
+    followers: 'Followers',
+    following: 'Following',
+    starred: 'Starred',
+    editProfile: 'Edit Profile',
+    viewProfile: 'View Profile',
+  },
+  repo: {
+    repositories: 'Repositories',
+    newRepo: 'New Repository',
+    repoName: 'Repository Name',
+    description: 'Description',
+    visibility: {
+      public: 'Public',
+      private: 'Private',
+    },
+    stats: {
+      stars: 'stars',
+      forks: 'forks',
+      watchers: 'watchers',
+      commits: 'commits',
+      branches: 'branches',
+      releases: 'releases',
+    },
+    actions: {
+      star: 'Star',
+      unstar: 'Unstar',
+      watch: 'Watch',
+      unwatch: 'Unwatch',
+      fork: 'Fork',
+      clone: 'Clone',
+      download: 'Download',
+    },
+  },
+  discussion: {
+    discussions: 'Discussions',
+    newDiscussion: 'New Discussion',
+    categories: {
+      question: 'Question',
+      idea: 'Idea',
+      share: 'Share',
+      discussion: 'Discussion',
+      announcement: 'Announcement',
+    },
+    replies: 'replies',
+    views: 'views',
+    pinned: 'Pinned',
+    locked: 'Locked',
+    acceptAnswer: 'Accept Answer',
+    acceptedAnswer: 'Accepted Answer',
+  },
+};
+
+export const auth = {
+  signIn: {
+    title: 'Sign in',
+    subtitle: 'Welcome back! Please sign in to your account.',
+    email: 'Email address',
+    password: 'Password',
+    rememberMe: 'Remember me',
+    forgotPassword: 'Forgot password?',
+    submit: 'Sign in',
+    noAccount: "Don't have an account?",
+    signUp: 'Sign up',
+  },
+  signUp: {
+    title: 'Create an account',
+    subtitle: 'Join us and start building today.',
+    username: 'Username',
+    email: 'Email address',
+    password: 'Password',
+    confirmPassword: 'Confirm password',
+    submit: 'Create account',
+    hasAccount: 'Already have an account?',
+    signIn: 'Sign in',
+  },
+  password: {
+    reset: 'Reset password',
+    resetSent: 'Password reset link sent',
+    resetSuccess: 'Password has been reset',
+    strength: {
+      weak: 'Weak',
+      fair: 'Fair',
+      good: 'Good',
+      strong: 'Strong',
+    },
+  },
+  errors: {
+    invalidCredentials: 'Invalid email or password',
+    userExists: 'An account with this email already exists',
+    usernameTaken: 'This username is already taken',
+    emailRequired: 'Email is required',
+    passwordRequired: 'Password is required',
+    passwordsDoNotMatch: 'Passwords do not match',
+  },
+};
+
+export const repo = {
+  create: {
+    title: 'Create a new repository',
+    name: 'Repository name',
+    namePlaceholder: 'e.g., my-awesome-project',
+    description: 'Description',
+    descriptionPlaceholder: 'A short description of your project',
+    visibility: 'Visibility',
+    public: 'Public',
+    publicDesc: 'Anyone can see this repository',
+    private: 'Private',
+    privateDesc: 'Only you can see this repository',
+    initialize: 'Initialize this repository with',
+    readme: 'Add a README file',
+    gitignore: 'Add .gitignore',
+    license: 'Choose a license',
+    submit: 'Create repository',
+  },
+  settings: {
+    title: 'Settings',
+    general: 'General',
+    branches: 'Branches',
+    hooks: 'Webhooks',
+    secrets: 'Secrets',
+    danger: 'Danger Zone',
+    delete: 'Delete this repository',
+    deleteWarning: 'This action cannot be undone.',
+  },
+  file: {
+    upload: 'Upload files',
+    createNew: 'Create new file',
+    raw: 'Raw',
+    blame: 'Blame',
+    history: 'History',
+    delete: 'Delete file',
+    rename: 'Rename',
+    move: 'Move',
+  },
+};
+
+export const discussion = {
+  create: {
+    title: 'Start a new discussion',
+    titleLabel: 'Title',
+    titlePlaceholder: 'What do you want to discuss?',
+    category: 'Category',
+    body: 'Body',
+    bodyPlaceholder: 'Write your discussion content here...',
+    submit: 'Create discussion',
+  },
+  reply: {
+    placeholder: 'Write a reply...',
+    submit: 'Reply',
+    edit: 'Edit reply',
+    delete: 'Delete reply',
+  },
+  categories: {
+    question: 'Questions',
+    idea: 'Ideas',
+    share: 'Shares',
+    discussion: 'Discussions',
+    announcement: 'Announcements',
+  },
+};
+
+export const admin = {
+  dashboard: {
+    title: 'Dashboard',
+    stats: {
+      users: 'Users',
+      repositories: 'Repositories',
+      discussions: 'Discussions',
+      reports: 'Reports',
+    },
+    activity: 'Recent Activity',
+    reports: {
+      pending: 'Pending Reports',
+      total: 'Total Reports',
+    },
+  },
+  users: {
+    title: 'User Management',
+    search: 'Search users...',
+    columns: {
+      username: 'Username',
+      email: 'Email',
+      role: 'Role',
+      status: 'Status',
+      joined: 'Joined',
+      actions: 'Actions',
+    },
+    roles: {
+      superAdmin: 'Super Admin',
+      admin: 'Admin',
+      user: 'User',
+    },
+    actions: {
+      edit: 'Edit',
+      ban: 'Ban',
+      unban: 'Unban',
+      delete: 'Delete',
+    },
+  },
+  reports: {
+    title: 'Report Management',
+    columns: {
+      type: 'Type',
+      reason: 'Reason',
+      reporter: 'Reporter',
+      status: 'Status',
+      date: 'Date',
+      actions: 'Actions',
+    },
+    actions: {
+      handle: 'Handle',
+      dismiss: 'Dismiss',
+      delete: 'Delete Content',
+    },
+    statuses: {
+      pending: 'Pending',
+      handled: 'Handled',
+      dismissed: 'Dismissed',
+    },
+  },
+  audit: {
+    title: 'Audit Logs',
+    columns: {
+      action: 'Action',
+      admin: 'Admin',
+      target: 'Target',
+      date: 'Date',
+      details: 'Details',
+    },
+  },
+  email: {
+    title: 'Email Configuration',
+    providers: {
+      qq: 'QQ Mail',
+      smtp: 'SMTP',
+      sendgrid: 'SendGrid',
+      mailgun: 'Mailgun',
+    },
+    test: 'Send Test Email',
+    testSent: 'Test email sent!',
+  },
+};
+
+export const settings = {
+  profile: {
+    title: 'Profile',
+    avatar: 'Avatar',
+    name: 'Name',
+    bio: 'Bio',
+    location: 'Location',
+    website: 'Website',
+    company: 'Company',
+    submit: 'Update profile',
+  },
+  account: {
+    title: 'Account',
+    email: 'Email',
+    changeEmail: 'Change email',
+    password: 'Password',
+    changePassword: 'Change password',
+    danger: 'Danger Zone',
+    delete: 'Delete Account',
+    deleteWarning: 'Once you delete your account, there is no going back.',
+  },
+  notifications: {
+    title: 'Notifications',
+    email: 'Email notifications',
+    push: 'Push notifications',
+    activity: 'Activity on your content',
+    mentions: 'Mentions',
+  },
+  repositories: {
+    title: 'Repositories',
+    defaultBranch: 'Default branch',
+    visibility: 'Default repository visibility',
+  },
+  export: {
+    title: 'Export Data',
+    description: 'Download a copy of all your data',
+    submit: 'Request export',
+  },
+};
+
+export const errors = {
+  notFound: {
+    title: 'Page not found',
+    message: 'The page you are looking for does not exist.',
+    back: 'Go back home',
+  },
+  serverError: {
+    title: 'Something went wrong',
+    message: 'We have encountered an unexpected error.',
+    retry: 'Try again',
+  },
+  unauthorized: {
+    title: 'Unauthorized',
+    message: 'You need to sign in to access this page.',
+    signIn: 'Sign in',
+  },
+  forbidden: {
+    title: 'Forbidden',
+    message: 'You do not have permission to access this page.',
+  },
+  validation: {
+    required: 'This field is required',
+    invalid: 'Invalid value',
+    tooShort: 'Value is too short',
+    tooLong: 'Value is too long',
+  },
+  network: {
+    title: 'Network error',
+    message: 'Please check your internet connection and try again.',
+    retry: 'Retry',
+  },
+};
+
+export default {
+  common,
+  auth,
+  repo,
+  discussion,
+  admin,
+  settings,
+  errors,
+};
