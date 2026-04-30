@@ -302,59 +302,5 @@ const isFormValid = () => {
         </div>
       </div>
     </div>
-    <style jsx>{`
-      .input-wrapper {
-        position: relative;
-        display: flex;
-        align-items: center;
-      }
-      .input-wrapper .form-input {
-        padding-right: 100px;
-      }
-      .input-wrapper .form-input.input-success {
-        border-color: var(--color-success-fg);
-      }
-      .input-wrapper .form-input.input-error {
-        border-color: var(--color-danger-fg);
-      }
-      .input-status {
-        position: absolute;
-        right: 10px;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 12px;
-        font-weight: 500;
-        pointer-events: none;
-      }
-      .input-status.checking { color: var(--color-fg-muted); }
-      .input-status.success  { color: var(--color-success-fg); }
-      .input-status.error   { color: var(--color-danger-fg); }
-      .password-strength {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 6px;
-      }
-      .strength-bar {
-        flex: 1;
-        height: 4px;
-        background: var(--color-border-default);
-        border-radius: 2px;
-        overflow: hidden;
-      }
-      .strength-progress {
-        height: 100%;
-        border-radius: 2px;
-        transition: width 0.2s ease, background-color 0.2s ease;
-        min-width: 2px;
-      }
-      .strength-label {
-        font-size: 12px;
-        font-weight: 500;
-        white-space: nowrap;
-        min-width: 50px;
-      }
-    `}</style>
   );
 }
