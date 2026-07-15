@@ -5,28 +5,20 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, error } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
 
 // GET /api/v1/repos/[username]/[repoName]/versions/[fileId]
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string; fileId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { username, repoName, fileId } = await params;
+export const GET = defineRoute({
+  auth: 'required',
+  handler: async ({ req, user, params }) => {
+    const { username, repoName, fileId } = params;
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
 
-    // 获取仓库
     const repo = await prisma.repository.findFirst({
       where: {
         owner: { username },
@@ -45,14 +37,13 @@ export async function GET(
     }
 
     // 检查访问权限
-    const isOwner = repo.ownerId === auth.userId;
-    const isPublic = repo.visibility === 1; // 1 = 公开, 0 = 私有
+    const isOwner = repo.ownerId === user!.id;
+    const isPublic = repo.visibility === 1;
 
     if (!isOwner && !isPublic) {
       return error(ErrorCodes.FORBIDDEN, { message: '无权访问此仓库' });
     }
 
-    // 获取文件记录
     const file = await prisma.repoItem.findFirst({
       where: {
         id: fileId,
@@ -71,7 +62,6 @@ export async function GET(
       return error(ErrorCodes.NOT_FOUND, { message: '文件不存在' });
     }
 
-    // 获取版本历史
     const [versions, total] = await Promise.all([
       prisma.fileVersion.findMany({
         where: { fileId },
@@ -90,7 +80,6 @@ export async function GET(
       prisma.fileVersion.count({ where: { fileId } }),
     ]);
 
-    // 获取文件当前版本信息
     const currentFile = await prisma.repoItem.findUnique({
       where: { id: fileId },
       select: {
@@ -100,7 +89,6 @@ export async function GET(
       },
     });
 
-    // 获取当前版本号
     const latestVersion = await prisma.fileVersion.findFirst({
       where: { fileId },
       orderBy: { version: 'desc' },
@@ -132,7 +120,5 @@ export async function GET(
         totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取版本历史失败');
-  }
-}
+  },
+});

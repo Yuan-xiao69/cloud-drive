@@ -2,47 +2,6 @@
 // 公共工具函数
 // ============================================================
 
-// --- 语言颜色映射（全项目唯一来源）---
-export const languageColors: Record<string, string> = {
-  JavaScript: '#f1e05a',
-  TypeScript: '#3178c6',
-  Python: '#3572A5',
-  Java: '#b07219',
-  'C++': '#f34b7d',
-  C: '#555555',
-  'C#': '#178600',
-  Go: '#00ADD8',
-  Rust: '#dea584',
-  Ruby: '#701516',
-  PHP: '#4F5D95',
-  Swift: '#F05138',
-  Kotlin: '#A97BFF',
-  Dart: '#00B4AB',
-  Scala: '#c22d40',
-  Shell: '#89e051',
-  HTML: '#e34c26',
-  CSS: '#563d7c',
-  Vue: '#41b883',
-  React: '#61dafb',
-  Markdown: '#083fa1',
-  JSON: '#292929',
-  YAML: '#cb171e',
-  SQL: '#e38c00',
-  R: '#198CE7',
-  MATLAB: '#e16737',
-  Jupyter: '#DA5B0B',
-  Dockerfile: '#384d54',
-  Makefile: '#427819',
-};
-
-/**
- * 根据语言名称获取对应的颜色
- */
-export function getLanguageColor(language: string | undefined | null): string {
-  if (!language) return '#8b949e';
-  return languageColors[language] ?? '#8b949e';
-}
-
 // --- 时间格式化 ---
 
 /**
@@ -69,22 +28,6 @@ export function formatTimeAgo(dateStr: string): string {
 }
 
 /**
- * 将时间字符串格式化为标准日期时间
- */
-export function formatDateTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).replace(/\//g, '-');
-}
-
-/**
  * 将时间字符串格式化为仅日期
  */
 export function formatDate(dateStr: string): string {
@@ -97,15 +40,6 @@ export function formatDate(dateStr: string): string {
 }
 
 // --- 数字格式化 ---
-
-/**
- * 格式化数字（超过 1000 用 k 表示）
- */
-export function formatNumber(num: number): string {
-  if (num >= 10000) return `${(num / 1000).toFixed(1)}k`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
-  return String(num);
-}
 
 /**
  * 格式化文件大小
@@ -121,27 +55,18 @@ export function formatFileSize(bytes: number): string {
 // --- 讨论区分类 ---
 
 export const categoryLabels: Record<string, string> = {
+  general: '综合',
   question: '提问',
   idea: '奇思妙想',
+  share: '经验分享',
+  help: '求助',
+  announcement: '公告',
   request: '资源求助',
   team: '项目组队',
-  share: '经验分享',
 };
 
 export function getCategoryLabel(category: string): string {
   return categoryLabels[category] ?? category;
-}
-
-// --- 仓库可见性 ---
-
-export const visibilityLabels: Record<number, string> = {
-  0: '私有',
-  1: '公开',
-  2: '隐藏共享',
-};
-
-export function getVisibilityLabel(visibility: number): string {
-  return visibilityLabels[visibility] ?? '未知';
 }
 
 // --- 字符串工具 ---
@@ -166,4 +91,27 @@ export function isValidUsername(username: string): boolean {
  */
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/**
+ * 根据当前路径和文件名构建完整文件路径
+ */
+export function buildFilePath(currentPath: string[], fileName: string): string {
+  const prefix = currentPath.length > 0 ? '/' + currentPath.join('/') : ''
+  return prefix + '/' + fileName
+}
+
+// ── 编程语言颜色 ──
+
+const LANGUAGE_COLORS: Record<string, string> = {
+  TypeScript: '#3178C6', JavaScript: '#F7DF1E', Python: '#3572A5',
+  Java: '#B07219', Go: '#00ADD8', Rust: '#DEA584', C: '#555555',
+  'C++': '#F34B7D', 'C#': '#178600', Ruby: '#701516', PHP: '#4F5D95',
+  Swift: '#F05138', Kotlin: '#A97BFF', Dart: '#00B4AB', Scala: '#DC322F',
+  HTML: '#E34F26', CSS: '#563D7C', Shell: '#89E051', Lua: '#000080',
+  Markdown: '#083FA1', JSON: '#292929', YAML: '#CB171E', Dockerfile: '#384D54',
+};
+
+export function getLanguageColor(lang: string): string {
+  return LANGUAGE_COLORS[lang] || '#8B8B8B';
 }

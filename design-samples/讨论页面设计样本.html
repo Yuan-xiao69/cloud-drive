@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>讨论页面设计样本 — 讨论列表 · 讨论详情 · 新建讨论</title>
+<style>
+:root {
+  --ds-accent: #C15F3C; --ds-accent-hover: #D47A4E; --ds-accent-subtle: rgba(193,95,60,0.08);
+  --ds-page-bg: #FAF9F5; --ds-surface: #FFFFFF; --ds-surface-subtle: #F5F2EC; --ds-surface-inset: #F0EDE6;
+  --ds-border: #E8E3DA; --ds-border-muted: #EEE9E2; --ds-border-strong: #D9D2C7;
+  --ds-text: #3B3228; --ds-text-secondary: #7A6E62; --ds-text-tertiary: #A0958B; --ds-text-inverse: #FFFFFF;
+  --ds-success: #4A8B5C; --ds-danger: #C8483C; --ds-warning: #B8862D;
+  --ds-danger-subtle: rgba(200,72,60,0.08); --ds-success-subtle: rgba(74,139,92,0.10);
+  --ds-radius-sm: 6px; --ds-radius-md: 10px;
+  --ds-shadow-sm: 0 1px 3px rgba(59,50,40,0.04);
+  --ds-space-1:4px; --ds-space-2:8px; --ds-space-3:12px; --ds-space-4:16px; --ds-space-6:24px; --ds-space-8:32px;
+  --font-display: 'Georgia','Noto Serif SC',serif; --font-body: 'Charter','Georgia','Noto Serif SC',serif;
+  --font-ui: system-ui,-apple-system,'Segoe UI',sans-serif; --font-mono: 'JetBrains Mono','Fira Code',monospace;
+}
+.dark { --ds-page-bg:#1E1B18; --ds-surface:#272420; --ds-surface-subtle:#2F2B27; --ds-surface-inset:#1A1714;
+  --ds-border:#3A3530; --ds-border-muted:#332F2B; --ds-border-strong:#4A4540;
+  --ds-text:#E8E0D8; --ds-text-secondary:#A0988E; --ds-text-tertiary:#706860;
+  --ds-accent:#D47A4E; --ds-accent-hover:#E08C64; --ds-accent-subtle:rgba(193,95,60,0.15); }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--ds-page-bg);color:var(--ds-text);line-height:1.6;padding:32px 24px}
+.topbar{display:flex;justify-content:space-between;margin-bottom:40px}
+.topbar h1{font-family:var(--font-display);font-size:26px;font-weight:700}
+.topbar p{font-size:13px;color:var(--ds-text-tertiary);margin-top:4px}
+.theme-btn{padding:8px 16px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);
+  background:var(--ds-surface);color:var(--ds-text-secondary);cursor:pointer;font-family:var(--font-ui);font-size:14px;font-weight:600}
+.section-title{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--ds-text);margin-bottom:24px;padding-bottom:12px;border-bottom:1px solid var(--ds-border-muted)}
+.page-frame{border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);overflow:hidden;margin-bottom:40px;background:var(--ds-page-bg)}
+.frame-label{font-family:var(--font-ui);font-size:12px;font-weight:700;color:var(--ds-text-secondary);padding:8px 16px;background:var(--ds-surface-subtle);border-bottom:1px solid var(--ds-border)}
+.frame-body{padding:24px;background:var(--ds-page-bg)}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-family:var(--font-ui);font-size:14px;font-weight:600;border-radius:var(--ds-radius-sm);border:1px solid transparent;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--ds-accent);color:var(--ds-text-inverse);border-color:var(--ds-accent)}
+.btn-primary:hover{background:var(--ds-accent-hover)}
+.btn-secondary{background:var(--ds-surface);color:var(--ds-text);border-color:var(--ds-border)}
+.btn-secondary:hover{background:var(--ds-surface-subtle)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-ghost{background:transparent;color:var(--ds-text-secondary);border-color:transparent}
+.btn-ghost:hover{color:var(--ds-accent);background:var(--ds-accent-subtle)}
+
+/* ── Category Tabs ── */
+.cat-tabs{display:flex;gap:4px;margin-bottom:20px;flex-wrap:wrap}
+.cat-tab{padding:6px 14px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;font-weight:500;color:var(--ds-text-secondary);cursor:pointer;transition:all .15s}
+.cat-tab:hover{border-color:var(--ds-border-strong);color:var(--ds-text)}
+.cat-tab.active{background:var(--ds-accent-subtle);color:var(--ds-accent);border-color:var(--ds-accent);font-weight:600}
+
+/* ── Discussion Card ── */
+.disc-card{display:flex;gap:16px;padding:18px 20px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);margin-bottom:8px;background:var(--ds-surface);transition:box-shadow .15s;align-items:flex-start}
+.disc-card:hover{box-shadow:var(--ds-shadow-sm)}
+.disc-avatar{width:40px;height:40px;border-radius:50%;background:var(--ds-accent-subtle);display:flex;align-items:center;justify-content:center;color:var(--ds-accent);font-weight:700;font-size:14px;font-family:var(--font-ui);flex-shrink:0}
+.disc-body{flex:1;min-width:0}
+.disc-title{font-size:14px;font-weight:600;color:var(--ds-text);margin-bottom:6px;cursor:pointer;font-family:var(--font-ui);line-height:1.4}
+.disc-title:hover{color:var(--ds-accent)}
+.disc-excerpt{font-size:13px;color:var(--ds-text-secondary);margin-bottom:10px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.disc-footer{display:flex;align-items:center;gap:16px;font-size:12px;color:var(--ds-text-tertiary);font-family:var(--font-ui);flex-wrap:wrap}
+.disc-stats{display:flex;align-items:center;gap:4px}
+.disc-cat{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;font-family:var(--font-ui)}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-family:var(--font-ui);font-size:11px;font-weight:600}
+.badge-accent{background:var(--ds-accent-subtle);color:var(--ds-accent)}
+.badge-success{background:var(--ds-success-subtle);color:var(--ds-success)}
+.badge-warn{background:rgba(184,134,45,0.12);color:var(--ds-warning)}
+.badge-danger{background:var(--ds-danger-subtle);color:var(--ds-danger)}
+.tag{display:inline-flex;padding:2px 8px;border-radius:10px;font-family:var(--font-ui);font-size:11px;font-weight:600;background:var(--ds-surface-subtle);color:var(--ds-text-tertiary);margin-right:4px}
+
+/* ── Detail Page ── */
+.detail-main{max-width:860px;margin:0 auto}
+.detail-header{margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--ds-border-muted)}
+.detail-title{font-family:var(--font-display);font-size:26px;font-weight:700;color:var(--ds-text);margin-bottom:12px;line-height:1.3}
+.detail-tags{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.detail-meta{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--ds-text-tertiary);font-family:var(--font-ui);flex-wrap:wrap}
+.detail-avatar{width:32px;height:32px;border-radius:50%;background:var(--ds-accent-subtle);display:flex;align-items:center;justify-content:center;color:var(--ds-accent);font-weight:700;font-size:12px;font-family:var(--font-ui)}
+.detail-body{font-size:14px;line-height:1.9;color:var(--ds-text);margin-bottom:32px}
+.detail-body p{margin-bottom:14px}
+.detail-actions{display:flex;align-items:center;gap:8px;padding:16px 0;border-top:1px solid var(--ds-border-muted);border-bottom:1px solid var(--ds-border-muted);margin-bottom:24px}
+
+/* ── Comments ── */
+.comments-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.comments-count{font-family:var(--font-ui);font-size:14px;font-weight:600;color:var(--ds-text)}
+.comment-card{border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);margin-bottom:12px;overflow:hidden;background:var(--ds-surface)}
+.comment-card.accepted{border-color:var(--ds-success)}
+.comment-header{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--ds-surface-subtle);border-bottom:1px solid var(--ds-border-muted)}
+.comment-header .avatar{width:28px;height:28px;border-radius:50%;background:var(--ds-accent-subtle);display:flex;align-items:center;justify-content:center;color:var(--ds-accent);font-weight:700;font-size:10px;font-family:var(--font-ui)}
+.comment-header .user{font-size:13px;font-weight:600;color:var(--ds-text);font-family:var(--font-ui)}
+.comment-header .time{font-size:12px;color:var(--ds-text-tertiary);margin-left:auto}
+.comment-body{padding:16px;font-size:14px;color:var(--ds-text);line-height:1.8}
+
+/* ── Reply Box ── */
+.reply-box{border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);overflow:hidden;margin-top:20px}
+.reply-box-header{padding:8px 16px;background:var(--ds-surface-subtle);border-bottom:1px solid var(--ds-border-muted);font-family:var(--font-ui);font-size:13px;font-weight:600;color:var(--ds-text-secondary)}
+.reply-box-body{padding:16px}
+.reply-textarea{width:100%;min-height:90px;padding:10px 14px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:13px;color:var(--ds-text);outline:none;resize:vertical;line-height:1.6}
+.reply-textarea:focus{border-color:var(--ds-accent)}
+.reply-textarea::placeholder{color:var(--ds-text-tertiary)}
+
+/* ── New Discussion Form ── */
+.new-form{max-width:740px;margin:0 auto}
+.form-group{margin-bottom:18px}
+.form-label{display:block;font-family:var(--font-ui);font-size:14px;font-weight:600;color:var(--ds-text);margin-bottom:6px}
+.form-input{padding:10px 14px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;color:var(--ds-text);outline:none;width:100%;transition:border-color .2s}
+.form-input:focus{border-color:var(--ds-accent)}
+.form-textarea{padding:10px 14px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;color:var(--ds-text);outline:none;width:100%;min-height:200px;resize:vertical;line-height:1.7}
+.form-textarea:focus{border-color:var(--ds-accent)}
+.form-hint{font-size:12px;color:var(--ds-text-tertiary);margin-top:4px}
+.form-actions{display:flex;align-items:center;justify-content:space-between;padding-top:8px}
+.form-tags{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ds-text);font-family:var(--font-ui);cursor:pointer}
+.checkbox-row input{accent-color:var(--ds-accent);width:16px;height:16px}
+
+/* ── Pinned ── */
+.pinned-row{display:flex;align-items:center;gap:6px;padding:10px 20px;background:var(--ds-accent-subtle);border-bottom:1px solid var(--ds-border-muted);font-family:var(--font-ui);font-size:13px}
+.pinned-row .pin-icon{font-size:14px}
+.pinned-row .pin-title{font-weight:600;color:var(--ds-text);cursor:pointer}
+.pinned-row .pin-title:hover{color:var(--ds-accent)}
+.pinned-row .pin-badge{font-size:11px;color:var(--ds-accent);font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div><h1>讨论页面设计样本</h1><p>讨论列表 · 讨论详情 · 新建讨论 — 用户交流与分享社区</p></div>
+  <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">☀️ / 🌙</button>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     讨论列表
+     ═══════════════════════════════════════════ -->
+<div class="section-title">讨论列表</div>
+<div class="page-frame">
+  <div class="frame-label">全宽布局 · 引导文案 + 分类筛选 + 讨论卡片列表</div>
+  <div class="frame-body">
+
+    <!-- 引导文案 -->
+    <div style="text-align:center;padding:8px 0 20px">
+      <p style="font-size:14px;color:var(--ds-text-secondary);font-family:var(--font-ui)">分享文件、交流经验、提出问题——社区的智慧藏在每一次讨论里</p>
+    </div>
+
+    <!-- 操作栏 -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <select class="form-input" style="width:auto;padding:6px 10px;font-size:12px">
+          <option>最新发布</option>
+          <option>最多回复</option>
+          <option>最多点赞</option>
+        </select>
+        <button class="btn btn-primary">发起讨论</button>
+      </div>
+    </div>
+
+    <!-- 置顶 -->
+    <div class="pinned-row">
+      <span class="pin-icon">📌</span>
+      <span class="pin-badge">置顶</span>
+      <span class="pin-title">📢 平台使用指南——如何创建仓库、上传文件和分享链接</span>
+    </div>
+    <div class="pinned-row" style="background:transparent;border-bottom-color:var(--ds-border)">
+      <span class="pin-icon">📌</span>
+      <span class="pin-badge">置顶</span>
+      <span class="pin-title">💡 功能建议收集帖——你希望平台增加什么功能？</span>
+    </div>
+
+    <!-- 讨论卡片列表 -->
+    <div style="margin-top:12px">
+      <div class="disc-card">
+        <div class="disc-avatar">张</div>
+        <div class="disc-body">
+          <div class="disc-title">分享 200GB 高清壁纸合集，已分类整理好 <span class="badge badge-accent" style="margin-left:6px">热帖</span></div>
+          <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag">壁纸</span><span class="tag">设计素材</span><span class="tag">免费资源</span></div>
+          <div class="disc-excerpt">整理了近两年的壁纸收藏，按风格（极简/自然/科技/艺术）分了四个文件夹。每张都选了高清版本，适合 4K 屏幕。仓库已公开，可以直接转存~</div>
+          <div class="disc-footer">
+            <span class="disc-stats">💬 28 回复</span>
+            <span class="disc-stats">👍 156</span>
+            <span class="disc-stats">👁 2.3k 浏览</span>
+            <span style="margin-left:auto">张三 <span style="font-size:11px;color:var(--ds-text-tertiary)">UID 000000001</span> · 2 小时前</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="disc-card">
+        <div class="disc-avatar">李</div>
+        <div class="disc-body">
+          <div class="disc-title">PDF 文件预览时中文字体显示乱码，有解决办法吗？ <span class="badge badge-warn" style="margin-left:6px">未解决</span></div>
+          <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag">PDF预览</span><span class="tag">字体</span></div>
+          <div class="disc-excerpt">上传的 PDF 文件包含方正字体，在线预览时中文全变成了方块。文件本身是好的，下载打开没问题。有没有办法让预览正常显示？</div>
+          <div class="disc-footer">
+<span class="disc-stats">💬 6 回复</span>
+            <span class="disc-stats">👍 12</span>
+            <span class="disc-stats">👁 340 浏览</span>
+            <span style="margin-left:auto">李四 <span style="font-size:11px;color:var(--ds-text-tertiary)">UID 000000042</span> · 5 小时前</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="disc-card">
+        <div class="disc-avatar">王</div>
+        <div class="disc-body">
+          <div class="disc-title">建议增加文件夹拖拽上传功能，像网盘那样直接拖整个文件夹</div>
+          <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag">功能建议</span><span class="tag">上传</span></div>
+          <div class="disc-excerpt">目前可以拖拽单个文件上传，但文件夹还需要一个一个创建子目录再上传。如果能像百度网盘那样直接拖整个文件夹进来就方便多了。</div>
+          <div class="disc-footer">
+<span class="disc-stats">💬 15 回复</span>
+            <span class="disc-stats">👍 89</span>
+            <span class="disc-stats">👁 1.1k 浏览</span>
+            <span style="margin-left:auto">王五 <span style="font-size:11px;color:var(--ds-text-tertiary)">UID 000000128</span> · 昨天</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="disc-card">
+        <div class="disc-avatar">赵</div>
+        <div class="disc-body">
+          <div class="disc-title">周末拍了一些城市风光，分享给大家做壁纸用 <span class="badge badge-success" style="margin-left:6px">✅ 有资源</span></div>
+          <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag">摄影</span><span class="tag">城市</span><span class="tag">壁纸</span></div>
+          <div class="disc-excerpt">上周末在浦东拍的，设备 A7M4 + 24-70 GM2。RAW 原片和调色后的 JPG 都传仓库了，想要的自己转存。拍得不好多多包涵~</div>
+          <div class="disc-footer">
+<span class="disc-stats">💬 42 回复</span>
+            <span class="disc-stats">👍 203</span>
+            <span class="disc-stats">👁 3.8k 浏览</span>
+            <span style="margin-left:auto">赵六 <span style="font-size:11px;color:var(--ds-text-tertiary)">UID 000000256</span> · 2 天前</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     讨论详情
+     ═══════════════════════════════════════════ -->
+<div class="section-title" style="margin-top:40px">讨论详情</div>
+<div class="page-frame">
+  <div class="frame-label">居中布局 · 标题 + 标签 + 正文 + 互动栏 + 评论区</div>
+  <div class="frame-body">
+    <div class="detail-main">
+
+      <!-- Header -->
+      <div class="detail-header">
+        <div class="detail-title">分享 200GB 高清壁纸合集，已分类整理好</div>
+        <div class="detail-tags">
+          <span class="tag">壁纸</span><span class="tag">设计素材</span><span class="tag">免费资源</span>
+        </div>
+        <div class="detail-meta">
+          <div class="detail-avatar">张</div>
+          <span><strong>张三</strong> <span style="font-size:11px;color:var(--ds-text-tertiary);font-weight:400">UID 000000001</span> · 发布于 2 小时前</span>
+          <span>👁 2.3k 浏览</span>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div class="detail-body">
+        <p>整理了近两年的壁纸收藏，筛选掉重复和低分辨率的，最终留下约 800 张。按风格分类如下：</p>
+        <p>
+          📁 <strong>极简风格/</strong> — 纯色、几何、留白<br>
+          📁 <strong>自然风光/</strong> — 山川、海洋、森林<br>
+          📁 <strong>科技未来/</strong> — 赛博朋克、抽象科技<br>
+          📁 <strong>艺术插画/</strong> — 手绘、水彩、数字艺术
+        </p>
+        <p>每张都是 4K 分辨率（3840×2160 或更高），适合各种屏幕使用。文件已上传至公开仓库，大家可以直接转存到自己的仓库里。</p>
+        <p style="background:var(--ds-accent-subtle);padding:12px 16px;border-radius:var(--ds-radius-sm);font-family:var(--font-ui);font-size:14px">
+          🔗 仓库地址：<span style="color:var(--ds-accent);cursor:pointer">zhangsan/wallpaper-collection</span>
+        </p>
+      </div>
+
+      <!-- Action Bar -->
+      <div class="detail-actions">
+        <button class="btn btn-secondary btn-sm">👍 点赞 156</button>
+        <button class="btn btn-secondary btn-sm">⭐ 收藏</button>
+        <button class="btn btn-secondary btn-sm">🔗 分享链接</button>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto">🚩 举报</button>
+      </div>
+
+      <!-- Comments -->
+      <div class="comments-header">
+        <span class="comments-count">💬 3 条回复</span>
+      </div>
+
+      <div class="comment-card accepted">
+        <div class="comment-header">
+          <div class="avatar">李</div>
+          <span class="user">李四 <span style="font-size:10px;color:var(--ds-text-tertiary);font-weight:400">UID 000000042</span></span>
+          <span class="badge badge-success">✅ 已置顶</span>
+          <span class="time">1 小时前</span>
+        </div>
+        <div class="comment-body">太棒了！极简风格那组特别适合我的工作桌面。已经转存到我的仓库了，感谢分享 🙏</div>
+      </div>
+
+      <div class="comment-card">
+        <div class="comment-header">
+          <div class="avatar">王</div>
+          <span class="user">王五 <span style="font-size:10px;color:var(--ds-text-tertiary);font-weight:400">UID 000000128</span></span>
+          <span class="time">30 分钟前</span>
+        </div>
+        <div class="comment-body">科技未来那个文件夹里的 cyberpunk 系列质量很高，请问是自己渲染的还是收集的？如果是收集的话方便标注一下来源吗？</div>
+      </div>
+
+      <div class="comment-card">
+        <div class="comment-header">
+          <div class="avatar">张</div>
+          <span class="user">张三 <span style="font-size:10px;color:var(--ds-text-tertiary);font-weight:400">UID 000000001</span></span>
+          <span class="badge badge-accent">作者</span>
+          <span class="time">10 分钟前</span>
+        </div>
+        <div class="comment-body">@王五 大部分是从 Unsplash 和 Wallhaven 收集的，少部分是 Midjourney 生成的。具体来源在每个文件夹里放了 README 说明~</div>
+      </div>
+
+      <!-- Reply Box -->
+      <div class="reply-box">
+        <div class="reply-box-header">撰写回复</div>
+        <div class="reply-box-body">
+          <textarea class="reply-textarea" placeholder="分享你的想法... 支持 Markdown 格式"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:10px;gap:8px">
+            <button class="btn btn-secondary btn-sm">预览</button>
+            <button class="btn btn-primary">发表回复</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     新建讨论
+     ═══════════════════════════════════════════ -->
+<div class="section-title" style="margin-top:40px">新建讨论</div>
+<div class="page-frame">
+  <div class="frame-label">居中布局 740px · 引导 + 表单</div>
+  <div class="frame-body">
+    <div class="new-form">
+      <div style="text-align:center;padding:8px 0 20px">
+        <p style="font-size:14px;color:var(--ds-text-secondary);font-family:var(--font-ui)">分享文件、求助问题、提出建议——每次讨论都可能帮到更多人</p>
+      </div>
+
+
+      <div class="form-group">
+        <label class="form-label">标题 <span style="font-weight:400;color:var(--ds-text-tertiary)">*</span></label>
+        <input class="form-input" placeholder="简明扼要地描述你的讨论主题，例如：如何批量下载文件夹里的所有文件？" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">标签 <span style="font-weight:400;color:var(--ds-text-tertiary)">（逗号分隔，最多 5 个）</span></label>
+        <input class="form-input" placeholder="例如：文件下载, 使用技巧" />
+        <div class="form-tags">
+          <span class="tag">文件下载 ×</span>
+          <span class="tag">使用技巧 ×</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">关联仓库 <span style="font-weight:400;color:var(--ds-text-tertiary)">（可选）</span></label>
+        <input class="form-input" placeholder="搜索并选择一个仓库..." />
+        <p class="form-hint">关联仓库后，讨论中可以直接引用仓库中的文件</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">内容 <span style="font-weight:400;color:var(--ds-text-tertiary)">*</span></label>
+        <textarea class="form-textarea" placeholder="详细描述你的想法、问题或分享的内容... 支持 Markdown 和图片拖拽上传"></textarea>
+        <p class="form-hint">支持 Markdown 语法、图片拖拽上传、@提及用户</p>
+      </div>
+
+      <div class="form-actions">
+        <label class="checkbox-row">
+          <input type="checkbox"> 允许其他人编辑此讨论（协作模式）
+        </label>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary">保存草稿</button>
+          <button class="btn btn-primary">发布讨论</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

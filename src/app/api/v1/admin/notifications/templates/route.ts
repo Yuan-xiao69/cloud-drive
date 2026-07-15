@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/notifications/templates - 删除通知模板
  */
 
-import { NextRequest } from 'next/server';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
 import { success, created, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // 默认模板列表
@@ -59,40 +59,38 @@ const DEFAULT_TEMPLATES = [
 let customTemplates = new Map<string, typeof DEFAULT_TEMPLATES[0]>();
 
 // GET /api/v1/admin/notifications/templates - 获取通知模板列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const adminResult = await requireAdmin(req);
-    if (isAuthError(adminResult)) {
-      return adminResult.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 合并默认模板和自定义模板
     const allTemplates = [
       ...DEFAULT_TEMPLATES,
       ...Array.from(customTemplates.values()),
     ];
 
     return success({ templates: allTemplates });
-  } catch (err) {
-    console.error('获取通知模板失败:', err);
-    return errors.internal('获取通知模板失败');
-  }
-}
+  },
+});
 
 // POST /api/v1/admin/notifications/templates - 创建通知模板
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const adminResult = await requireAdmin(req);
-    if (isAuthError(adminResult)) {
-      return adminResult.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    name: z.string(),
+    type: z.string(),
+    title: z.string(),
+    content: z.string(),
+    variables: z.array(z.string()).optional(),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { name, type, title, content, variables } = body;
-
-    if (!name || !type || !title || !content) {
-      return errors.badRequest('缺少必要参数');
-    }
 
     const id = `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const template = {
@@ -109,18 +107,15 @@ export async function POST(req: NextRequest): Promise<Response> {
     customTemplates.set(id, template);
 
     return created({ template });
-  } catch (err) {
-    console.error('创建通知模板失败:', err);
-    return errors.internal('创建通知模板失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/notifications/templates - 删除通知模板
-export async function DELETE(req: NextRequest): Promise<Response> {
-  try {
-    const adminResult = await requireAdmin(req);
-    if (isAuthError(adminResult)) {
-      return adminResult.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const { searchParams } = new URL(req.url);
@@ -130,7 +125,6 @@ export async function DELETE(req: NextRequest): Promise<Response> {
       return errors.badRequest('缺少模板 ID');
     }
 
-    // 不允许删除默认模板
     if (DEFAULT_TEMPLATES.some((t) => t.id === id)) {
       return errors.badRequest('无法删除系统默认模板');
     }
@@ -142,8 +136,5 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     customTemplates.delete(id);
 
     return success({ message: '模板已删除' });
-  } catch (err) {
-    console.error('删除通知模板失败:', err);
-    return errors.internal('删除通知模板失败');
-  }
-}
+  },
+});

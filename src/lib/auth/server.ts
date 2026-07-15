@@ -16,6 +16,9 @@ export interface SessionUser {
 /**
  * 在 Server Component / Server Action 中调用，获取当前登录用户。
  * 返回 null 表示未登录，返回用户对象表示已登录。
+ *
+ * @deprecated 新代码推荐使用 SessionService.validate() 替代，
+ *             提供更完整的会话管理（isBanned / tokenVersion 检查、会话 TTL 等）。
  */
 export async function auth(): Promise<SessionUser | null> {
   try {
@@ -37,13 +40,21 @@ export async function auth(): Promise<SessionUser | null> {
     const payload = verifyAccessToken(token);
     if (!payload) return null;
 
-    // 从数据库获取完整用户信息
+    // 从数据库获取完整用户信息（含封禁状态和 Token 版本号）
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, username: true, role: true, email: true, avatarUrl: true },
+      select: { id: true, username: true, role: true, email: true, avatarUrl: true, isBanned: true, tokenVersion: true },
     });
 
-    return user ? { ...user, avatar: user.avatarUrl } : null;
+    if (!user) return null;
+
+    // 被封禁的用户拒绝其请求
+    if (user.isBanned) return null;
+
+    // Token 版本号校验：改密码/被封禁后旧 Token 立即失效
+    if (user.tokenVersion !== payload.tokenVersion) return null;
+
+    return { id: user.id, username: user.username, role: user.role, email: user.email, avatar: user.avatarUrl };
   } catch {
     return null;
   }

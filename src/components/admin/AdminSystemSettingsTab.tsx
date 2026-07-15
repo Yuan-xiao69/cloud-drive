@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminSystemSettingsEnhanced from './AdminSystemSettingsEnhanced';
-import { tokenManager } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 
 export default function AdminSystemSettingsTab() {
   const [config, setConfig] = useState<Record<string, { value: string | number | boolean; description?: string }> | null>(null);
@@ -17,15 +17,11 @@ export default function AdminSystemSettingsTab() {
     setLoading(true);
     setError(null);
     try {
-      const token = tokenManager.getAccessToken();
-      const response = await fetch('/api/v1/admin/config', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
-      if (data.code === 200) {
-        setConfig(data.data);
+      const res = await api.get<Record<string, { value: string | number | boolean; description?: string }>>('/api/v1/admin/config');
+      if (res.code === 200) {
+        setConfig(res.data);
       } else {
-        setError(data.message || '加载配置失败');
+        setError(res.message || '加载配置失败');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '网络错误');
@@ -36,18 +32,9 @@ export default function AdminSystemSettingsTab() {
 
   // 保存配置
   const handleSave = async (requestData: Record<string, { value: string | number | boolean; description?: string }>) => {
-    const token = tokenManager.getAccessToken();
-    const response = await fetch('/api/v1/admin/config', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(requestData),
-    });
-    const data = await response.json();
-    if (data.code !== 200) {
-      throw new Error(data.message || '保存失败');
+    const res = await api.put<{ message?: string }>('/api/v1/admin/config', requestData);
+    if (res.code !== 200) {
+      throw new Error(res.message || '保存失败');
     }
     // 保存成功后刷新配置
     await loadConfig();

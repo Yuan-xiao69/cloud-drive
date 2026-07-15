@@ -93,18 +93,7 @@ export function AdminContextMenu({
     setMenuStyle({ left, top });
   }, [x, y, sections, maxHeight]);
 
-  // 点击其他地方关闭
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.context-menu')) return;
-      onClose?.();
-    };
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [onClose]);
-
-  // ESC 关闭
+  // ESC 关闭（点击外部由 page.tsx 全局监听器统一处理）
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose?.();
@@ -131,16 +120,16 @@ export function AdminContextMenu({
 
   const renderMenuItem = (item: ContextMenuItemConfig, index: number, parentId?: string) => {
     if (item.divider) {
-      return <div key={`divider-${index}`} className="context-menu-divider" />;
+      return <div key={`divider-${index}`} className="border-t border-[var(--ds-border-muted)] my-1" />;
     }
 
     const hasChildren = item.children && item.children.length > 0;
     const isActive = activeSubmenu === item.id;
 
     return (
-      <div
+      <button
         key={item.id}
-        className={`context-menu-item ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''} ${hasChildren ? 'has-children' : ''}`}
+        className={`flex items-center gap-2 px-3 py-1.5 text-sm transition-colors w-full text-left border-0 bg-transparent ${item.danger ? 'text-[var(--ds-danger-default)]' : 'text-[var(--ds-text-primary)]'} ${item.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--ds-surface-subtle)]'} ${hasChildren ? 'relative' : ''}`}
         onClick={() => handleItemClick(item)}
         onMouseEnter={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
@@ -153,11 +142,11 @@ export function AdminContextMenu({
           }, 100);
         }}
       >
-        {item.icon && <span className="context-menu-icon">{item.icon}</span>}
-        <span className="context-menu-label">{item.label}</span>
-        {item.shortcut && <span className="context-menu-shortcut">{item.shortcut}</span>}
+        {item.icon && <span className="flex-shrink-0 w-4 h-4 text-[var(--ds-text-secondary)]">{item.icon}</span>}
+        <span className="flex-1">{item.label}</span>
+        {item.shortcut && <span className="ml-auto text-xs text-[var(--ds-text-tertiary)]">{item.shortcut}</span>}
         {hasChildren && (
-          <span className="context-menu-arrow">
+          <span className="ml-auto text-[var(--ds-text-tertiary)]">
             <ChevronRightIcon size={14} />
           </span>
         )}
@@ -165,9 +154,8 @@ export function AdminContextMenu({
         {/* 子菜单 */}
         {hasChildren && isActive && (
           <div
-            className="context-menu-submenu"
+            className="fixed bg-[var(--ds-surface-default)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] shadow z-50 min-w-[180px] py-1"
             style={{
-              position: 'fixed',
               left: submenuPosition.x,
               top: submenuPosition.y,
             }}
@@ -177,15 +165,15 @@ export function AdminContextMenu({
             )}
           </div>
         )}
-      </div>
+      </button>
     );
   };
 
   return (
     <>
-      <div className="context-menu" style={menuStyle}>
+      <div className="fixed bg-[var(--ds-surface-default)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] shadow z-50 min-w-[220px] py-1 overflow-hidden" style={menuStyle}>
         {(sections || []).map((section, sectionIndex) => (
-          <div key={section.id} className="context-menu-section">
+          <div key={section.id}>
             {section.items.map((item, itemIndex) => 
               renderMenuItem(item, itemIndex)
             )}

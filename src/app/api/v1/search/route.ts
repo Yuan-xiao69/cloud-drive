@@ -4,133 +4,87 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/search?q=&type=&page=&size= - 综合搜索
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, paginated, handlePrismaError, parsePagination, buildPaginationMeta } from '@/lib/api/v1';
-import { prisma } from '@/lib/prisma';
+import { defineRoute } from '@/lib/framework/define-route';
+import { error, paginated, parsePagination, buildPaginationMeta } from '@/lib/api/v1';
 import { ErrorCodes } from '@/lib/api/v1';
+import { withCache, CacheKeys } from '@/lib/cache';
+import { SearchService, SearchType, SearchRepoItem, SearchUserItem, SearchDiscussionItem } from '@/services/search-service';
 
 // GET /api/v1/search?q=&type=&page=&size=
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
+export const GET = defineRoute({
+  auth: 'none',
+  async handler({ req }) {
     const sp = req.nextUrl.searchParams;
     const q = sp.get('q')?.trim() || '';
-    const type = sp.get('type') || 'repos'; // repos | users | discussions
-    const { page, size, skip } = parsePagination(sp);
+    const type = (sp.get('type') || 'repos') as SearchType;
+    const { page, size } = parsePagination(sp);
+    const cacheKey = `${CacheKeys.search(q, type)}:p${page}:s${size}`;
+    // 仅缓存无搜索词的首屏（最频繁访问），搜索请求不缓存
+    const shouldCache = !q && page === 1;
 
+    // 校验搜索类型
+    if (!['repos', 'users', 'discussions'].includes(type)) {
+      return error(ErrorCodes.INVALID_PARAMS, { message: '无效的搜索类型，支持: repos, users, discussions' });
+    }
+
+    // 执行搜索（委托给 SearchService）
+    const executor = () => SearchService.search(q, type, page, size);
+    const result = shouldCache
+      ? await withCache(cacheKey, 300, executor)
+      : await executor();
+
+    // 根据类型映射为 API 响应格式
     if (type === 'repos') {
-      // 搜索所有未删除的仓库（包括私有，但当前用户有权限的）
-      const where = q ? {
-        deletedAt: null,
-        OR: [
-          { name: { contains: q, mode: 'insensitive' as const } },
-          { description: { contains: q, mode: 'insensitive' as const } },
-        ],
-      } : {
-        deletedAt: null,
-      };
-
-      const [repos, total] = await Promise.all([
-        prisma.repository.findMany({
-          where,
-          include: { owner: { select: { id: true, username: true, avatarUrl: true } } },
-          orderBy: { starCount: 'desc' },
-          skip,
-          take: size,
-        }),
-        prisma.repository.count({ where }),
-      ]);
+      const items = (result.items as SearchRepoItem[]).map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description ?? undefined,
+        owner: { id: r.owner.id, username: r.owner.username, avatarUrl: r.owner.avatarUrl ?? undefined },
+        starCount: r.starCount,
+        forkCount: r.forkCount,
+        language: r.language ?? undefined,
+        createdAt: new Date(r.createdAt).toISOString(),
+      }));
 
       return paginated(
-        repos.map((r) => ({
-          id: r.id,
-          name: r.name,
-          description: r.description ?? undefined,
-          owner: { id: r.owner.id, username: r.owner.username, avatarUrl: r.owner.avatarUrl ?? undefined },
-          starCount: r.starCount,
-          forkCount: r.forkCount,
-          language: r.language ?? undefined,
-          createdAt: r.createdAt.toISOString(),
-        })),
-        { ...buildPaginationMeta(total, page, size), type: 'repos' as const }
+        items,
+        { ...buildPaginationMeta(result.total, page, size), type: 'repos' as const },
       );
     }
 
     if (type === 'users') {
-      // 空搜索时返回所有用户
-      const where = q ? {
-        OR: [
-          { username: { contains: q, mode: 'insensitive' as const } },
-          { bio: { contains: q, mode: 'insensitive' as const } },
-        ],
-      } : {};
-
-      const [users, total] = await Promise.all([
-        prisma.user.findMany({
-          where,
-          include: {
-            _count: { select: { repositories: true } },
-          },
-          skip,
-          take: size,
-        }),
-        prisma.user.count({ where }),
-      ]);
+      const items = (result.items as SearchUserItem[]).map((u) => ({
+        id: u.id,
+        username: u.username,
+        avatarUrl: u.avatarUrl ?? undefined,
+        bio: u.bio ? (u.bio.length > 200 ? u.bio.slice(0, 200) : u.bio) : undefined,
+        location: u.location ?? undefined,
+        createdAt: new Date(u.createdAt).toISOString(),
+        reposCount: u._count.repositories,
+      }));
 
       return paginated(
-        users.map((u) => ({
-          id: u.id,
-          username: u.username,
-          avatarUrl: u.avatarUrl ?? undefined,
-          bio: u.bio ?? undefined,
-          location: u.location ?? undefined,
-          createdAt: u.createdAt.toISOString(),
-          reposCount: u._count.repositories,
-        })),
-        { ...buildPaginationMeta(total, page, size), type: 'users' as const }
+        items,
+        { ...buildPaginationMeta(result.total, page, size), type: 'users' as const },
       );
     }
 
-    if (type === 'discussions') {
-      // 空搜索时返回所有讨论
-      const where = q ? {
-        isDeleted: false,
-        OR: [
-          { title: { contains: q, mode: 'insensitive' as const } },
-          { content: { contains: q, mode: 'insensitive' as const } },
-        ],
-      } : { isDeleted: false };
+    // type === 'discussions'
+    const items = (result.items as SearchDiscussionItem[]).map((d) => ({
+      id: d.id,
+      title: d.title,
+      content: d.content ? (d.content.length > 200 ? d.content.slice(0, 200) : d.content) : undefined,
+      category: d.category,
+      status: d.status,
+      author: { id: d.author.id, username: d.author.username, avatarUrl: d.author.avatarUrl ?? undefined },
+      commentCount: d._count.comments,
+      viewCount: d.viewCount,
+      createdAt: new Date(d.createdAt).toISOString(),
+    }));
 
-      const [discussions, total] = await Promise.all([
-        prisma.discussion.findMany({
-          where,
-          include: {
-            author: { select: { id: true, username: true, avatarUrl: true } },
-            _count: { select: { comments: { where: { isDeleted: false } } } },
-          },
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: size,
-        }),
-        prisma.discussion.count({ where }),
-      ]);
-
-      return paginated(
-        discussions.map((d) => ({
-          id: d.id,
-          title: d.title,
-          category: d.category,
-          status: d.status,
-          author: { id: d.author.id, username: d.author.username, avatarUrl: d.author.avatarUrl ?? undefined },
-          commentCount: d._count.comments,
-          viewCount: d.viewCount,
-          createdAt: d.createdAt.toISOString(),
-        })),
-        { ...buildPaginationMeta(total, page, size), type: 'discussions' as const }
-      );
-    }
-
-    return error(ErrorCodes.INVALID_PARAMS, { message: '无效的搜索类型，支持: repos, users, discussions' });
-  } catch (err) {
-    return handlePrismaError(err, '搜索失败');
-  }
-}
+    return paginated(
+      items,
+      { ...buildPaginationMeta(result.total, page, size), type: 'discussions' as const },
+    );
+  },
+});

@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { tokenManager } from '@/lib/api/client';
-import { ShieldCheck } from '@/components/ui/icons';
+import { api } from '@/lib/api/client';
+import { Button, Input, Field } from '@/components/design';
+import { ShieldCheck } from '@/components/design/icons';
+import toast from 'react-hot-toast';
 
 interface MFASettingsProps {
   onClose?: () => void;
@@ -32,11 +34,7 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
 
   const loadMFAStatus = async () => {
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch('/api/v1/users/mfa', {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
+      const data = await api.get<{ enabled: boolean; configured: boolean }>('/api/v1/users/mfa');
       if (data.code === 200) {
         setIsEnabled(data.data.enabled);
         setIsConfigured(data.data.configured);
@@ -68,16 +66,7 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
     setError('');
 
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch('/api/v1/users/mfa', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ action: 'init', password }),
-      });
-      const data = await res.json();
+      const data = await api.post<MFASetupData>('/api/v1/users/mfa', { action: 'init', password });
 
       if (data.code === 200) {
         setSetupData(data.data);
@@ -104,16 +93,7 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
     setError('');
 
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch('/api/v1/users/mfa', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ action: 'enable', code }),
-      });
-      const data = await res.json();
+      const data = await api.post<{ recoveryCodes: string[] }>('/api/v1/users/mfa', { action: 'enable', code });
 
       if (data.code === 200) {
         setRecoveryCodes(data.data.recoveryCodes || []);
@@ -142,16 +122,7 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
     setError('');
 
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch('/api/v1/users/mfa', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ action: 'disable', password, code }),
-      });
-      const data = await res.json();
+      const data = await api.post('/api/v1/users/mfa', { action: 'disable', password, code });
 
       if (data.code === 200) {
         setIsEnabled(false);
@@ -159,7 +130,7 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
         setStep('initial');
         setPassword('');
         setCode('');
-        alert('两步验证已禁用');
+        toast.success('两步验证已禁用');
         onClose?.();
       } else {
         setError(data.message || '禁用失败');
@@ -173,14 +144,14 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
 
   const copyRecoveryCodes = () => {
     navigator.clipboard.writeText(recoveryCodes.join('\n'));
-    alert('恢复码已复制到剪贴板');
+    toast.success('恢复码已复制到剪贴板');
   };
 
   return (
     <div className="mfa-settings">
-      <div className="section-header">
-        <h1 className="section-title">两步验证</h1>
-        <p className="section-desc">为你的账号添加额外的安全保护</p>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-base font-semibold text-[var(--ds-text-primary)]">两步验证</h1>
+        <p className="text-[13px] text-[var(--ds-text-secondary)] mt-1">为你的账号添加额外的安全保护</p>
       </div>
 
       {/* 状态显示 */}
@@ -194,12 +165,12 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
             {isEnabled ? '已启用 - 你的账号受到额外保护' : '未启用'}
           </p>
         </div>
-        <button
-          className={`btn ${isEnabled ? 'btn-secondary' : 'btn-primary'}`}
+        <Button
+          variant={isEnabled ? 'secondary' : 'primary'}
           onClick={handleEnableClick}
         >
           {isEnabled ? '管理' : '启用'}
-        </button>
+        </Button>
       </div>
 
       {/* 密码验证步骤 */}
@@ -208,24 +179,19 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
           <h3>验证密码</h3>
           <p className="step-desc">请输入你的密码以继续</p>
           <form onSubmit={handlePasswordSubmit}>
-            <div className="form-group">
-              <input
-                type="password"
-                className="form-input"
-                placeholder="当前密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoFocus
-              />
+            <div className="mb-4">
+              <Field label="当前密码">
+                <Input id="mfa-password" type="password" placeholder="当前密码" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </Field>
             </div>
             {error && <p className="text-danger">{error}</p>}
-            <div className="form-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setStep('initial')}>
+            <div className="flex justify-end gap-3 mt-4">
+              <Button variant="secondary" type="button" onClick={() => setStep('initial')}>
                 取消
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={loading}>
+              </Button>
+              <Button type="submit" loading={loading}>
                 {loading ? '验证中...' : '继续'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -249,26 +215,19 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
           </div>
 
           <form onSubmit={handleSetupSubmit}>
-            <div className="form-group">
-              <label className="form-label">输入验证码</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="6 位数字验证码"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                maxLength={6}
-                autoFocus
-              />
+            <div className="mb-4">
+              <Field label="输入验证码">
+                <Input id="mfa-setup-code" type="text" placeholder="6 位数字验证码" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} />
+              </Field>
             </div>
             {error && <p className="text-danger">{error}</p>}
-            <div className="form-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setStep('initial')}>
+            <div className="flex justify-end gap-3 mt-4">
+              <Button variant="secondary" type="button" onClick={() => setStep('initial')}>
                 取消
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={loading || code.length !== 6}>
+              </Button>
+              <Button type="submit" loading={loading} disabled={!loading && code.length !== 6}>
                 {loading ? '验证中...' : '验证并启用'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -293,13 +252,13 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
             ))}
           </div>
 
-          <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={copyRecoveryCodes}>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button variant="secondary" type="button" onClick={copyRecoveryCodes}>
               复制全部
-            </button>
-            <button type="button" className="btn btn-primary" onClick={() => setStep('initial')}>
+            </Button>
+            <Button type="button" onClick={() => setStep('initial')}>
               完成
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -310,25 +269,19 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
           <h3>验证身份</h3>
           <p className="step-desc">请输入密码和身份验证器中的验证码</p>
           <form onSubmit={handlePasswordSubmit}>
-            <div className="form-group">
-              <label className="form-label">密码</label>
-              <input
-                type="password"
-                className="form-input"
-                placeholder="当前密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoFocus
-              />
+            <div className="mb-4">
+              <Field label="密码">
+                <Input id="mfa-verify-password" type="password" placeholder="当前密码" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </Field>
             </div>
             {error && <p className="text-danger">{error}</p>}
-            <div className="form-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setStep('initial')}>
+            <div className="flex justify-end gap-3 mt-4">
+              <Button variant="secondary" type="button" onClick={() => setStep('initial')}>
                 取消
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={loading}>
+              </Button>
+              <Button type="submit" loading={loading}>
                 {loading ? '验证中...' : '继续'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -341,35 +294,24 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
             警告：禁用两步验证会降低你账号的安全性。请确保你记得密码，并可以访问身份验证器。
           </p>
           <form onSubmit={handleDisableSubmit}>
-            <div className="form-group">
-              <label className="form-label">当前密码</label>
-              <input
-                type="password"
-                className="form-input"
-                placeholder="输入密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+            <div className="mb-4">
+              <Field label="当前密码">
+                <Input id="mfa-disable-password" type="password" placeholder="输入密码" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </Field>
             </div>
-            <div className="form-group">
-              <label className="form-label">身份验证器验证码</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="6 位验证码"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                maxLength={6}
-              />
+            <div className="mb-4">
+              <Field label="身份验证器验证码">
+                <Input id="mfa-disable-code" type="text" placeholder="6 位验证码" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} />
+              </Field>
             </div>
             {error && <p className="text-danger">{error}</p>}
-            <div className="form-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setStep('initial')}>
+            <div className="flex justify-end gap-3 mt-4">
+              <Button variant="secondary" type="button" onClick={() => setStep('initial')}>
                 取消
-              </button>
-              <button type="submit" className="btn btn-danger" disabled={loading || !password || code.length !== 6}>
+              </Button>
+              <Button variant="danger" type="submit" loading={loading} disabled={!loading && (!password || code.length !== 6)}>
                 {loading ? '处理中...' : '确认禁用'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -377,53 +319,31 @@ export default function MFASettings({ onClose }: MFASettingsProps) {
 
       <style jsx>{`
         .mfa-settings { padding: 0; }
-        .section-header { margin-bottom: 24px; }
-        .section-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
-        .section-desc { color: var(--color-fg-muted, #656d76); font-size: 14px; }
+        .section-desc { color: var(--ds-text-secondary); font-size: 14px; }
         .setting-item {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 16px 0; border-bottom: 1px solid var(--color-border, #d0d7de);
+          padding: 16px 0; border-bottom: 1px solid var(--ds-border-default);
         }
         .setting-info { flex: 1; }
         .setting-title { font-size: 16px; font-weight: 500; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
         .icon-inline { width: 16px; height: 16px; }
-        .setting-desc { color: var(--color-fg-muted, #656d76); font-size: 14px; }
-        .mfa-step { margin-top: 24px; padding: 20px; background: var(--color-bg-subtle, #f6f8fa); border-radius: 6px; }
+        .setting-desc { color: var(--ds-text-secondary); font-size: 14px; }
+        .mfa-step { margin-top: 24px; padding: 20px; background: var(--ds-surface-subtle); border-radius: 6px; }
         .mfa-step h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-        .step-desc { color: var(--color-fg-muted, #656d76); font-size: 14px; margin-bottom: 16px; }
-        .step-desc.warning { color: #9a6700; }
-        .form-group { margin-bottom: 16px; }
-        .form-label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
-        .form-input {
-          width: 100%; padding: 8px 12px; font-size: 14px;
-          border: 1px solid var(--color-border, #d0d7de); border-radius: 6px;
-          background: var(--color-bg-default, #ffffff);
-        }
-        .form-input:focus { outline: none; border-color: var(--color-accent-fg, #0969da); box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15); }
-        .form-actions { display: flex; gap: 8px; margin-top: 16px; }
-        .text-danger { color: var(--color-danger-fg, #cf222e); font-size: 14px; margin-top: 8px; }
-        .btn {
-          display: inline-flex; align-items: center; justify-content: center;
-          padding: 6px 16px; font-size: 14px; font-weight: 500; border-radius: 6px; border: 1px solid transparent; cursor: pointer;
-        }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--color-btn-primary-bg, #238636); color: white; border-color: var(--color-btn-primary-border, #2ea44f); }
-        .btn-primary:hover:not(:disabled) { background: var(--color-btn-primary-hover-bg, #2ea44f); }
-        .btn-secondary { background: var(--color-btn-bg, #f6f8fa); color: var(--color-btn-fg, #24292f); border-color: var(--color-btn-border, #d0d7de); }
-        .btn-secondary:hover:not(:disabled) { background: var(--color-btn-hover-bg, #f3f4f6); }
-        .btn-danger { background: var(--color-danger-bg, #ffebe9); color: var(--color-danger-fg, #cf222e); border-color: var(--color-danger-border, #ff818266); }
-        .btn-danger:hover:not(:disabled) { background: var(--color-danger-hover-bg, #ffd6d6); }
+        .step-desc { color: var(--ds-text-secondary); font-size: 14px; margin-bottom: 16px; }
+        .step-desc.warning { color: var(--ds-warning-default); }
+        .text-danger { color: var(--ds-danger-default); font-size: 14px; margin-top: 8px; }
         .qr-code-container { display: flex; justify-content: center; margin: 20px 0; }
-        .qr-code { width: 200px; height: 200px; border: 1px solid var(--color-border, #d0d7de); border-radius: 4px; }
+        .qr-code { width: 200px; height: 200px; border: 1px solid var(--ds-border-default); border-radius: 4px; }
         .secret-key { text-align: center; margin-bottom: 20px; }
-        .secret-key p { font-size: 14px; color: var(--color-fg-muted, #656d76); margin-bottom: 8px; }
-        .secret-code { display: inline-block; padding: 8px 16px; background: var(--color-bg-default, #ffffff); border: 1px solid var(--color-border, #d0d7de); border-radius: 6px; font-family: monospace; font-size: 16px; letter-spacing: 2px; }
-        .success-banner { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--color-success-bg, #dafbe1); color: var(--color-success-fg, #1a7f37); border-radius: 6px; margin-bottom: 20px; font-weight: 500; }
+        .secret-key p { font-size: 14px; color: var(--ds-text-secondary); margin-bottom: 8px; }
+        .secret-code { display: inline-block; padding: 8px 16px; background: var(--ds-surface-default); border: 1px solid var(--ds-border-default); border-radius: 6px; font-family: monospace; font-size: 16px; letter-spacing: 2px; }
+        .success-banner { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--ds-success-subtle); color: var(--ds-success-default); border-radius: 6px; margin-bottom: 20px; font-weight: 500; }
         .success-icon { width: 20px; height: 20px; }
         .recovery-codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 20px; }
-        .recovery-code { padding: 8px 12px; background: var(--color-bg-default, #ffffff); border: 1px solid var(--color-border, #d0d7de); border-radius: 4px; font-family: monospace; font-size: 14px; text-align: center; }
-        .danger-step { background: var(--color-danger-bg, #ffebe9); }
-        .danger-step h3 { color: var(--color-danger-fg, #cf222e); }
+        .recovery-code { padding: 8px 12px; background: var(--ds-surface-default); border: 1px solid var(--ds-border-default); border-radius: 4px; font-family: monospace; font-size: 14px; text-align: center; }
+        .danger-step { background: var(--ds-danger-subtle); }
+        .danger-step h3 { color: var(--ds-danger-default); }
         @media (max-width: 600px) {
           .recovery-codes { grid-template-columns: 1fr; }
           .qr-code { width: 160px; height: 160px; }

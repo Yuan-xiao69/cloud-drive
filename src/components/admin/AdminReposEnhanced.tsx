@@ -26,6 +26,8 @@ import type {
   RepoFilters,
   ContextMenuData
 } from './AdminTypes';
+import { formatDate } from '@/lib/utils';
+import { Button, Card  , Field } from '@/components/design';
 
 interface AdminReposEnhancedProps {
   // 数据
@@ -221,30 +223,30 @@ export default function AdminReposEnhanced({
   };
 
   return (
-    <div className="tab-content">
+    <div className="p-4">
       {/* 页面标题和操作栏 */}
-      <div className="page-header">
-        <h1 className="page-title">仓库管理</h1>
-        <div className="header-actions">
-          <button
-            className={`btn btn-secondary btn-sm ${showAdvancedFilter ? 'active' : ''}`}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">仓库管理</h1>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
           >
             <FilterIcon /> 筛选
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => onExportRepos()}
           >
             <DownloadIcon /> 导出
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
+          </Button>
+          <Button
+            variant="secondary"
             onClick={onRefresh}
           >
             刷新
-          </button>
-          <div className="search-box">
+          </Button>
+          <div className="relative">
             <SearchIcon />
             <input
               type="search"
@@ -263,8 +265,7 @@ export default function AdminReposEnhanced({
           values={filters as Record<string, string | number | Date | null>}
           onChange={(name, value) => {
             const updated = { ...filters, [name]: value };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onFiltersChange(updated as any);
+            onFiltersChange(updated);
           }}
           onApply={() => onPageChange(1)}
           onReset={() => onFiltersChange({} as RepoFilters)}
@@ -284,8 +285,8 @@ export default function AdminReposEnhanced({
       />
 
       {/* 仓库列表 */}
-      <div className="admin-table-container">
-        <table className="admin-table">
+      <Card padding="none" className="overflow-hidden">
+        <table className="w-full text-sm">
           <thead>
             <tr>
               <th style={{ width: '40px' }}>
@@ -375,52 +376,52 @@ export default function AdminReposEnhanced({
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* 分页 */}
       {reposTotal > reposPageSize && (
-        <div className="pagination">
-          <div className="pagination-info">
+        <div className="flex items-center justify-between py-3">
+          <div className="text-sm text-[var(--ds-text-secondary)]">
             显示 {((reposPage - 1) * reposPageSize) + 1} - {Math.min(reposPage * reposPageSize, reposTotal)} 条，共 {reposTotal} 条
           </div>
-          <div className="pagination-controls">
-            <button
-              className="btn btn-secondary btn-sm"
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
               disabled={reposPage <= 1 || reposLoading}
               onClick={() => onPageChange(reposPage - 1)}
             >
               上一页
-            </button>
+            </Button>
             <div className="pagination-pages">
               {getPaginationNumbers(reposPage, totalPages).map((page, i) => (
                 page === '...' ? (
                   <span key={i} className="pagination-ellipsis">...</span>
                 ) : (
-                  <button
+                  <Button
                     key={i}
-                    className={`btn btn-sm ${page === reposPage ? 'btn-primary' : 'btn-ghost'}`}
+                    variant={page === reposPage ? 'primary' : 'ghost'}
                     onClick={() => onPageChange(page as number)}
                   >
                     {page}
-                  </button>
+                  </Button>
                 )
               ))}
             </div>
-            <button
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="secondary"
               disabled={reposPage >= totalPages || reposLoading}
               onClick={() => onPageChange(reposPage + 1)}
             >
               下一页
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* 右键上下文菜单 */}
       {contextMenu && contextMenuTarget && (
-        <div
-          className="context-menu enhanced"
+        <button
+          className="context-menu enhanced border-0 bg-transparent"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -429,7 +430,8 @@ export default function AdminReposEnhanced({
           </div>
 
           <div className="context-menu-section">
-            <button
+            <Button
+              variant="ghost"
               className="context-menu-item"
               onClick={() => {
                 onViewDetail(contextMenuTarget.id);
@@ -437,8 +439,9 @@ export default function AdminReposEnhanced({
               }}
             >
               <EyeIcon /> 查看详情 <span className="shortcut">Enter</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               className="context-menu-item"
               onClick={() => {
                 onBrowseFiles(contextMenuTarget);
@@ -446,8 +449,9 @@ export default function AdminReposEnhanced({
               }}
             >
               <ExternalLinkIcon /> 浏览文件
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               className="context-menu-item"
               onClick={() => {
                 const url = `/${contextMenuTarget.ownerUsername || 'unknown'}/${contextMenuTarget.name}`;
@@ -456,7 +460,7 @@ export default function AdminReposEnhanced({
               }}
             >
               <CopyIcon /> 复制仓库地址 <span className="shortcut">Ctrl+C</span>
-            </button>
+            </Button>
           </div>
 
           <div className="context-menu-divider" />
@@ -467,16 +471,17 @@ export default function AdminReposEnhanced({
                 🌍 修改可见性 <ChevronDownIcon />
               </span>
               <div className="submenu-content">
-                <button onClick={() => { onChangeVisibility(contextMenuTarget.id, 0); onCloseContextMenu(); }}>
+                <Button variant="ghost" size="sm" onClick={() => { onChangeVisibility(contextMenuTarget.id, 0); onCloseContextMenu(); }}>
                   设为公开
-                </button>
-                <button onClick={() => { onChangeVisibility(contextMenuTarget.id, 1); onCloseContextMenu(); }}>
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { onChangeVisibility(contextMenuTarget.id, 1); onCloseContextMenu(); }}>
                   设为私有
-                </button>
+                </Button>
               </div>
             </div>
 
-            <button
+            <Button
+              variant="ghost"
               className="context-menu-item"
               onClick={() => {
                 onArchiveRepo(contextMenuTarget.id);
@@ -484,13 +489,14 @@ export default function AdminReposEnhanced({
               }}
             >
               <ArchiveIcon /> {contextMenuTarget.deletedAt ? '取消归档' : '归档仓库'}
-            </button>
+            </Button>
           </div>
 
           <div className="context-menu-divider" />
 
           <div className="context-menu-section">
-            <button
+            <Button
+              variant="ghost"
               className="context-menu-item danger"
               onClick={() => {
                 setConfirmDialog({
@@ -507,13 +513,14 @@ export default function AdminReposEnhanced({
               }}
             >
               <TrashIcon /> 删除仓库 <span className="shortcut">d</span>
-            </button>
+            </Button>
           </div>
 
           <div className="context-menu-divider" />
 
           <div className="context-menu-section">
-            <button
+            <Button
+              variant="ghost"
               className="context-menu-item"
               onClick={() => {
                 onExportRepos([contextMenuTarget.id]);
@@ -521,9 +528,9 @@ export default function AdminReposEnhanced({
               }}
             >
               <DownloadIcon /> 导出信息
-            </button>
+            </Button>
           </div>
-        </div>
+        </button>
       )}
 
       {/* 仓库详情侧边栏 */}
@@ -598,7 +605,7 @@ function RepoDetailPanel({
         width={520}
       >
         <div className="detail-loading">
-          <div className="loading-spinner" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] mb-3" />
           <p>正在加载仓库详情...</p>
         </div>
       </SidePanel>
@@ -619,7 +626,7 @@ function RepoDetailPanel({
     >
       {/* 基本信息 */}
       <div className="detail-section">
-        <h3 className="detail-section-title">基本信息</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">基本信息</h3>
         <div className="detail-grid">
           <div className="detail-item full-width">
             <span className="detail-label">描述</span>
@@ -656,30 +663,30 @@ function RepoDetailPanel({
 
       {/* 统计数据 */}
       <div className="detail-section">
-        <h3 className="detail-section-title">统计数据</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">统计数据</h3>
         <div className="stats-grid-4">
-          <div className="mini-stat">
-            <span className="mini-stat-value">{repo.starCount}</span>
-            <span className="mini-stat-label">⭐ Star</span>
+          <div className="flex flex-col items-center p-3">
+            <span className="text-xl font-semibold text-[var(--ds-text-primary)]">{repo.starCount}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">⭐ Star</span>
           </div>
-          <div className="mini-stat">
-            <span className="mini-stat-value">{repo.forkCount}</span>
-            <span className="mini-stat-label">🍴 Fork</span>
+          <div className="flex flex-col items-center p-3">
+            <span className="text-xl font-semibold text-[var(--ds-text-primary)]">{repo.forkCount}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">🍴 Fork</span>
           </div>
-          <div className="mini-stat">
-            <span className="mini-stat-value">{repo.watcherCount || 0}</span>
-            <span className="mini-stat-label">👀 Watch</span>
+          <div className="flex flex-col items-center p-3">
+            <span className="text-xl font-semibold text-[var(--ds-text-primary)]">{repo.watcherCount || 0}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">👀 Watch</span>
           </div>
-          <div className="mini-stat">
-            <span className="mini-stat-value">{repo.openIssues}</span>
-            <span className="mini-stat-label">📝 Issues</span>
+          <div className="flex flex-col items-center p-3">
+            <span className="text-xl font-semibold text-[var(--ds-text-primary)]">{repo.openIssues}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">📝 Issues</span>
           </div>
         </div>
       </div>
 
       {/* 仓库功能 */}
       <div className="detail-section">
-        <h3 className="detail-section-title">仓库功能</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">仓库功能</h3>
         <div className="feature-list">
           <div className="feature-item">
             <span>Issues</span>
@@ -705,7 +712,7 @@ function RepoDetailPanel({
       {/* 最近提交 */}
       {repo.recentCommits && repo.recentCommits.length > 0 && (
         <div className="detail-section">
-          <h3 className="detail-section-title">最近提交</h3>
+          <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">最近提交</h3>
           <div className="commit-list">
             {repo.recentCommits.slice(0, 5).map((commit) => (
               <div key={commit.sha} className="commit-item">
@@ -722,52 +729,52 @@ function RepoDetailPanel({
 
       {/* 操作按钮 */}
       <div className="detail-section">
-        <h3 className="detail-section-title">管理操作</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">管理操作</h3>
         <div className="detail-actions">
-          <button className="btn btn-secondary btn-block" onClick={onBrowseFiles}>
+          <Button variant="secondary" onClick={onBrowseFiles}>
             浏览文件
-          </button>
-          <button
-            className="btn btn-secondary btn-block"
+          </Button>
+          <Button
+            variant="secondary"
             onClick={onChangeVisibility}
           >
             {repo.visibility === 'public' ? '设为私有' : '设为公开'}
-          </button>
-          <button className="btn btn-secondary btn-block" onClick={onArchive}>
+          </Button>
+          <Button variant="secondary" onClick={onArchive}>
             {repo.isArchived ? '取消归档' : '归档仓库'}
-          </button>
-          <button className="btn btn-danger btn-block" onClick={onDelete}>
+          </Button>
+          <Button variant="danger" onClick={onDelete}>
             删除仓库
-          </button>
+          </Button>
         </div>
       </div>
       <style jsx>{`
         .repo-cell { display: flex; align-items: center; gap: 8px; }
         .repo-icon { font-size: 16px; }
-        .repo-link { font-weight: 500; color: var(--color-accent-fg); }
+        .repo-link { font-weight: 500; color: var(--ds-accent-default); }
         .repo-link:hover { text-decoration: underline; }
         .language-badge {
           display: inline-flex; padding: 2px 8px; border-radius: 12px;
-          font-size: 12px; background: var(--color-bg-subtle); color: var(--color-fg-muted);
+          font-size: 12px; background: var(--ds-surface-subtle); color: var(--ds-text-secondary);
         }
         .star-count, .fork-count { font-weight: 500; }
         .feature-list { display: flex; flex-direction: column; gap: 8px; }
         .feature-item {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 8px 12px; background: var(--color-bg-subtle);
+          padding: 8px 12px; background: var(--ds-surface-subtle);
           border-radius: 6px; font-size: 13px;
         }
         .feature-status { font-size: 12px; }
-        .feature-status.enabled { color: var(--color-success-fg); }
-        .feature-status.disabled { color: var(--color-fg-muted); }
+        .feature-status.enabled { color: var(--ds-success-default); }
+        .feature-status.disabled { color: var(--ds-text-secondary); }
         .commit-list { display: flex; flex-direction: column; gap: 8px; }
-        .commit-item { padding: 10px 12px; background: var(--color-bg-subtle); border-radius: 6px; }
+        .commit-item { padding: 10px 12px; background: var(--ds-surface-subtle); border-radius: 6px; }
         .commit-message {
-          font-size: 13px; color: var(--color-fg-default); margin-bottom: 4px;
+          font-size: 13px; color: var(--ds-text-primary); margin-bottom: 4px;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .commit-meta { display: flex; gap: 12px; font-size: 11px; color: var(--color-fg-muted); }
-        .commit-author { color: var(--color-accent-fg); }
+        .commit-meta { display: flex; gap: 12px; font-size: 11px; color: var(--ds-text-secondary); }
+        .commit-author { color: var(--ds-accent-default); }
         .detail-item.full-width { grid-column: span 2; }
       `}</style>
     </SidePanel>
@@ -785,16 +792,6 @@ function getRepoStatusLabel(repo: RepositorySummary): string {
   if (repo.deletedAt) return '已删除';
   if (repo.visibility === 'private') return '私有';
   return '公开';
-}
-
-function formatDate(dateString: string): string {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
 }
 
 function getPaginationNumbers(current: number, total: number): (number | string)[] {

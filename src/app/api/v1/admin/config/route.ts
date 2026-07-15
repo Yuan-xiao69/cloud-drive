@@ -6,11 +6,10 @@ export const dynamic = 'force-dynamic';
  * PUT  /api/v1/admin/config - 更新系统配置
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
 
 // 配置项映射
 const CONFIG_KEYS = {
@@ -95,11 +94,11 @@ const CONFIG_DESCRIPTIONS: Record<string, string> = {
 };
 
 // GET /api/v1/admin/config
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (!auth) {
-      return errors.unauthorized();
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     // 从数据库获取所有配置
@@ -142,27 +141,22 @@ export async function GET(req: NextRequest): Promise<Response> {
     }
 
     return success(config);
-  } catch (err) {
-    return handlePrismaError(err, '获取系统配置失败');
-  }
-}
+  },
+});
 
 // PUT /api/v1/admin/config
-export async function PUT(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PUT = defineRoute({
+  auth: 'required',
+  validation: z.object({}).passthrough(),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 只有超级管理员可以修改系统配置
-    if (auth.role !== 'super_admin') {
-      return error(ErrorCodes.FORBIDDEN, { message: '只有超级管理员可以修改系统配置' });
+    if (user!.role !== 'super_admin') {
+      return errors.forbidden('只有超级管理员可以修改系统配置');
     }
 
-    const body = await req.json();
-
-    // 验证并更新配置
     const updates: Promise<unknown>[] = [];
 
     for (const [key, dbKey] of Object.entries(CONFIG_KEYS)) {
@@ -193,9 +187,6 @@ export async function PUT(req: NextRequest): Promise<Response> {
 
     await Promise.all(updates);
 
-    // 返回更新后的配置
     return success({ message: '配置更新成功' });
-  } catch (err) {
-    return handlePrismaError(err, '更新系统配置失败');
-  }
-}
+  },
+});

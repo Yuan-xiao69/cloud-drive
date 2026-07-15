@@ -193,7 +193,8 @@ async function initRedisClient(): Promise<import('ioredis').Redis | null> {
   redisInitPromise = (async () => {
     try {
       const { default: Redis } = await import('ioredis');
-      const client = new Redis(process.env.REDIS_URL, {
+      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+      const client = new Redis(redisUrl, {
         maxRetriesPerRequest: 3,
         lazyConnect: true,
         enableOfflineQueue: false,
@@ -394,4 +395,3 @@ export function withRateLimit<T extends (...args: unknown[]) => Promise<Response
     return response;
   };
 }
-

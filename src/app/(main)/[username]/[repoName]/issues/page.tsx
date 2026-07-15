@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import Header from '@/components/layout/Header';
+import { Button, Input, Field, PageLayout, PageLayoutContent, Badge, Modal, ModalFooter, Empty } from '@/components/design';
 import {
   Plus,
   Search,
@@ -12,33 +14,13 @@ import {
   Tag,
   Clock,
   X,
-} from '@/components/ui/icons';
+} from '@/components/design/icons';
 import { formatTimeAgo } from '@/lib/utils';
-import { tokenManager } from '@/lib/api/client';
-
-interface IssueLabel {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface Issue {
-  id: string;
-  title: string;
-  content: string;
-  status: string;
-  labels: IssueLabel[];
-  commentsCount: number;
-  authorUsername: string;
-  authorAvatar: string | null;
-  createdAt: string;
-}
-
-interface RepoInfo {
-  id: string;
-  name: string;
-  owner: { username: string };
-}
+import { useIssues } from '@/components/repo/hooks/useIssues';
+import type { IssueItem } from '@/components/repo/hooks/useIssues';
+import { api } from '@/lib/api/client';
+import { useAuth } from '@/lib/providers';
+import toast from 'react-hot-toast';
 
 export default function IssuesListPage() {
   const params = useParams();
@@ -46,77 +28,26 @@ export default function IssuesListPage() {
   const username = params.username as string;
   const repoName = params.repoName as string;
 
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
-  const [totalPages, setTotalPages] = useState(1);
-  const [status, setStatus] = useState<'open' | 'closed' | 'all'>('open');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const {
+    issues, total, page, totalPages,
+    status, setStatus,
+    searchQuery, setSearchQuery,
+    isLoading, error,
+    setPage, fetchIssues,
+  } = useIssues({ username, repoName });
 
   // 创建 Issue 模态框
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
-  const [newLabels, setNewLabels] = useState<IssueLabel[]>([]);
+  const [newLabels, setNewLabels] = useState<{ id: string; name: string; color: string }[]>([]);
   const [newLabelName, setNewLabelName] = useState('');
-  const [newLabelColor, setNewLabelColor] = useState('#0075ca');
+  const [newLabelColor, setNewLabelColor] = useState('var(--ds-accent-default)');
   const [isCreating, setIsCreating] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
 
-  // 获取当前用户
-  useEffect(() => {
-    const token = tokenManager.getAccessToken();
-    if (!token) return;
-    fetch('/api/v1/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(d => {
-        if (d.code === 200) setCurrentUser(d.data);
-      })
-      .catch(() => {});
-  }, []);
+  const formRef = useRef<HTMLFormElement>(null);
 
-  // 获取 Issues
-  const fetchIssues = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const params = new URLSearchParams({
-        status: status === 'all' ? 'all' : status,
-        page: page.toString(),
-        size: pageSize.toString(),
-      });
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/issues?${params}`);
-      const data = await res.json();
-      if (data.code === 200) {
-        setIssues(data.data.data);
-        setTotal(data.data.total);
-        setTotalPages(data.data.totalPages);
-      } else {
-        setError(data.message || '加载失败');
-      }
-    } catch {
-      setError('网络错误');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchIssues();
-  }, [username, repoName, status, page]);
-
-  // 过滤搜索
-  const filteredIssues = searchQuery
-    ? issues.filter(i =>
-        i.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        i.content.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : issues;
+  const { user: currentUser } = useAuth();
 
   // 创建 Issue
   const handleCreate = async (e: React.FormEvent) => {
@@ -125,31 +56,22 @@ export default function IssuesListPage() {
 
     setIsCreating(true);
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/issues`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
-          title: newTitle.trim(),
-          content: newContent.trim(),
-          labels: newLabels.map(l => ({ name: l.name, color: l.color })),
-        }),
+      const data = await api.post(`/api/v1/repos/${username}/${repoName}/issues`, {
+        title: newTitle.trim(),
+        content: newContent.trim(),
+        labels: newLabels.map(l => ({ name: l.name, color: l.color })),
       });
-      const data = await res.json();
-      if (data.code === 200) {
+      if (data.code === 201) {
         setShowCreateModal(false);
         setNewTitle('');
         setNewContent('');
         setNewLabels([]);
         fetchIssues();
       } else {
-        alert(data.message || '创建失败');
+        toast.error(data.message || '创建失败');
       }
     } catch {
-      alert('网络错误');
+      toast.error('网络错误');
     } finally {
       setIsCreating(false);
     }
@@ -168,49 +90,53 @@ export default function IssuesListPage() {
   };
 
   return (
-    <div className="issues-page">
+    <PageLayout containerWidth="medium"><PageLayoutContent>
+      <Header />
       {/* Header */}
-      <div className="page-header">
-        <div className="header-left">
-          <h1>问题</h1>
-          <span className="count-badge">{total}</span>
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold m-0 flex items-center gap-2">问题</h1>
+          <span className="bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)] text-sm font-medium px-2 py-0.5 rounded-full">{total}</span>
         </div>
         {currentUser && (
-          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+          <Button variant="primary" onClick={() => setShowCreateModal(true)}>
             <Plus size={16} />
             新建问题
-          </button>
+          </Button>
         )}
       </div>
 
       {/* 状态标签栏 */}
-      <div className="status-tabs">
-        <button
-          className={`status-tab ${status === 'open' ? 'active' : ''}`}
+      <div className="flex border-b border-[var(--ds-border-default)] mb-5">
+        <Button
+          variant="ghost"
+          className={`border-b-2 -mb-px ${status === 'open' ? 'text-[var(--ds-text-primary)] border-[var(--ds-accent-default)] font-semibold' : 'text-[var(--ds-text-secondary)] border-transparent hover:text-[var(--ds-text-primary)]'}`}
           onClick={() => { setStatus('open'); setPage(1); }}
         >
-          <Circle size={16} />
+          <Circle size={16} className="text-[var(--ds-success-default)]" />
           开放 {total > 0 && `(${issues.filter(i => i.status === 'open').length})`}
-        </button>
-        <button
-          className={`status-tab ${status === 'closed' ? 'active' : ''}`}
+        </Button>
+        <Button
+          variant="ghost"
+          className={`border-b-2 -mb-px ${status === 'closed' ? 'text-[var(--ds-text-primary)] border-[var(--ds-accent-default)] font-semibold' : 'text-[var(--ds-text-secondary)] border-transparent hover:text-[var(--ds-text-primary)]'}`}
           onClick={() => { setStatus('closed'); setPage(1); }}
         >
-          <CheckCircle size={16} />
+          <CheckCircle size={16} className="text-[var(--ds-accent-default)]" />
           已关闭 {total > 0 && `(${issues.filter(i => i.status === 'closed').length})`}
-        </button>
-        <button
-          className={`status-tab ${status === 'all' ? 'active' : ''}`}
+        </Button>
+        <Button
+          variant="ghost"
+          className={`border-b-2 -mb-px ${status === 'all' ? 'text-[var(--ds-text-primary)] border-[var(--ds-accent-default)] font-semibold' : 'text-[var(--ds-text-secondary)] border-transparent hover:text-[var(--ds-text-primary)]'}`}
           onClick={() => { setStatus('all'); setPage(1); }}
         >
           全部
-        </button>
+        </Button>
       </div>
 
       {/* 搜索栏 */}
-      <div className="search-bar">
-        <Search size={16} />
-        <input
+      <div className="flex items-center gap-2 px-3 py-2 bg-[var(--ds-surface-default)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] mb-5">
+        <Search size={16} className="text-[var(--ds-text-secondary)] shrink-0" />
+        <Input
           type="text"
           placeholder="搜索问题..."
           value={searchQuery}
@@ -220,86 +146,76 @@ export default function IssuesListPage() {
 
       {/* 列表 */}
       {isLoading ? (
-        <div className="loading-state">
-          <div className="loading-spinner" />
-          <span>加载中...</span>
-        </div>
+        <Empty title="加载中..." />
       ) : error ? (
-        <div className="error-state">
-          <AlertCircle size={32} />
-          <p>{error}</p>
-          <button className="btn btn-secondary" onClick={fetchIssues}>重试</button>
-        </div>
-      ) : filteredIssues.length === 0 ? (
-        <div className="empty-state">
-          {status === 'open' ? (
-            <>
-              <AlertCircle size={48} />
-              <h3>没有问题</h3>
-              <p>这个问题仓库还没有开放的问题</p>
-              {currentUser && (
-                <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-                  创建第一个问题
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <CheckCircle size={48} />
-              <h3>没有已关闭的问题</h3>
-              <p>已关闭的问题会显示在这里</p>
-            </>
-          )}
-        </div>
+        <Empty icon={<AlertCircle size={32} />} title={error} action={{ label: '重试', onClick: fetchIssues }} />
+      ) : issues.length === 0 ? (
+        status === 'open' ? (
+          <Empty
+            icon={<AlertCircle size={48} className="opacity-50" />}
+            title="没有问题"
+            description="这个问题仓库还没有开放的问题"
+            action={currentUser ? { label: '创建第一个问题', onClick: () => setShowCreateModal(true) } : undefined}
+          />
+        ) : (
+          <Empty
+            icon={<CheckCircle size={48} className="opacity-50" />}
+            title="没有已关闭的问题"
+            description="已关闭的问题会显示在这里"
+          />
+        )
       ) : (
-        <div className="issues-list">
-          {filteredIssues.map(issue => (
+        <div className="flex flex-col border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] overflow-hidden">
+          {issues.map(issue => (
             <Link
               key={issue.id}
               href={`/${username}/${repoName}/issues/${issue.id}`}
-              className="issue-item"
+              className="flex gap-3 px-4 py-4 border-b border-[var(--ds-border-default)] no-underline text-inherit transition-colors hover:bg-[var(--ds-surface-subtle)] last:border-b-0"
             >
-              <div className="issue-status-icon">
+              <div className="shrink-0 pt-0.5">
                 {issue.status === 'open' ? (
-                  <span className="status-icon open"><Circle size={20} /></span>
+                  <span className="text-[var(--ds-success-default)]"><Circle size={20} /></span>
                 ) : (
-                  <span className="status-icon closed"><CheckCircle size={20} /></span>
+                  <span className="text-[var(--ds-accent-default)]"><CheckCircle size={20} /></span>
                 )}
               </div>
-              <div className="issue-content">
-                <div className="issue-title-row">
-                  <span className="issue-title">{issue.title}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <span className="text-[15px] font-medium text-[var(--ds-accent-default)]">{issue.title}</span>
                   {issue.labels && issue.labels.length > 0 && (
-                    <div className="issue-labels">
-                      {issue.labels.slice(0, 3).map(label => (
-                        <span
-                          key={label.id}
-                          className="label-badge"
+                    <div className="flex gap-1 flex-wrap">
+                      {issue.labels.slice(0, 3).map((label, i) => (
+                        <Badge
+                          key={label.name + i}
+                          variant="default"
+                          className="font-medium"
                           style={{
                             backgroundColor: label.color + '22',
                             color: label.color,
                             borderColor: label.color,
+                            borderWidth: 1,
+                            borderStyle: 'solid',
                           }}
                         >
                           {label.name}
-                        </span>
+                        </Badge>
                       ))}
                       {issue.labels.length > 3 && (
-                        <span className="label-more">+{issue.labels.length - 3}</span>
+                        <span className="text-xs text-[var(--ds-text-secondary)]">+{issue.labels.length - 3}</span>
                       )}
                     </div>
                   )}
                 </div>
-                <div className="issue-meta">
-                  <span className="meta-item">
-                    #{issue.id.slice(0, 8)} • 由 {issue.authorUsername} 提交
+                <div className="flex items-center gap-3 text-xs text-[var(--ds-text-secondary)]">
+                  <span className="flex items-center gap-1">
+                    #{issue.id.slice(0, 8)} • 由 {issue.author?.username} 提交
                   </span>
-                  <span className="meta-item">
+                  <span className="flex items-center gap-1">
                     <Clock size={12} />
                     {formatTimeAgo(issue.createdAt)}
                   </span>
                   {issue.commentsCount > 0 && (
-                    <span className="meta-item comments">
+                    <span className="flex items-center gap-1">
                       💬 {issue.commentsCount} 条评论
                     </span>
                   )}
@@ -312,475 +228,114 @@ export default function IssuesListPage() {
 
       {/* 分页 */}
       {totalPages > 1 && (
-        <div className="pagination">
-          <button
-            className="btn btn-secondary btn-sm"
+        <div className="flex justify-center items-center gap-4 mt-6">
+          <Button
+            variant="secondary"
             disabled={page <= 1}
             onClick={() => setPage(p => p - 1)}
           >
             上一页
-          </button>
-          <span className="page-info">
+          </Button>
+          <span className="text-sm text-[var(--ds-text-secondary)]">
             第 {page} / {totalPages} 页，共 {total} 条
           </span>
-          <button
-            className="btn btn-secondary btn-sm"
+          <Button
+            variant="secondary"
             disabled={page >= totalPages}
             onClick={() => setPage(p => p + 1)}
           >
             下一页
-          </button>
+          </Button>
         </div>
       )}
 
       {/* 创建模态框 */}
-      {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>新建问题</h2>
-              <button className="modal-close" onClick={() => setShowCreateModal(false)}>
-                <X size={20} />
-              </button>
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="创建 Issue"
+        maxWidth="640px"
+        footer={
+          <ModalFooter
+            onCancel={() => setShowCreateModal(false)}
+            onConfirm={() => formRef.current?.requestSubmit()}
+            confirmLabel="创建问题"
+            cancelLabel="取消"
+            confirmLoading={isCreating}
+          />
+        }
+      >
+        <form ref={formRef} onSubmit={handleCreate}>
+          <Field label="标题 *">
+            <Input
+              id="issue-create-title"
+              type="text"
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              placeholder="问题标题"
+              required
+            />
+          </Field>
+          <Field label="描述">
+            <Input
+              id="issue-create-content"
+              multiline
+              rows={8}
+              value={newContent}
+              onChange={e => setNewContent(e.target.value)}
+              placeholder="详细描述你遇到的问题或建议..."
+            />
+          </Field>
+          <Field label="标签">
+            <div className="flex gap-2 items-center">
+              <Input
+                id="issue-create-label"
+                type="text"
+                value={newLabelName}
+                onChange={e => setNewLabelName(e.target.value)}
+                placeholder="标签名称"
+              />
+              <input
+                type="color"
+                className="w-10 h-[38px] p-0.5 border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] cursor-pointer"
+                value={newLabelColor}
+                onChange={e => setNewLabelColor(e.target.value)}
+              />
+              <Button type="button" variant="secondary" onClick={handleAddLabel}>
+                添加
+              </Button>
             </div>
-            <form onSubmit={handleCreate}>
-              <div className="form-group">
-                <label>标题 *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  placeholder="问题标题"
-                  autoFocus
-                  required
-                />
+          </Field>
+            {newLabels.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {newLabels.map(label => (
+                  <Badge
+                    key={label.id}
+                    variant="default"
+                    className="font-medium"
+                    style={{
+                      backgroundColor: label.color + '22',
+                      color: label.color,
+                      borderColor: label.color,
+                      borderWidth: 1,
+                      borderStyle: 'solid',
+                    }}
+                  >
+                    <Tag size={12} />
+                    {label.name}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => handleRemoveLabel(label.id)}
+                    >
+                      <X size={12} />
+                    </Button>
+                  </Badge>
+                ))}
               </div>
-              <div className="form-group">
-                <label>描述</label>
-                <textarea
-                  className="form-input"
-                  rows={8}
-                  value={newContent}
-                  onChange={e => setNewContent(e.target.value)}
-                  placeholder="详细描述你遇到的问题或建议..."
-                />
-              </div>
-              <div className="form-group">
-                <label>标签</label>
-                <div className="label-input-row">
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newLabelName}
-                    onChange={e => setNewLabelName(e.target.value)}
-                    placeholder="标签名称"
-                  />
-                  <input
-                    type="color"
-                    className="color-picker"
-                    value={newLabelColor}
-                    onChange={e => setNewLabelColor(e.target.value)}
-                  />
-                  <button type="button" className="btn btn-secondary" onClick={handleAddLabel}>
-                    添加
-                  </button>
-                </div>
-                {newLabels.length > 0 && (
-                  <div className="label-list">
-                    {newLabels.map(label => (
-                      <span
-                        key={label.id}
-                        className="label-badge"
-                        style={{
-                          backgroundColor: label.color + '22',
-                          color: label.color,
-                          borderColor: label.color,
-                        }}
-                      >
-                        <Tag size={12} />
-                        {label.name}
-                        <button
-                          type="button"
-                          className="label-remove"
-                          onClick={() => handleRemoveLabel(label.id)}
-                        >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
-                  取消
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={isCreating || !newTitle.trim()}>
-                  {isCreating ? '创建中...' : '创建问题'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <style jsx global>{`
-        .issues-page {
-          max-width: 900px;
-          margin: 0 auto;
-          padding: 32px 24px;
-        }
-
-        .page-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-        }
-
-        .page-header h1 {
-          font-size: 24px;
-          font-weight: 600;
-          margin: 0;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .count-badge {
-          background: var(--skeleton-bg);
-          color: var(--color-text-secondary);
-          font-size: 14px;
-          font-weight: 500;
-          padding: 2px 8px;
-          border-radius: 20px;
-        }
-
-        .status-tabs {
-          display: flex;
-          gap: 0;
-          border-bottom: 1px solid var(--border-color);
-          margin-bottom: 20px;
-        }
-
-        .status-tab {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 16px;
-          border: none;
-          background: none;
-          color: var(--color-text-secondary);
-          font-size: 14px;
-          cursor: pointer;
-          border-bottom: 2px solid transparent;
-          margin-bottom: -1px;
-          transition: all 0.2s;
-        }
-
-        .status-tab:hover {
-          color: var(--color-text);
-        }
-
-        .status-tab.active {
-          color: var(--color-text);
-          border-bottom-color: var(--accent-color);
-        }
-
-        .status-tab .status-icon.open {
-          color: var(--color-success-fg);
-        }
-
-        .status-tab .status-icon.closed {
-          color: var(--color-closed-fg, #8250df);
-        }
-
-        .search-bar {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          background: var(--input-bg);
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          margin-bottom: 20px;
-        }
-
-        .search-bar svg {
-          color: var(--color-text-secondary);
-          flex-shrink: 0;
-        }
-
-        .search-bar input {
-          flex: 1;
-          border: none;
-          background: none;
-          font-size: 14px;
-          color: var(--color-text);
-          outline: none;
-        }
-
-        .search-bar input::placeholder {
-          color: var(--color-text-secondary);
-        }
-
-        .issues-list {
-          display: flex;
-          flex-direction: column;
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          overflow: hidden;
-        }
-
-        .issue-item {
-          display: flex;
-          gap: 12px;
-          padding: 16px;
-          border-bottom: 1px solid var(--border-color);
-          text-decoration: none;
-          color: inherit;
-          transition: background 0.15s;
-        }
-
-        .issue-item:last-child {
-          border-bottom: none;
-        }
-
-        .issue-item:hover {
-          background: var(--hover-bg);
-        }
-
-        .issue-status-icon {
-          flex-shrink: 0;
-          padding-top: 2px;
-        }
-
-        .status-icon.open {
-          color: var(--color-success-fg);
-        }
-
-        .status-icon.closed {
-          color: var(--color-closed-fg, #8250df);
-        }
-
-        .issue-content {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .issue-title-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-bottom: 6px;
-        }
-
-        .issue-title {
-          font-size: 15px;
-          font-weight: 500;
-          color: var(--link-color);
-        }
-
-        .issue-labels {
-          display: flex;
-          gap: 4px;
-          flex-wrap: wrap;
-        }
-
-        .label-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          padding: 2px 8px;
-          font-size: 12px;
-          border-radius: 100px;
-          border: 1px solid;
-          font-weight: 500;
-        }
-
-        .label-more {
-          font-size: 12px;
-          color: var(--color-text-secondary);
-        }
-
-        .label-remove {
-          background: none;
-          border: none;
-          padding: 0;
-          cursor: pointer;
-          display: flex;
-          opacity: 0.7;
-        }
-
-        .label-remove:hover {
-          opacity: 1;
-        }
-
-        .issue-meta {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          font-size: 12px;
-          color: var(--color-text-secondary);
-        }
-
-        .meta-item {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .comments {
-          color: var(--color-text-secondary);
-        }
-
-        .loading-state,
-        .error-state,
-        .empty-state {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 64px 24px;
-          text-align: center;
-          color: var(--color-text-secondary);
-        }
-
-        .empty-state svg {
-          margin-bottom: 16px;
-          opacity: 0.5;
-        }
-
-        .empty-state h3 {
-          margin: 0 0 8px;
-          font-size: 18px;
-          color: var(--color-text);
-        }
-
-        .empty-state p {
-          margin: 0 0 16px;
-        }
-
-        .pagination {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: 16px;
-          margin-top: 24px;
-        }
-
-        .page-info {
-          font-size: 14px;
-          color: var(--color-text-secondary);
-        }
-
-        .modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          padding: 24px;
-        }
-
-        .modal-content {
-          background: var(--bg-primary);
-          border-radius: 8px;
-          width: 100%;
-          max-width: 640px;
-          max-height: 90vh;
-          overflow-y: auto;
-        }
-
-        .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          border-bottom: 1px solid var(--border-color);
-        }
-
-        .modal-header h2 {
-          margin: 0;
-          font-size: 18px;
-        }
-
-        .modal-close {
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 4px;
-          color: var(--color-text-secondary);
-        }
-
-        .modal-close:hover {
-          color: var(--color-text);
-        }
-
-        .form-group {
-          margin-bottom: 16px;
-        }
-
-        .form-group label {
-          display: block;
-          font-size: 14px;
-          font-weight: 500;
-          margin-bottom: 6px;
-        }
-
-        .form-input {
-          width: 100%;
-          padding: 8px 12px;
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          font-size: 14px;
-          background: var(--input-bg);
-          color: var(--color-text);
-        }
-
-        .form-input:focus {
-          outline: none;
-          border-color: var(--accent-color);
-        }
-
-        .label-input-row {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .label-input-row .form-input {
-          flex: 1;
-        }
-
-        .color-picker {
-          width: 40px;
-          height: 38px;
-          padding: 2px;
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          cursor: pointer;
-        }
-
-        .label-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 12px;
-        }
-
-        .modal-footer {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-          padding: 16px 20px;
-          border-top: 1px solid var(--border-color);
-        }
-      `}</style>
-    </div>
+            )}
+        </form>
+      </Modal>
+    </PageLayoutContent></PageLayout>
   );
 }

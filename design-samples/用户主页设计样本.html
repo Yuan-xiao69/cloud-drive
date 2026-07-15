@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用户主页设计样本</title>
+<style>
+:root {
+  --ds-accent: #C15F3C; --ds-accent-hover: #D47A4E; --ds-accent-subtle: rgba(193,95,60,0.08);
+  --ds-page-bg: #FAF9F5; --ds-surface: #FFFFFF; --ds-surface-subtle: #F5F2EC; --ds-surface-inset: #F0EDE6;
+  --ds-border: #E8E3DA; --ds-border-muted: #EEE9E2; --ds-border-strong: #D9D2C7;
+  --ds-text: #3B3228; --ds-text-secondary: #7A6E62; --ds-text-tertiary: #A0958B; --ds-text-inverse: #FFFFFF;
+  --ds-success: #4A8B5C; --ds-danger: #C8483C; --ds-warning: #B8862D;
+  --ds-danger-subtle: rgba(200,72,60,0.08); --ds-success-subtle: rgba(74,139,92,0.10);
+  --ds-radius-sm: 6px; --ds-radius-md: 10px; --ds-shadow-sm: 0 1px 3px rgba(59,50,40,0.04);
+  --ds-space-1:4px; --ds-space-2:8px; --ds-space-3:12px; --ds-space-4:16px; --ds-space-6:24px;
+  --font-display: 'Georgia','Noto Serif SC',serif; --font-body: 'Charter','Georgia','Noto Serif SC',serif;
+  --font-ui: system-ui,-apple-system,'Segoe UI',sans-serif; --font-mono: 'JetBrains Mono','Fira Code',monospace;
+}
+.dark { --ds-page-bg:#1E1B18; --ds-surface:#272420; --ds-surface-subtle:#2F2B27; --ds-surface-inset:#1A1714;
+  --ds-border:#3A3530; --ds-border-muted:#332F2B; --ds-border-strong:#4A4540;
+  --ds-text:#E8E0D8; --ds-text-secondary:#A0988E; --ds-text-tertiary:#706860;
+  --ds-accent:#D47A4E; --ds-accent-hover:#E08C64; --ds-accent-subtle:rgba(193,95,60,0.15); }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--ds-page-bg);color:var(--ds-text);line-height:1.6;padding:32px 24px}
+.topbar{display:flex;justify-content:space-between;margin-bottom:40px}
+.topbar h1{font-family:var(--font-display);font-size:26px;font-weight:700}
+.topbar p{font-size:13px;color:var(--ds-text-tertiary);margin-top:4px}
+.theme-btn{padding:8px 16px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);color:var(--ds-text-secondary);cursor:pointer;font-family:var(--font-ui);font-size:13px;font-weight:600}
+.section-title{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--ds-text);margin-bottom:24px;padding-bottom:12px;border-bottom:1px solid var(--ds-border-muted)}
+.page-frame{border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);overflow:hidden;margin-bottom:40px;background:var(--ds-page-bg)}
+.frame-label{font-family:var(--font-ui);font-size:12px;font-weight:700;color:var(--ds-text-secondary);padding:8px 16px;background:var(--ds-surface-subtle);border-bottom:1px solid var(--ds-border)}
+.frame-body{padding:20px;background:var(--ds-page-bg)}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-family:var(--font-ui);font-size:14px;font-weight:600;border-radius:var(--ds-radius-sm);border:1px solid transparent;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--ds-accent);color:var(--ds-text-inverse);border-color:var(--ds-accent)}
+.btn-primary:hover{background:var(--ds-accent-hover)}
+.btn-secondary{background:var(--ds-surface);color:var(--ds-text);border-color:var(--ds-border)}
+.btn-secondary:hover{background:var(--ds-surface-subtle)}
+.btn-danger{background:var(--ds-danger);color:var(--ds-text-inverse);border-color:var(--ds-danger)}
+.btn-sm{padding:4px 10px;font-size:12px}
+
+/* ── Profile Header ── */
+.profile-header{display:flex;align-items:flex-start;gap:24px;padding:20px 0;margin-bottom:16px}
+.profile-avatar{width:80px;height:80px;border-radius:50%;background:var(--ds-accent-subtle);color:var(--ds-accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:32px;font-family:var(--font-display);flex-shrink:0;border:3px solid var(--ds-border)}
+.profile-info{flex:1;min-width:0}
+.profile-name{font-family:var(--font-display);font-size:20px;font-weight:700}
+.profile-username{font-family:var(--font-ui);font-size:14px;color:var(--ds-text-secondary);margin-bottom:8px}
+.profile-bio{font-size:14px;color:var(--ds-text-secondary);margin-bottom:12px;line-height:1.6}
+.profile-meta{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--ds-text-tertiary);font-family:var(--font-ui);flex-wrap:wrap}
+.profile-meta span{display:flex;align-items:center;gap:4px}
+.profile-actions{display:flex;gap:8px;flex-shrink:0}
+
+/* ── Stats Bar ── */
+.stats-bar{display:flex;gap:4px;margin-bottom:16px}
+.stat-item{flex:1;text-align:center;padding:12px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);cursor:pointer;transition:box-shadow .15s}
+.stat-item:hover{box-shadow:var(--ds-shadow-sm)}
+.stat-num{font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--ds-text)}
+.stat-label{font-size:12px;color:var(--ds-text-tertiary);font-family:var(--font-ui);margin-top:2px}
+
+/* ── Tabs ── */
+.profile-tabs{display:flex;gap:0;border-bottom:1px solid var(--ds-border);margin-bottom:16px}
+.profile-tab{padding:10px 20px;font-family:var(--font-ui);font-size:14px;font-weight:500;color:var(--ds-text-secondary);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;display:flex;align-items:center;gap:6px;background:none}
+.profile-tab:hover{color:var(--ds-text)}
+.profile-tab.active{color:var(--ds-text);border-bottom-color:var(--ds-accent);font-weight:600}
+.count-badge{display:inline-flex;align-items:center;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;font-family:var(--font-ui);background:var(--ds-surface-subtle);color:var(--ds-text-tertiary)}
+
+/* ── Repo Cards ── */
+.repo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+.repo-card{padding:20px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-md);background:var(--ds-surface);transition:box-shadow .15s}
+.repo-card:hover{box-shadow:var(--ds-shadow-sm)}
+.repo-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
+.repo-card-name{font-family:var(--font-ui);font-size:14px;font-weight:700;color:var(--ds-text);cursor:pointer}
+.repo-card-name:hover{color:var(--ds-accent)}
+.repo-card-vis{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;font-family:var(--font-ui);border:1px solid var(--ds-border);color:var(--ds-text-tertiary);flex-shrink:0}
+.repo-card-desc{font-size:13px;color:var(--ds-text-secondary);margin-bottom:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.repo-card-meta{display:flex;align-items:center;gap:16px;font-size:12px;color:var(--ds-text-tertiary);font-family:var(--font-ui)}
+.repo-card-meta span{display:flex;align-items:center;gap:4px}
+
+/* ── Empty State ── */
+.empty-state{text-align:center;padding:60px 20px;color:var(--ds-text-tertiary)}
+.empty-state .empty-icon{font-size:48px;margin-bottom:12px}
+.empty-state p{font-size:14px;font-family:var(--font-ui)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div><h1>用户主页设计样本</h1><p>用户公开资料 · 仓库列表 · 收藏 · 关注/粉丝</p></div>
+  <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">☀️ / 🌙</button>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     用户主页 — 自己的视角
+     ═══════════════════════════════════════════ -->
+<div class="section-title">用户主页 — 自己的视角</div>
+<div class="page-frame">
+  <div class="frame-label">单栏布局 1200px · 头像+资料+统计+Tab+仓库卡片 · PageLayout containerWidth="wide"</div>
+  <div class="frame-body">
+
+    <!-- Profile Header -->
+    <div class="profile-header">
+      <div class="profile-avatar">Z</div>
+      <div class="profile-info">
+        <div class="profile-name">张三</div>
+        <div class="profile-username">zhangsan <span style="font-size:11px;color:var(--ds-text-tertiary);font-family:var(--font-ui);font-weight:400">UID 000000001</span></div>
+        <div class="profile-bio">设计师 / 全栈开发者。喜欢收集设计素材、写技术博客、分享开源项目。🏔️ 🎨 📚</div>
+        <div class="profile-meta">
+          <span>📍 北京</span>
+          <span>🔗 design.example.com</span>
+          <span>🕐 加入于 2025-03-12</span>
+        </div>
+      </div>
+      <div class="profile-actions">
+        <button class="btn btn-secondary btn-sm">✎ 编辑资料</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        <div class="stat-num">12</div>
+        <div class="stat-label">仓库</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">1.2k</div>
+        <div class="stat-label">收藏</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">48</div>
+        <div class="stat-label">关注</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">156</div>
+        <div class="stat-label">粉丝</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="profile-tabs">
+      <div class="profile-tab active">📁 仓库 <span class="count-badge">12</span></div>
+      <div class="profile-tab">⭐ 收藏 <span class="count-badge">1.2k</span></div>
+    </div>
+
+    <!-- Repo Grid -->
+    <div class="repo-grid">
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">我的设计素材</div>
+          <span class="repo-card-vis">🌐 公开</span>
+        </div>
+        <div class="repo-card-desc">收集的设计素材、参考图和灵感图片。按项目分类，方便团队成员共享使用。</div>
+        <div class="repo-card-meta">
+          <span>📁 8 个文件</span>
+          <span>⭐ 256</span>
+          <span>更新于 2 小时前</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">壁纸收藏</div>
+          <span class="repo-card-vis">🌐 公开</span>
+        </div>
+        <div class="repo-card-desc">近两年收集的高清壁纸，按风格分类整理，适合 4K 屏幕。</div>
+        <div class="repo-card-meta">
+          <span>📁 800+ 文件</span>
+          <span>⭐ 1.2k</span>
+          <span>更新于 3 天前</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">项目文档归档</div>
+          <span class="repo-card-vis">🔒 私有</span>
+        </div>
+        <div class="repo-card-desc">2024-2026 年所有项目文档、合同扫描件、会议纪要的统一存储位置。</div>
+        <div class="repo-card-meta">
+          <span>📁 47 个文件</span>
+          <span>⭐ —</span>
+          <span>更新于 昨天</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">软件安装包合集</div>
+          <span class="repo-card-vis">🌐 公开</span>
+        </div>
+        <div class="repo-card-desc">常用开发工具、设计软件、办公套件的安装包备份，方便团队统一版本。</div>
+        <div class="repo-card-meta">
+          <span>📁 23 个文件</span>
+          <span>⭐ 89</span>
+          <span>更新于 2 周前</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">电子书资源库</div>
+          <span class="repo-card-vis">🌐 公开</span>
+        </div>
+        <div class="repo-card-desc">技术书籍、设计理论、产品管理相关电子书，PDF 和 EPUB 格式。</div>
+        <div class="repo-card-meta">
+          <span>📁 156 个文件</span>
+          <span>⭐ 340</span>
+          <span>更新于 1 个月前</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">个人照片备份</div>
+          <span class="repo-card-vis">🔒 私有</span>
+        </div>
+        <div class="repo-card-desc">手机照片自动备份，按月份归档。仅自己可见。</div>
+        <div class="repo-card-meta">
+          <span>📁 1,203 个文件</span>
+          <span>⭐ —</span>
+          <span>更新于 1 周前</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     用户主页 — 他人的视角
+     ═══════════════════════════════════════════ -->
+<div class="section-title" style="margin-top:40px">用户主页 — 他人的视角</div>
+<div class="page-frame">
+  <div class="frame-label">与"自己视角"不同：操作按钮变为"关注 + 拉黑"，私有仓库不可见</div>
+  <div class="frame-body">
+
+    <!-- Profile Header -->
+    <div class="profile-header">
+      <div class="profile-avatar" style="background:rgba(74,139,92,0.10);color:var(--ds-success)">L</div>
+      <div class="profile-info">
+        <div class="profile-name">李四</div>
+        <div class="profile-username">lisi <span style="font-size:11px;color:var(--ds-text-tertiary);font-family:var(--font-ui);font-weight:400">UID 000000042</span></div>
+        <div class="profile-bio">UI 设计师。关注品牌设计、交互体验。开放素材仓库欢迎大家拉入使用。</div>
+        <div class="profile-meta">
+          <span>📍 上海</span>
+          <span>🔗 lisi.design</span>
+          <span>🕐 加入于 2025-06-01</span>
+        </div>
+      </div>
+      <div class="profile-actions">
+        <button class="btn btn-primary btn-sm">👁 关注</button>
+        <button class="btn btn-secondary btn-sm">⭐ 收藏</button>
+        <button class="btn btn-secondary btn-sm" style="color:var(--ds-danger)">🚫 拉黑</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        <div class="stat-num">8</div>
+        <div class="stat-label">仓库</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">430</div>
+        <div class="stat-label">收藏</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">32</div>
+        <div class="stat-label">关注</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">89</div>
+        <div class="stat-label">粉丝</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="profile-tabs">
+      <div class="profile-tab active">📁 仓库 <span class="count-badge">6</span></div>
+      <div class="profile-tab">⭐ 收藏 <span class="count-badge">430</span></div>
+    </div>
+
+    <!-- Only PUBLIC repos visible to others -->
+    <div class="repo-grid">
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">品牌设计资源</div>
+          <span class="repo-card-vis">🌐 公开</span>
+        </div>
+        <div class="repo-card-desc">品牌设计相关资源合集：字体、配色、Logo 模板、品牌手册范例。</div>
+        <div class="repo-card-meta">
+          <span>📁 64 个文件</span>
+          <span>⭐ 195</span>
+          <span>更新于 5 天前</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">UI 图标库</div>
+          <span class="repo-card-vis">🌐 公开</span>
+        </div>
+        <div class="repo-card-desc">自建 SVG 图标库，包含 1200+ 常用图标，支持多种尺寸导出。</div>
+        <div class="repo-card-meta">
+          <span>📁 1,200 个文件</span>
+          <span>⭐ 612</span>
+          <span>更新于 2 周前</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-top">
+          <div class="repo-card-name">交互原型存档</div>
+          <span class="repo-card-vis">🌐 公开</span>
+        </div>
+        <div class="repo-card-desc">过往项目的交互原型文件，Figma / Sketch 格式，可用于学习和参考。</div>
+        <div class="repo-card-meta">
+          <span>📁 38 个文件</span>
+          <span>⭐ 87</span>
+          <span>更新于 1 个月前</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

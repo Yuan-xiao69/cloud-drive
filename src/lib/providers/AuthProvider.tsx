@@ -19,28 +19,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const checkAuth = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { tokenManager } = await import('@/lib/api/client');
-      const token = tokenManager.getAccessToken();
-      if (!token) {
-        setUser(null);
-        setIsLoading(false);
-        return;
-      }
-      
+      // 使用 credentials: 'include' 让浏览器自动携带 HttpOnly cookie
+      // 无需手动读取 token，服务端 getAuthUser 会从 cookie 提取
       const res = await fetch('/api/v1/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
       const data = await res.json();
-      setUser(data.code === 200 ? data.data : null);
+      if (data.code === 200 && data.data) {
+        setUser(data.data);
+        setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
     } catch (error) {
       console.error('Check auth failed:', error);
       setUser(null);
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
@@ -55,13 +55,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ account, password }),
       });
       const data = await res.json();
-      
-      if (data.code === 200 && data.data) {
-        const { tokenManager } = await import('@/lib/api/client');
-        tokenManager.setTokens(data.data.tokens.accessToken, data.data.tokens.refreshToken);
+
+      if (data.code === 200) {
+        // HttpOnly cookies 由浏览器自动设置，只需验证会话
         await checkAuth();
         return { success: true, message: '登录成功' };
       }
@@ -76,26 +76,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(data),
       });
       const result = await res.json();
-      
+
       if (result.code === 200) {
+        // 注册成功后验证会话（如果后端自动签发 cookie）
+        await checkAuth();
         return { success: true, message: '注册成功，请登录' };
       }
       return { success: false, message: result.message };
     } catch (error) {
       return { success: false, message: '注册失败，请稍后重试' };
     }
-  }, []);
+  }, [checkAuth]);
 
   const logout = useCallback(async () => {
     try {
-      await fetch('/api/v1/auth/logout', { method: 'POST' });
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
     } finally {
-      const { tokenManager } = await import('@/lib/api/client');
-      tokenManager.clearTokens();
+      // HttpOnly cookies 由服务端清除，前端只需重置状态
       setUser(null);
+      setIsAuthenticated(false);
     }
   }, []);
 
@@ -111,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated,
         login,
         register,
         logout,

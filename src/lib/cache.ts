@@ -20,26 +20,26 @@ interface RedisClientInterface {
 }
 
 let redisClient: RedisClientInterface | null = null;
+let memoryFallback: ReturnType<typeof createMemoryCache> | null = null;
 
-async function getRedisClient(): Promise<RedisClientInterface> {
+async function getCacheRedisClient(): Promise<RedisClientInterface> {
   if (redisClient) return redisClient;
 
-  try {
-    const { default: Redis } = await import('ioredis');
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    const client = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      enableOfflineQueue: false,
-    });
-
-    await client.connect();
-    redisClient = client as unknown as RedisClientInterface;
+  const { getRedisClient: getSharedRedis } = await import('./redis-client');
+  const shared = await getSharedRedis();
+  if (shared) {
+    redisClient = shared as unknown as RedisClientInterface;
     return redisClient;
-  } catch {
-    console.warn('[Cache] Redis not available, using memory fallback');
-    return createMemoryCache();
   }
+
+  console.warn('[Cache] Redis not available, using memory fallback');
+  if (!memoryFallback) memoryFallback = createMemoryCache();
+  return memoryFallback;
+}
+
+// 保持向后兼容的 getRedisClient 导出（内部使用统一模块）
+async function getRedisClient(): Promise<RedisClientInterface> {
+  return getCacheRedisClient();
 }
 
 // 内存缓存（备用）
@@ -87,14 +87,14 @@ function createMemoryCache(): RedisClientInterface {
     async incr(key: string): Promise<number> {
       const entry = memoryCache.get(key);
       const value = entry ? parseInt(entry.value, 10) + 1 : 1;
-      memoryCache.set(key, { value: String(value), expiresAt: null });
+      memoryCache.set(key, { value: String(value), expiresAt: entry?.expiresAt ?? null });
       return value;
     },
 
     async decr(key: string): Promise<number> {
       const entry = memoryCache.get(key);
       const value = entry ? parseInt(entry.value, 10) - 1 : -1;
-      memoryCache.set(key, { value: String(value), expiresAt: null });
+      memoryCache.set(key, { value: String(value), expiresAt: entry?.expiresAt ?? null });
       return value;
     },
 
@@ -257,19 +257,14 @@ async function deleteKeysWithScan(client: RedisClientInterface, keys: string[]):
   }
 
   // Redis 使用 pipeline 批量删除
-  const redisClient = client as RedisClientInterface & {
-    del: (key: string) => Promise<number>;
-    pipeline: () => {
-      del: (key: string) => ReturnType<typeof client.del>;
-      exec: () => Promise<[Error | null, number][]>;
-    };
-  };
+  // 使用 any 类型绕过复杂的 pipeline 类型定义
+  const redisClient = client as any;
 
-  if (!('pipeline' in redisClient)) {
+  if (!redisClient.pipeline) {
     // 如果没有 pipeline，使用逐个删除
     let deleted = 0;
     for (const key of keys) {
-      const result = await redisClient.del(key);
+      const result = await client.del(key);
       deleted += result;
     }
     return deleted;
@@ -283,12 +278,12 @@ async function deleteKeysWithScan(client: RedisClientInterface, keys: string[]):
   try {
     const results = await pipeline.exec();
     if (!results) return 0;
-    return results.reduce((sum, [, count]) => sum + (count as number), 0);
+    return results.reduce((sum: number, [, count]: [Error | null, number]) => sum + count, 0);
   } catch {
     // 如果 pipeline 失败，回退到逐个删除
     let deleted = 0;
     for (const key of keys) {
-      const result = await redisClient.del(key);
+      const result = await client.del(key);
       deleted += result;
     }
     return deleted;

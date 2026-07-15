@@ -1,31 +1,43 @@
 export const dynamic = 'force-dynamic';
-import { NextRequest } from 'next/server';
+import { defineRoute } from '@/lib/framework/define-route';
 import { success } from '@/lib/api/v1';
+import { invalidateAllTokens } from '@/lib/auth';
 
 // POST /api/v1/auth/logout
-export async function POST(req: NextRequest) {
-  // 清除 HttpOnly Cookie（无状态 JWT，服务器不需要维护黑名单）
-  const isProd = process.env.NODE_ENV === 'production';
+export const POST = defineRoute({
+  auth: 'optional',
+  async handler({ user }) {
+    const isProd = process.env.NODE_ENV === 'production';
 
-  const response = success(null, '已退出登录');
+    // 如果用户已认证，使所有 Token 失效（最佳努力，不阻断登出流程）
+    if (user) {
+      try {
+        await invalidateAllTokens(user.id);
+      } catch {
+        // Token 失效失败不阻止登出
+      }
+    }
 
-  // 清除 access_token cookie（前端需要读取，所以不能用 HttpOnly）
-  response.cookies.set('access_token', '', {
-    httpOnly: false,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0, // 立即过期
-  });
+    const response = success(null, '已退出登录');
 
-  // 清除 refresh_token cookie
-  response.cookies.set('refresh_token', '', {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0, // 立即过期
-  });
+    // 清除 access_token cookie（HttpOnly，服务端清除）
+    response.cookies.set('access_token', '', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0, // 立即过期
+    });
 
-  return response;
-}
+    // 清除 refresh_token cookie
+    response.cookies.set('refresh_token', '', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0, // 立即过期
+    });
+
+    return response;
+  },
+});

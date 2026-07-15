@@ -6,18 +6,18 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/email/test - 测试邮件发送
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { saveEmailConfig, getEmailConfigSafe } from '@/lib/email-service';
 import { sendVerificationCode } from '@/lib/email-service';
 
 // GET /api/v1/admin/email - 获取邮件配置
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const authResult = await requireAdmin(req);
-    if (isAuthError(authResult)) {
-      return authResult.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const config = await getEmailConfigSafe();
@@ -27,33 +27,39 @@ export async function GET(req: NextRequest): Promise<Response> {
       type: config?.type || null,
       user: config?.user || null,
     });
-  } catch (error) {
-    console.error('获取邮件配置失败:', error);
-    return errors.internal('服务器错误');
-  }
-}
+  },
+});
 
 // PUT /api/v1/admin/email - 保存邮件配置
-export async function PUT(req: NextRequest): Promise<Response> {
-  try {
-    const authResult = await requireAdmin(req);
-    if (isAuthError(authResult)) {
-      return authResult.error;
+export const PUT = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    type: z.string(),
+    host: z.string().optional(),
+    port: z.union([z.string(), z.number()]).optional(),
+    secure: z.boolean().optional(),
+    user: z.string().optional(),
+    pass: z.string().optional(),
+    from: z.string().optional(),
+    apiKey: z.string().optional(),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
-    const { type, host, port, secure, user, pass, from, apiKey } = body;
+    const { type, host, port, secure, user: emailUser, pass, from, apiKey } = body;
 
     if (!type) {
       return errors.badRequest('请选择邮件服务商');
     }
 
     if (type === 'qq' || type === 'smtp') {
-      if (!user || !pass) {
+      if (!emailUser || !pass) {
         return errors.badRequest('请填写邮箱地址和密码');
       }
     } else if (type === 'sendgrid' || type === 'mailgun') {
-      if (!apiKey || !user) {
+      if (!apiKey || !emailUser) {
         return errors.badRequest('请填写 API Key 和发件人邮箱');
       }
     }
@@ -71,9 +77,9 @@ export async function PUT(req: NextRequest): Promise<Response> {
     }
 
     const config: EmailConfig = {
-      type,
-      user,
-      from: from || user,
+      type: type as EmailProviderType,
+      user: emailUser,
+      from: from || emailUser,
       apiKey,
     };
 
@@ -87,26 +93,21 @@ export async function PUT(req: NextRequest): Promise<Response> {
     await saveEmailConfig(config);
 
     return success(null, '邮件配置已保存');
-  } catch (error) {
-    console.error('保存邮件配置失败:', error);
-    return errors.internal('服务器错误');
-  }
-}
+  },
+});
 
 // POST /api/v1/admin/email/test - 测试邮件发送
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const authResult = await requireAdmin(req);
-    if (isAuthError(authResult)) {
-      return authResult.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    to: z.string(),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { to } = body;
-
-    if (!to) {
-      return errors.badRequest('请输入测试邮箱地址');
-    }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const result = await sendVerificationCode(to, code);
@@ -116,8 +117,5 @@ export async function POST(req: NextRequest): Promise<Response> {
     } else {
       return errors.internal(result.error || '发送失败');
     }
-  } catch (error) {
-    console.error('测试邮件发送失败:', error);
-    return errors.internal('服务器错误');
-  }
-}
+  },
+});

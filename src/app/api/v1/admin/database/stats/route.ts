@@ -7,9 +7,8 @@ export const dynamic = 'force-dynamic';
  * pg_stat_activity 获取真实连接数。
  */
 
-import { NextRequest } from 'next/server';
+import { defineRoute } from '@/lib/framework/define-route';
 import { success, errors } from '@/lib/api/v1';
-import { requireAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // 需要统计的表名列表
@@ -35,19 +34,17 @@ const TABLE_NAMES = [
 ] as const;
 
 // GET /api/v1/admin/database/stats
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (!auth) {
-      return errors.unauthorized();
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 使用原始 SQL 查询真实表大小和行数
     const tableStats = await Promise.all(
       TABLE_NAMES.map(tableName => getRealTableStats(tableName))
     );
 
-    // 计算数据库总大小（使用 pg_database_size）
     let databaseSize = '0 KB';
     try {
       const dbSizeResult: Array<{ size: string }> = await prisma.$queryRaw`
@@ -58,7 +55,6 @@ export async function GET(req: NextRequest): Promise<Response> {
       console.error('Failed to get database size:', error);
     }
 
-    // 真实连接数：活跃 + 空闲
     let connectionCount = 0;
     let activeConnectionCount = 0;
     try {
@@ -81,16 +77,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       connectionCount,
       activeConnectionCount,
     });
-  } catch (error) {
-    console.error('Database stats error:', error);
-    return success({
-      tableSizes: [],
-      totalSize: '0 KB',
-      connectionCount: 0,
-      activeConnectionCount: 0,
-    });
-  }
-}
+  },
+});
 
 /**
  * 使用 pg_total_relation_size 获取真实表大小（含索引、toast）

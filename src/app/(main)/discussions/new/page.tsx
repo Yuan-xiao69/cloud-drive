@@ -3,354 +3,138 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import Header from '@/components/layout/Header';
-import { Button, Input, Textarea, Select } from '@/components/ui';
-import { useAuth } from '@/lib/providers';
-import { tokenManager } from '@/lib/api/client';
+import { Select, Card, Button, Input, Field, PageLayout, PageLayoutContent } from '@/components/design';
+import { api } from '@/lib/api/client';
+import { useAuth } from '@/lib/providers/AuthProvider';
 
-const categoryOptions = [
-  { value: 'question', label: '提问 - 寻求帮助和答案' },
-  { value: 'idea', label: '奇思妙想 - 分享你的新想法' },
-  { value: 'request', label: '资源求助 - 寻找特定的资源' },
-  { value: 'team', label: '项目组队 - 寻找志同道合的伙伴' },
-  { value: 'share', label: '经验分享 - 分享你的经验和知识' },
-];
+const categories = ['general', 'qa', 'share', 'suggestion', 'announce'];
+const categoryNames: Record<string, string> = { general: '闲聊', qa: '问答', share: '分享', suggestion: '建议', announce: '公告' };
+const categoryOptions = categories.map(c => ({ value: c, label: categoryNames[c] }));
 
-const ArrowLeftIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M19 12H5M12 19l-7-7 7-7" />
-  </svg>
-);
+function LoadingState({ text }: { text: string }) {
+  return (
+    <div className="flex-1 min-w-0 flex items-center justify-center">
+      <div className="flex items-center gap-2 text-[var(--ds-text-primary)]-muted">
+        <div className="w-5 h-5 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] rounded-full animate-spin" />
+        <span>{text}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function NewDiscussionPage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
-  
-  const [form, setForm] = useState({
-    title: '',
-    content: '',
-    category: 'share',
-  });
+  const { isAuthenticated, isLoading } = useAuth();
+  const [form, setForm] = useState({ category: 'general', title: '', content: '' });
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Redirect if not logged in
+  // 未登录时重定向到登录页
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login?redirect=/discussions/new');
+    if (!isLoading && !isAuthenticated) {
+      router.replace('/login?redirect=/discussions/new');
     }
-  }, [isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    // 标题验证
-    if (!form.title.trim()) {
-      setError('请输入标题');
-      return;
-    }
-    if (form.title.length > 200) {
-      setError('标题不能超过 200 个字符');
-      return;
-    }
-    // 内容验证
-    if (!form.content.trim()) {
-      setError('请输入内容');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // Get token from tokenManager
-      const token = tokenManager.getAccessToken();
-
-      const res = await fetch('/api/v1/discussions', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (data.code === 201) {
-        router.push(`/discussions/${data.data.id}`);
-      } else {
-        setError(data.message || '发布失败');
-      }
-    } catch (err) {
-      setError('发布失败，请稍后重试');
-    } finally {
-      setIsSubmitting(false);
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addTag();
     }
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div className="page">
-        <Header />
-        <div className="page-container">
-          <div className="loading-state">正在跳转登录...</div>
-        </div>
-      </div>
-    );
-  }
+  const addTag = () => {
+    const trimmed = tagInput.replace(/,/g, '').trim();
+    if (trimmed && !tags.includes(trimmed) && tags.length < 10) {
+      setTags([...tags, trimmed]);
+    }
+    setTagInput('');
+  };
+
+  const removeTag = (tag: string) => {
+    setTags(tags.filter(t => t !== tag));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setError('');
+    if (!form.content.trim()) { setError('内容不能为空'); return; }
+    setIsSubmitting(true);
+    try {
+      const data = await api.post<{ id: string }>('/api/v1/discussions', { ...form, tags });
+      if (data.code === 200) router.push(`/discussions/${data.data.id}`);
+      else setError(data.message || '发布失败');
+    } catch { setError('网络错误'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  if (isLoading) return <PageLayout containerWidth="medium"><PageLayoutContent><LoadingState text="加载中..." /></PageLayoutContent></PageLayout>;
+  if (!isAuthenticated) return <PageLayout containerWidth="medium"><PageLayoutContent><LoadingState text="正在跳转登录..." /></PageLayoutContent></PageLayout>;
 
   return (
-    <div className="page">
-      <Header />
-
-      <div className="page-container">
-        <div className="new-discussion-wrapper">
-          {/* Breadcrumb */}
-          <div className="breadcrumb-nav">
-            <Link href="/discussions" className="breadcrumb-link">
-              <ArrowLeftIcon />
-              <span>返回讨论区</span>
-            </Link>
+    <PageLayout containerWidth="medium"><PageLayoutContent>
+      <div className="p-6">
+          <nav className="flex items-center gap-1 text-sm text-[var(--ds-text-primary)]-muted mb-4">
+            <Link href="/discussions" className="text-[var(--ds-accent-default)] hover:underline no-underline">讨论</Link><span>/</span><span className="text-[var(--ds-text-primary)]">发起新讨论</span>
+          </nav>
+          {/* 引导文案 */}
+          <div className="mb-5 p-4 bg-[var(--ds-accent-subtle)] border border-[var(--ds-accent-default)] rounded-[var(--ds-radius-lg)]">
+            <p className="text-sm text-[var(--ds-accent-default)] font-medium">分享经验、探讨方案、提出建议——这里没有标准答案，只有更好的想法</p>
           </div>
 
-          <div className="new-discussion-card">
-            <h1 className="new-discussion-title">发起新讨论</h1>
-
-            <form onSubmit={handleSubmit} className="new-discussion-form">
-              {/* Category */}
-              <div className="form-group">
-                <label className="form-label">分类</label>
-                <Select
-                  options={categoryOptions}
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  required
-                />
-              </div>
-
-              {/* Title */}
-              <div className="form-group">
-                <label className="form-label">标题</label>
-                <div className="input-with-counter">
-                  <Input
-                    name="title"
-                    placeholder="简要描述你的问题或想法"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    maxLength={200}
-                    required
-                  />
-                  <span className={`char-counter ${form.title.length > 180 ? (form.title.length >= 200 ? 'char-counter-error' : 'char-counter-warning') : ''}`}>
-                    {form.title.length}/200
-                  </span>
+          <Card padding="lg">
+            <h1 className="text-xl font-semibold text-[var(--ds-text-primary)] mb-6">发起新讨论</h1>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              <Field label="分类">
+                <Select options={categoryOptions} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
+              </Field>
+              <Field label="标题">
+                <div className="relative">
+                  <Input type="text" placeholder="清晰的标题有助于获得更多回复" value={form.title} onChange={e => setForm({ ...form, title: e.target.value.slice(0, 200) })} maxLength={200} />
+                  <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs ${form.title.length > 180 ? (form.title.length >= 200 ? 'text-[var(--ds-danger-default)]' : 'text-[var(--ds-warning-default)]') : 'text-[var(--ds-text-tertiary)]'}`}>{form.title.length}/200</span>
                 </div>
-              </div>
-
-              {/* Content */}
-              <div className="form-group">
-                <label className="form-label">
-                  内容 <span className="required-mark">*</span>
-                </label>
-                <Textarea
-                  placeholder={`支持 Markdown 格式...
-
-**示例：**
-
-# 我的问题
-
-大家好，我想请教一下...
-
-\`\`\`javascript
-const hello = "world";
-\`\`\``}
-                  value={form.content}
-                  onChange={(e) => setForm({ ...form, content: e.target.value })}
-                  className="content-textarea"
-                  required
+              </Field>
+              <Field label="标签" hint="逗号或回车分隔，最多10个">
+                <Input
+                  type="text"
+                  placeholder="输入标签后按回车添加"
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  onBlur={addTag}
                 />
-                <p className="form-hint">支持 Markdown 格式，可以添加代码块、列表、链接等</p>
-              </div>
-
-              {error && (
-                <div className="error-message">{error}</div>
+              </Field>
+              {tags.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap -mt-3 mb-2">
+                  {tags.map(tag => (
+                    <span key={tag} role="button" tabIndex={0} className="inline-flex items-center gap-1 px-[var(--ds-space-2)] py-[1px] text-[11px] font-semibold rounded-[var(--ds-radius-full)] bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)] cursor-pointer" onClick={() => removeTag(tag)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); removeTag(tag); } }}>
+                      {tag} &times;
+                    </span>
+                  ))}
+                </div>
               )}
-
-              {/* Actions */}
-              <div className="form-actions">
-                <Link href="/discussions" className="cancel-link">
-                  取消
-                </Link>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  isLoading={isSubmitting}
-                  disabled={!form.title.trim() || !form.content.trim()}
-                >
-                  发布讨论
-                </Button>
+              <Field label="内容 *" hint="支持 Markdown 格式，可以添加文本块、列表、链接等">
+                <Input multiline placeholder="详细描述你的想法... 支持 Markdown" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} />
+              </Field>
+              {error && <div className="p-3 text-sm text-[var(--ds-danger-default)] bg-[var(--ds-danger-subtle)] border border-[var(--ds-danger-default)] rounded-[var(--ds-radius-sm)]">{error}</div>}
+              <div className="flex items-center gap-3 pt-2">
+                <Button type="submit" variant="primary" size="md" loading={isSubmitting}>{isSubmitting ? '发布中...' : '发布讨论'}</Button>
+                <Link href="/discussions" className="inline-flex"><Button variant="ghost" size="md">取消</Button></Link>
               </div>
             </form>
-          </div>
-
-          {/* Tips */}
-          <div className="tips-card">
-            <h3 className="tips-title">发布提示</h3>
-            <ul className="tips-list">
-              <li>请选择合适的分类，以便他人找到你的讨论</li>
-              <li>标题要简洁明了，描述你的问题或想法</li>
-              <li>详细描述问题，附带相关代码和错误信息</li>
-              <li>提问类讨论被采纳答案后请标记为"已解决"</li>
+          </Card>
+          <Card variant="subtle" className="mt-4">
+            <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-2">发布提示</h3>
+            <ul className="text-sm text-[var(--ds-text-primary)]-muted space-y-1.5 list-disc pl-5">
+              <li>选择正确的分类能让你的讨论更容易被发现</li>
+              <li>添加相关标签帮助他人快速了解讨论主题</li>
+              <li>清晰的标题有助于获得更多回复</li>
+              <li>使用 Markdown 格式可以让内容更加易读</li>
+              <li>友善交流，尊重他人观点</li>
             </ul>
-          </div>
-        </div>
+          </Card>
       </div>
-
-      <style jsx>{`
-        .new-discussion-wrapper {
-          max-width: 800px;
-          margin: 0 auto;
-        }
-
-        .breadcrumb-nav {
-          margin-bottom: 24px;
-        }
-
-        .breadcrumb-link {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          color: var(--color-fg-muted);
-          text-decoration: none;
-          font-size: 14px;
-          transition: color 0.2s;
-        }
-
-        .breadcrumb-link:hover {
-          color: var(--color-accent-fg);
-        }
-
-        .new-discussion-card {
-          background: var(--color-bg-default);
-          border: 1px solid var(--color-border-default);
-          border-radius: 8px;
-          padding: 32px;
-          margin-bottom: 24px;
-        }
-
-        .new-discussion-title {
-          font-size: 20px;
-          font-weight: 600;
-          color: var(--color-fg-default);
-          margin: 0 0 24px 0;
-        }
-
-        .new-discussion-form {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .form-label {
-          font-size: 14px;
-          font-weight: 500;
-          color: var(--color-fg-default);
-        }
-
-        .required-mark {
-          color: var(--color-danger-fg);
-        }
-
-        .content-textarea {
-          min-height: 250px !important;
-          font-family: 'SF Mono', Monaco, Consolas, monospace;
-          resize: vertical;
-        }
-
-        .form-hint {
-          font-size: 12px;
-          color: var(--color-fg-muted);
-          margin: 0;
-        }
-
-        .error-message {
-          padding: 12px 16px;
-          background: var(--color-bg-danger);
-          color: var(--color-danger-fg);
-          border-radius: 6px;
-          font-size: 14px;
-        }
-
-        .form-actions {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding-top: 20px;
-          border-top: 1px solid var(--color-border-default);
-        }
-
-        .cancel-link {
-          color: var(--color-fg-muted);
-          text-decoration: none;
-          font-size: 14px;
-          padding: 8px 16px;
-          border-radius: 6px;
-          transition: all 0.2s;
-        }
-
-        .cancel-link:hover {
-          background: var(--color-bg-subtle);
-          color: var(--color-fg-default);
-        }
-
-        .tips-card {
-          background: var(--color-bg-inset);
-          border: 1px solid var(--color-border-default);
-          border-radius: 8px;
-          padding: 20px 24px;
-        }
-
-        .tips-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--color-fg-default);
-          margin: 0 0 12px 0;
-        }
-
-        .tips-list {
-          margin: 0;
-          padding-left: 20px;
-          font-size: 13px;
-          color: var(--color-fg-muted);
-          line-height: 1.8;
-        }
-
-        .loading-state {
-          text-align: center;
-          padding: 60px 20px;
-          color: var(--color-fg-muted);
-        }
-
-        @media (max-width: 768px) {
-          .new-discussion-card {
-            padding: 20px;
-          }
-
-          .form-actions {
-            flex-direction: column-reverse;
-            gap: 12px;
-          }
-
-          .cancel-link,
-          .form-actions :global(button) {
-            width: 100%;
-            text-align: center;
-          }
-        }
-      `}</style>
-    </div>
+    </PageLayoutContent></PageLayout>
   );
 }

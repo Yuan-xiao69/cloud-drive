@@ -6,26 +6,24 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/announcements/[id] - 删除公告
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
+import { sanitizeHtml } from '@/lib/security';
 
 // GET /api/v1/admin/announcements/[id] - 获取单个公告
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const { id } = await params;
+export const GET = defineRoute({
+  auth: 'none',
+  async handler({ params }) {
+    const { id } = params;
 
     const announcement = await prisma.announcement.findUnique({
       where: { id },
     });
 
     if (!announcement) {
-      return error(ErrorCodes.NOT_FOUND, { message: '公告不存在' });
+      return errors.notFound('公告');
     }
 
     // 获取创建者信息
@@ -49,36 +47,40 @@ export async function GET(
       createdBy: announcement.createdBy,
       creator: creator ? { id: creator.id, username: creator.username, avatarUrl: creator.avatarUrl } : null,
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取公告失败');
-  }
-}
+  },
+});
 
 // PATCH /api/v1/admin/announcements/[id] - 更新公告
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    title: z.string().max(200, '标题长度不能超过200个字符').optional(),
+    content: z.string().max(10000, '内容长度不能超过10000个字符').optional(),
+    type: z.string().optional(),
+    priority: z.string().optional(),
+    isPinned: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+    publishedAt: z.string().nullable().optional(),
+    expiresAt: z.string().nullable().optional(),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id } = params;
     const { title, content, type, priority, isPinned, isActive, publishedAt, expiresAt } = body;
 
     const existing = await prisma.announcement.findUnique({ where: { id } });
     if (!existing) {
-      return error(ErrorCodes.NOT_FOUND, { message: '公告不存在' });
+      return errors.notFound('公告');
     }
 
     const announcement = await prisma.announcement.update({
       where: { id },
       data: {
-        ...(title !== undefined && { title }),
-        ...(content !== undefined && { content }),
+        ...(title !== undefined && { title: sanitizeHtml(title) }),
+        ...(content !== undefined && { content: sanitizeHtml(content) }),
         ...(type !== undefined && { type }),
         ...(priority !== undefined && { priority }),
         ...(isPinned !== undefined && { isPinned }),
@@ -89,33 +91,26 @@ export async function PATCH(
     });
 
     return success(announcement, '公告更新成功');
-  } catch (err) {
-    return handlePrismaError(err, '更新公告失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/announcements/[id] - 删除公告
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     const existing = await prisma.announcement.findUnique({ where: { id } });
     if (!existing) {
-      return error(ErrorCodes.NOT_FOUND, { message: '公告不存在' });
+      return errors.notFound('公告');
     }
 
     await prisma.announcement.delete({ where: { id } });
 
     return success({ id }, '公告已删除');
-  } catch (err) {
-    return handlePrismaError(err, '删除公告失败');
-  }
-}
+  },
+});

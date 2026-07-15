@@ -5,24 +5,22 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/me/appeals - 创建申诉
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, paginated, handlePrismaError, errors, buildPaginationMeta } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, created, paginated, errors, buildPaginationMeta } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/auth';
 import { sanitizeText } from '@/lib/security';
 
 // GET /api/v1/me/appeals - 获取当前用户的申诉列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
 
-    const where: Record<string, unknown> = { userId: auth.userId };
+    const where: Record<string, unknown> = { userId: user!.id };
     if (status && ['pending', 'approved', 'rejected'].includes(status)) {
       where.status = status;
     }
@@ -48,28 +46,19 @@ export async function GET(req: NextRequest): Promise<Response> {
     ]);
 
     return paginated(appeals, buildPaginationMeta(total, page, limit));
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // POST /api/v1/me/appeals - 创建申诉
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
-    const body = await req.json();
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    appealType: z.enum(['ban', 'hidden', 'penalty']),
+    targetId: z.string().min(1),
+    content: z.string().min(1).max(2000),
+  }),
+  async handler({ user, body }) {
     const { appealType, targetId, content } = body;
-
-    if (!appealType || !targetId || !content) {
-      return errors.badRequest('缺少必填字段');
-    }
-
-    const validTypes = ['ban', 'hidden', 'penalty'];
-    if (!validTypes.includes(appealType)) {
-      return errors.badRequest('无效的申诉类型');
-    }
 
     // 净化申诉内容
     const cleanContent = sanitizeText(content.trim()).slice(0, 2000);
@@ -82,7 +71,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     switch (appealType) {
       case 'ban': {
         const ban = await prisma.userBan.findFirst({
-          where: { id: targetId, userId: auth.userId },
+          where: { id: targetId, userId: user!.id },
         });
         targetExists = !!ban;
         break;
@@ -96,7 +85,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       }
       case 'penalty': {
         const penalty = await prisma.userPenalty.findFirst({
-          where: { id: targetId, userId: auth.userId },
+          where: { id: targetId, userId: user!.id },
         });
         targetExists = !!penalty;
         break;
@@ -110,7 +99,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     // 检查是否有待处理的申诉
     const existingAppeal = await prisma.appeal.findFirst({
       where: {
-        userId: auth.userId,
+        userId: user!.id,
         appealType,
         targetId,
         status: 'pending',
@@ -123,7 +112,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const appeal = await prisma.appeal.create({
       data: {
-        userId: auth.userId,
+        userId: user!.id,
         appealType,
         targetId,
         content: cleanContent,
@@ -140,7 +129,5 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
 
     return created({ appeal }, '申诉提交成功');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

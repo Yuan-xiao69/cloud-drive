@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>创建仓库页面设计样本</title>
+<style>
+:root {
+  --ds-accent: #C15F3C; --ds-accent-hover: #D47A4E; --ds-accent-subtle: rgba(193,95,60,0.08);
+  --ds-page-bg: #FAF9F5; --ds-surface: #FFFFFF; --ds-surface-subtle: #F5F2EC; --ds-surface-inset: #F0EDE6;
+  --ds-border: #E8E3DA; --ds-border-muted: #EEE9E2; --ds-border-strong: #D9D2C7;
+  --ds-text: #3B3228; --ds-text-secondary: #7A6E62; --ds-text-tertiary: #A0958B; --ds-text-inverse: #FFFFFF;
+  --ds-success: #4A8B5C; --ds-danger: #C8483C; --ds-warning: #B8862D;
+  --ds-danger-subtle: rgba(200,72,60,0.08); --ds-success-subtle: rgba(74,139,92,0.10);
+  --ds-radius-sm: 6px; --ds-radius-md: 10px; --ds-shadow-sm: 0 1px 3px rgba(59,50,40,0.04);
+  --ds-space-1:4px; --ds-space-2:8px; --ds-space-3:12px; --ds-space-4:16px; --ds-space-6:24px;
+  --font-display: 'Georgia','Noto Serif SC',serif; --font-body: 'Charter','Georgia','Noto Serif SC',serif;
+  --font-ui: system-ui,-apple-system,'Segoe UI',sans-serif; --font-mono: 'JetBrains Mono','Fira Code',monospace;
+}
+.dark { --ds-page-bg:#1E1B18; --ds-surface:#272420; --ds-surface-subtle:#2F2B27; --ds-surface-inset:#1A1714;
+  --ds-border:#3A3530; --ds-border-muted:#332F2B; --ds-border-strong:#4A4540;
+  --ds-text:#E8E0D8; --ds-text-secondary:#A0988E; --ds-text-tertiary:#706860;
+  --ds-accent:#D47A4E; --ds-accent-hover:#E08C64; --ds-accent-subtle:rgba(193,95,60,0.15); }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--ds-page-bg);color:var(--ds-text);line-height:1.6;padding:32px 24px}
+.topbar{display:flex;justify-content:space-between;margin-bottom:40px}
+.topbar h1{font-family:var(--font-display);font-size:26px;font-weight:700}
+.topbar p{font-size:13px;color:var(--ds-text-tertiary);margin-top:4px}
+.theme-btn{padding:8px 16px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);color:var(--ds-text-secondary);cursor:pointer;font-family:var(--font-ui);font-size:13px;font-weight:600}
+
+/* ── Layout ── */
+.page-frame{border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);overflow:hidden;margin-bottom:40px;background:var(--ds-page-bg)}
+.frame-label{font-family:var(--font-ui);font-size:12px;font-weight:700;color:var(--ds-text-secondary);padding:8px 16px;background:var(--ds-surface-subtle);border-bottom:1px solid var(--ds-border)}
+.frame-body{padding:20px;background:var(--ds-page-bg)}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-family:var(--font-ui);font-size:14px;font-weight:600;border-radius:var(--ds-radius-sm);border:1px solid transparent;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--ds-accent);color:var(--ds-text-inverse);border-color:var(--ds-accent)}
+.btn-primary:hover{background:var(--ds-accent-hover)}
+.btn-secondary{background:var(--ds-surface);color:var(--ds-text);border-color:var(--ds-border)}
+.btn-secondary:hover{background:var(--ds-surface-subtle)}
+.btn-sm{padding:4px 10px;font-size:12px}
+
+/* ── Form ── */
+.form-page{max-width:800px;margin:0 auto;padding:20px 0}
+.form-header{margin-bottom:32px}
+.form-header h2{font-family:var(--font-display);font-size:20px;font-weight:700;margin-bottom:6px}
+.form-header p{font-size:14px;color:var(--ds-text-secondary)}
+.form-group{margin-bottom:24px}
+.form-label{display:block;font-family:var(--font-ui);font-size:14px;font-weight:600;color:var(--ds-text);margin-bottom:8px}
+.form-hint{font-size:12px;color:var(--ds-text-tertiary);margin-top:4px;font-family:var(--font-ui)}
+.form-input{padding:10px 14px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;color:var(--ds-text);outline:none;width:100%}
+.form-input:focus{border-color:var(--ds-accent)}
+.form-textarea{padding:10px 14px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;color:var(--ds-text);outline:none;width:100%;min-height:80px;resize:vertical}
+.form-textarea:focus{border-color:var(--ds-accent)}
+
+/* ── Visibility Radio ── */
+.radio-group{display:flex;flex-direction:column;gap:4px}
+.radio-row{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;border:2px solid var(--ds-border);border-radius:var(--ds-radius-sm);cursor:pointer;background:var(--ds-surface);transition:border-color .15s}
+.radio-row:hover{border-color:var(--ds-border-strong)}
+.radio-row.selected{border-color:var(--ds-accent);background:var(--ds-accent-subtle)}
+.radio-row input[type="radio"]{accent-color:var(--ds-accent);margin-top:3px}
+.radio-label{font-family:var(--font-ui);font-size:14px;font-weight:600;color:var(--ds-text)}
+.radio-desc{font-size:12px;color:var(--ds-text-tertiary);margin-top:2px;font-family:var(--font-ui)}
+
+/* ── Repo name preview ── */
+.name-preview{display:flex;align-items:center;gap:0;font-family:var(--font-mono);font-size:13px;color:var(--ds-text-secondary);padding:8px 0}
+.name-preview .owner{color:var(--ds-text-tertiary)}
+.name-preview .sep{color:var(--ds-text-tertiary);margin:0 2px}
+.name-preview .repo-name{color:var(--ds-text);font-weight:600}
+.owner-info{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-family:var(--font-ui);font-size:13px;color:var(--ds-text-secondary)}
+.owner-avatar{width:32px;height:32px;border-radius:50%;background:var(--ds-accent-subtle);color:var(--ds-accent);display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div><h1>创建仓库页面设计样本</h1><p>新建仓库表单 · 名称 + 描述 + 可见性选择</p></div>
+  <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">☀️ / 🌙</button>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     创建仓库 — 表单页面
+     ═══════════════════════════════════════════ -->
+<div class="page-frame">
+  <div class="frame-label">居中布局 800px · 仓库创建表单 · PageLayout containerWidth="wide"</div>
+  <div class="frame-body">
+    <div class="form-page">
+
+      <!-- Header -->
+      <div class="form-header">
+        <h2>创建新仓库</h2>
+        <p>仓库是文件的组织容器。创建后即可上传文件、邀请协作者。</p>
+      </div>
+
+      <!-- Owner -->
+      <div class="owner-info">
+        <span class="owner-avatar">Z</span>
+        <span>由 <strong>zhangsan</strong> 创建</span>
+      </div>
+
+      <!-- Repo Name -->
+      <div class="form-group">
+        <label class="form-label">仓库名称 *</label>
+        <input class="form-input" type="text" placeholder="例如：我的设计素材" value="" style="max-width:440px" />
+        <div class="form-hint">仓库名称可包含字母、数字、中文、下划线和短横线。</div>
+        <div class="name-preview">
+          <span class="owner">zhangsan</span><span class="sep">/</span><span class="repo-name" style="color:var(--ds-text-tertiary)">仓库名称</span>
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="form-group">
+        <label class="form-label">描述（可选）</label>
+        <textarea class="form-textarea" placeholder="简要描述这个仓库的内容和用途..." style="max-width:560px"></textarea>
+        <div class="form-hint">好的描述能帮助别人快速了解仓库的内容</div>
+      </div>
+
+      <!-- Visibility -->
+      <div class="form-group">
+        <label class="form-label">可见性</label>
+        <div class="radio-group" style="max-width:560px">
+          <label class="radio-row selected">
+            <input type="radio" name="vis" checked>
+            <div>
+              <div class="radio-label">🌐 公开</div>
+              <div class="radio-desc">任何人都能看到和下载此仓库中的文件。可被搜索、拉入（Fork）、分享到讨论区。</div>
+            </div>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="vis">
+            <div>
+              <div class="radio-label">🔒 私有</div>
+              <div class="radio-desc">仅你和受邀的协作者可以访问。不会被搜索到、不可被拉入。</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="padding-top:16px;border-top:1px solid var(--ds-border-muted);display:flex;align-items:center;gap:12px">
+        <button class="btn btn-primary" style="padding:10px 24px;font-size:14px">创建仓库</button>
+        <button class="btn btn-secondary" style="padding:10px 24px;font-size:14px">取消</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     空表单状态（首次进入）
+     ═══════════════════════════════════════════ -->
+<div class="page-frame">
+  <div class="frame-label">表单空状态 · 无预填内容，纯提示</div>
+  <div class="frame-body">
+    <div class="form-page">
+
+      <div class="form-header">
+        <h2>创建新仓库</h2>
+        <p>仓库是文件的组织容器。创建后即可上传文件、邀请协作者。</p>
+      </div>
+
+      <div class="owner-info">
+        <span class="owner-avatar">Z</span>
+        <span>由 <strong>zhangsan</strong> 创建</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">仓库名称 *</label>
+        <input class="form-input" type="text" placeholder="给仓库起个好记的名字..." style="max-width:440px" />
+        <div class="form-hint">好名字让协作者一眼就知道里面有什么</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">描述（可选）</label>
+        <textarea class="form-textarea" placeholder="简要描述这个仓库的内容和用途..." style="max-width:560px"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">可见性</label>
+        <div class="radio-group" style="max-width:560px">
+          <label class="radio-row selected">
+            <input type="radio" name="vis2" checked>
+            <div>
+              <div class="radio-label">🌐 公开</div>
+              <div class="radio-desc">任何人都能查看和下载。可被搜索、拉入、分享。</div>
+            </div>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="vis2">
+            <div>
+              <div class="radio-label">🔒 私有</div>
+              <div class="radio-desc">仅你和受邀协作者可访问。</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div style="padding-top:16px;border-top:1px solid var(--ds-border-muted);display:flex;align-items:center;gap:12px">
+        <button class="btn btn-primary" style="padding:10px 24px;font-size:14px">创建仓库</button>
+        <button class="btn btn-secondary" style="padding:10px 24px;font-size:14px">取消</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -5,22 +5,24 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/discussions/[id]/comments - 添加评论
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, paginated, error, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAuth } from '@/lib/auth';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, created, paginated, error } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { sanitizeText } from '@/lib/security';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { DiscussionService } from '@/services/discussion-service';
 import { parsePagination, buildPaginationMeta } from '@/lib/api/v1/pagination';
 import { logActivity } from '@/lib/activity-log';
 
+const createCommentSchema = z.object({
+  content: z.string().min(1, '评论内容不能为空').max(10000, '评论内容过长'),
+  parentId: z.string().optional(),
+});
+
 // GET /api/v1/discussions/[id]/comments - 获取评论列表
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const { id } = await params;
+export const GET = defineRoute({
+  auth: 'none',
+  handler: async ({ req, params }) => {
+    const { id } = params;
     const { searchParams } = new URL(req.url);
     const { page, size, skip } = parsePagination(searchParams);
 
@@ -119,103 +121,35 @@ export async function GET(
     }));
 
     return paginated(items, buildPaginationMeta(total, page, size));
-  } catch (err) {
-    return handlePrismaError(err, '获取评论列表失败');
-  }
-}
+  },
+});
 
 // POST /api/v1/discussions/[id]/comments - 添加评论
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const { id } = await params;
-
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
-    // 速率限制
-    const rateLimit = await checkRateLimit(req, 'api');
-    if (!rateLimit.allowed) {
-      return error('RATE_LIMITED', { message: '操作过于频繁，请稍后再试' });
-    }
-
-    // 检查讨论是否存在
-    const discussion = await prisma.discussion.findUnique({
-      where: { id, isDeleted: false },
-      select: { id: true, authorId: true },
-    });
-
-    if (!discussion) {
-      return error('NOT_FOUND', { message: '讨论不存在' });
-    }
-
-    const body = await req.json();
+export const POST = defineRoute({
+  auth: 'required',
+  rateLimit: 'default',
+  validation: createCommentSchema,
+  handler: async ({ req, user, body, params }) => {
+    const { id } = params;
     const { content, parentId } = body;
 
-    // 验证评论内容
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      return errors.badRequest('评论内容不能为空');
-    }
-    if (content.trim().length > 10000) {
-      return errors.badRequest('评论内容过长，最大支持 10000 字符');
-    }
-
-    // 如果是回复，检查父评论是否存在
-    if (parentId) {
-      const parentComment = await prisma.discussionComment.findUnique({
-        where: { id: parentId, isDeleted: false },
-      });
-      if (!parentComment) {
-        return error('NOT_FOUND', { message: '父评论不存在' });
-      }
-      if (parentComment.discussionId !== id) {
-        return errors.badRequest('父评论不属于该讨论');
-      }
-    }
-
-    const sanitizedContent = sanitizeText(content.trim());
-
-    const comment = await prisma.discussionComment.create({
-      data: {
-        discussionId: id,
-        authorId: auth.userId,
-        content: sanitizedContent,
-        parentId: parentId || null,
-      },
-      include: {
-        author: {
-          select: { id: true, username: true, avatarUrl: true },
-        },
-      },
-    });
+    const comment = await DiscussionService.addComment(
+      id,
+      user!.id,
+      content,
+      parentId,
+    );
 
     // 记录活动日志
     await logActivity({
-      userId: auth.userId,
+      userId: user!.id,
       action: parentId ? 'reply_discussion' : 'comment_discussion',
       targetType: 'discussion',
       targetId: id,
-      targetName: discussion.id,
+      targetName: id,
       req,
     });
 
-    return created({
-      id: comment.id,
-      authorId: comment.authorId,
-      author: {
-        id: comment.author.id,
-        username: comment.author.username,
-        avatarUrl: comment.author.avatarUrl ?? undefined,
-      },
-      content: comment.content,
-      parentId: comment.parentId,
-      isAccepted: comment.isAccepted,
-      createdAt: comment.createdAt.toISOString(),
-      updatedAt: comment.updatedAt.toISOString(),
-    }, parentId ? '回复成功' : '评论成功');
-  } catch (err) {
-    return handlePrismaError(err, '添加评论失败');
-  }
-}
+    return created(comment, parentId ? '回复成功' : '评论成功');
+  },
+});

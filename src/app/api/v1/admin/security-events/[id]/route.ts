@@ -6,27 +6,25 @@ export const dynamic = 'force-dynamic';
  * PATCH /api/v1/admin/security-events/[id] - 更新事件状态
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // GET /api/v1/admin/security-events/[id] - 获取事件详情
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以访问安全事件详情');
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     const event = await prisma.securityEvent.findUnique({
       where: { id },
@@ -37,29 +35,26 @@ export async function GET(
     }
 
     return success({ event });
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // PATCH /api/v1/admin/security-events/[id] - 更新事件状态
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    action: z.enum(['resolve', 'investigate', 'ignore']),
+    note: z.string().optional(),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 只有超级管理员可以操作安全事件
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以操作安全事件');
     }
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id } = params;
     const { action, note } = body;
 
     const event = await prisma.securityEvent.findUnique({
@@ -76,32 +71,26 @@ export async function PATCH(
 
     switch (action) {
       case 'resolve':
-        // 标记为已解决
         updateData = {
           status: 'resolved',
           resolvedAt: new Date(),
-          resolvedBy: auth.userId,
+          resolvedBy: user!.id,
         };
         logAction = 'resolve_security_event';
         logDetail = `将安全事件标记为已解决: ${event.eventType} - ${event.ipAddress}`;
         break;
 
       case 'investigate':
-        // 标记为调查中
         updateData = { status: 'investigated' };
         logAction = 'investigate_security_event';
         logDetail = `将安全事件标记为调查中: ${event.eventType} - ${event.ipAddress}`;
         break;
 
       case 'ignore':
-        // 标记为误报
         updateData = { status: 'false_positive' };
         logAction = 'ignore_security_event';
         logDetail = `将安全事件标记为误报: ${event.eventType} - ${event.ipAddress}${note ? `，原因：${note}` : ''}`;
         break;
-
-      default:
-        return errors.badRequest('无效的操作类型');
     }
 
     await prisma.securityEvent.update({
@@ -109,9 +98,10 @@ export async function PATCH(
       data: updateData,
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
-      userId: auth.userId,
+      adminId: user!.id,
+      userId: user!.id,
       actionType: logAction,
       targetType: 'security_event',
       targetId: id,
@@ -119,7 +109,5 @@ export async function PATCH(
     });
 
     return success({ id, status: updateData.status }, '操作成功');
-  } catch (err) {
-    return handlePrismaError(err, '操作失败');
-  }
-}
+  },
+});

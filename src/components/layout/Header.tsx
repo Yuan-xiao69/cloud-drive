@@ -4,123 +4,21 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import DOMPurify from 'isomorphic-dompurify';
+import clsx from 'clsx';
 import { useAuth, useTheme } from '@/lib/providers';
-import { useNotificationStream, fetchNotifications } from '@/lib/hooks/use-notifications';
+import { useNotificationStream, fetchNotifications, markNotificationsRead, markAllNotificationsRead } from '@/lib/hooks/use-notifications';
 import type { Notification } from '@/lib/hooks/use-notifications';
 import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts';
+import { useAnnouncements } from '@/lib/hooks/use-announcements';
+import { formatTimeAgo } from '@/lib/utils';
 import KeyboardShortcutsHelpModal from './KeyboardShortcutsHelpModal';
-
-const LogoIcon = () => (
-  <svg width="32" height="32" viewBox="0 0 32 32" fill="currentColor">
-    <path d="M16 2C8.268 2 2 8.268 2 16c0 6.084 3.993 11.247 9.548 13.085.697.129.953-.303.953-.674 0-.332-.012-1.213-.018-2.38-3.876.842-4.694-1.869-4.694-1.869-.634-1.612-1.548-2.041-1.548-2.041-1.266-.866.096-.849.096-.849 1.4.099 2.137 1.438 2.137 1.438 1.244 2.131 3.263 1.515 4.057 1.159.126-.901.486-1.515.884-1.863-3.098-.353-6.354-1.549-6.354-6.894 0-1.523.544-2.769 1.438-3.745-.144-.353-.623-1.775.137-3.694 0 0 1.173-.375 3.857 1.43A13.38 13.38 0 0116 8.37c1.185.002 2.38.16 3.494.469 2.682-1.805 3.855-1.43 3.855-1.43.761 1.919.282 3.341.138 3.694.895.976 1.437 2.222 1.437 3.745 0 5.354-3.259 6.539-6.366 6.886.501.431.947 1.28 1.17 1.996.103.2.185.593.185 1.195 0 .865-.013 1.561-.013 1.774 0 .373.254.809 1.959.668C26.01 27.243 30 22.083 30 16c0-7.732-6.268-14-14-14z" />
-  </svg>
-);
-
-const PlusIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M8.75 1.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5z"/>
-  </svg>
-);
-
-const BellIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-  </svg>
-);
-
-const ChevronDownIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-    <path d="M2.78 4.47a.75.75 0 0 1 1.06 0L6 6.69l2.16-2.22a.75.75 0 0 1 1.06 1.06l-2.69 2.78a.75.75 0 0 1-1.06 0L2.78 5.53a.75.75 0 0 1 0-1.06z"/>
-  </svg>
-);
-
-const UserIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-);
-
-const SettingsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
-  </svg>
-);
-
-const LogoutIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-    <polyline points="16 17 21 12 16 7" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-);
-
-const AdminIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="8" x2="12" y2="12" />
-    <line x1="12" y1="16" x2="12.01" y2="16" />
-  </svg>
-);
-
-const MenuIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <line x1="3" y1="6" x2="21" y2="6" />
-    <line x1="3" y1="12" x2="21" y2="12" />
-    <line x1="3" y1="18" x2="21" y2="18" />
-  </svg>
-);
-
-const WifiIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M5 12.55a11 11 0 0 1 14.08 0" />
-    <path d="M1.42 9a16 16 0 0 1 21.16 0" />
-    <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-    <line x1="12" y1="20" x2="12.01" y2="20" />
-  </svg>
-);
-
-const WifiOffIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="1" y1="1" x2="23" y2="23" />
-    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
-    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
-    <path d="M10.71 5.05A16 16 0 0 1 22.58 9" />
-    <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
-    <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-    <line x1="12" y1="20" x2="12.01" y2="20" />
-  </svg>
-);
-
-const RefreshIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="23 4 23 10 17 10" />
-    <polyline points="1 20 1 14 7 14" />
-    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-  </svg>
-);
-
-const SunIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="5" />
-    <line x1="12" y1="1" x2="12" y2="3" />
-    <line x1="12" y1="21" x2="12" y2="23" />
-    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-    <line x1="1" y1="12" x2="3" y2="12" />
-    <line x1="21" y1="12" x2="23" y2="12" />
-    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-  </svg>
-);
-
-const MoonIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-  </svg>
-);
+import {
+  LogoIcon, PlusIcon, BellIcon, ChevronDownIcon,
+  UserIcon, SettingsIcon, LogoutIcon, AdminIcon, MenuIcon,
+  WifiIcon, WifiOffIcon, RefreshIcon, SunIcon, MoonIcon,
+} from './header-icons';
+import { Button, Modal } from '@/components/design';
+import { getAvatarDisplayUrl } from '@/lib/storage';
 
 export default function Header() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,40 +26,14 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
-  const [notifications, setNotifications] = useState<Array<{
-    id: string;
-    title: string;
-    content: string;
-    type: string;
-    isRead: boolean;
-    createdAt: string;
-    linkUrl?: string | null;
-  }>>([]);
+  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; content: string; type: string; isRead: boolean; createdAt: string; linkUrl?: string | null }>>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
-  const [newNotification, setNewNotification] = useState<{
-    id: string;
-    title: string;
-    content: string;
-    type: string;
-    linkUrl?: string | null;
-  } | null>(null);
+  const [newNotification, setNewNotification] = useState<{ id: string; title: string; content: string; type: string; linkUrl?: string | null } | null>(null);
   const [showToast, setShowToast] = useState(false);
-  const [announcements, setAnnouncements] = useState<Array<{
-    id: string;
-    title: string;
-    content: string;
-    type: string;
-    priority: string;
-  }>>([]);
+  const { announcements, loading: announcementsLoading } = useAnnouncements();
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
-  const [currentAnnouncement, setCurrentAnnouncement] = useState<{
-    id: string;
-    title: string;
-    content: string;
-    type: string;
-    priority: string;
-  } | null>(null);
+  const [currentAnnouncement, setCurrentAnnouncement] = useState<{ id: string; title: string; content: string; type: string; priority: string } | null>(null);
   const [announcementIndex, setAnnouncementIndex] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -171,47 +43,37 @@ export default function Header() {
   const { theme, toggleTheme } = useTheme();
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // 初始化通知声音
+  // 提示音（Web Audio API）
   useEffect(() => {
-    // 创建一个简单的提示音（使用 Web Audio API）
     const createNotificationSound = () => {
       try {
         const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
         audioRef.current = {
           play: () => {
             try {
-              const oscillator = audioContext.createOscillator();
-              const gainNode = audioContext.createGain();
-              oscillator.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              oscillator.frequency.value = 800;
-              oscillator.type = 'sine';
-              gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-              oscillator.start(audioContext.currentTime);
-              oscillator.stop(audioContext.currentTime + 0.3);
-            } catch {
-              // 静默处理
-            }
+              const osc = audioContext.createOscillator();
+              const gain = audioContext.createGain();
+              osc.connect(gain); gain.connect(audioContext.destination);
+              osc.frequency.value = 800; osc.type = 'sine';
+              gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+              osc.start(audioContext.currentTime);
+              osc.stop(audioContext.currentTime + 0.3);
+            } catch { /* 静默处理 */ }
           }
         } as unknown as HTMLAudioElement;
-      } catch {
-        // 静默处理
-      }
+      } catch { /* 静默处理 */ }
     };
     createNotificationSound();
   }, []);
 
-  // SSE 实时通知 Hook
+  // SSE 实时通知
   const { isConnected } = useNotificationStream({
     onNotification: useCallback((notification: Notification) => {
-      // 添加到通知列表
-      const newNotif: typeof notifications[0] = {
+      const newNotif = {
         id: notification.id || `temp-${Date.now()}`,
-        title: notification.title,
-        content: notification.content,
-        type: notification.type,
-        isRead: false,
+        title: notification.title, content: notification.content,
+        type: notification.type, isRead: false,
         createdAt: new Date(notification.timestamp).toISOString(),
         linkUrl: notification.linkUrl,
       };
@@ -219,102 +81,46 @@ export default function Header() {
       setUnreadCount(prev => prev + 1);
       setNewNotification(newNotif);
       setShowToast(true);
-
-      // 播放提示音
-      if (audioRef.current) {
-        audioRef.current.play().catch(() => {
-          // 静默处理
-        });
-      }
-
-      // 3秒后自动关闭 toast
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-      toastTimeoutRef.current = setTimeout(() => {
-        setShowToast(false);
-      }, 3000);
+      audioRef.current?.play().catch(() => {});
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => setShowToast(false), 3000);
     }, []),
-    onConnect: useCallback(() => {
-      setConnectionStatus('connected');
-    }, []),
-    onDisconnect: useCallback(() => {
-      setConnectionStatus('disconnected');
-    }, []),
-    onError: useCallback(() => {
-      setConnectionStatus('reconnecting');
-    }, []),
+    onConnect: useCallback(() => setConnectionStatus('connected'), []),
+    onDisconnect: useCallback(() => setConnectionStatus('disconnected'), []),
+    onError: useCallback(() => setConnectionStatus('reconnecting'), []),
   });
 
-  // 更新连接状态
   useEffect(() => {
-    if (isConnected) {
-      setConnectionStatus('connected');
-    } else {
-      setConnectionStatus('disconnected');
-    }
+    setConnectionStatus(isConnected ? 'connected' : 'disconnected');
   }, [isConnected]);
 
   // 获取通知列表
-  const fetchNotifications = async () => {
+  const loadNotifications = async () => {
     try {
-      const response = await fetch('/api/v1/notifications?limit=10');
-      const data = await response.json();
-      if (data.code === 200) {
-        setNotifications(data.data.items || []);
-        setUnreadCount(data.data.unreadCount || 0);
-      }
-    } catch (error) {
-      console.error('获取通知失败:', error);
-    }
+      const data = await fetchNotifications({ limit: 10 });
+      setNotifications((data.items || []) as Array<{ id: string; title: string; content: string; type: string; isRead: boolean; createdAt: string; linkUrl?: string | null }>);
+      setUnreadCount(data.unreadCount || 0);
+    } catch { /* ignore */ }
   };
 
+  useEffect(() => { if (isAuthenticated) loadNotifications(); }, [isAuthenticated]);
+
+  // 排序公告（按优先级），首次有未读公告时弹窗
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchNotifications();
+    if (!isAuthenticated || announcementsLoading || announcements.length === 0) return;
+    const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+    const sorted = [...announcements].sort(
+      (a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2)
+    );
+    const storedRead = localStorage.getItem('readAnnouncements') || '';
+    const readIds = storedRead ? JSON.parse(storedRead) : [];
+    const unreadAnn = sorted.find((a) => !readIds.includes(a.id));
+    if (unreadAnn) {
+      setCurrentAnnouncement(unreadAnn);
+      setShowAnnouncementModal(true);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, announcementsLoading, announcements]);
 
-  // 获取活跃公告
-  const fetchAnnouncements = useCallback(async () => {
-    try {
-      const response = await fetch('/api/v1/announcements');
-      const data = await response.json();
-      if (data.code === 200 && data.data.announcements?.length > 0) {
-        let anns = data.data.announcements;
-        
-        // 按优先级排序：urgent > high > normal > low
-        const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
-        anns = [...anns].sort((a, b) => {
-          const aPriority = priorityOrder[a.priority] ?? 2;
-          const bPriority = priorityOrder[b.priority] ?? 2;
-          return aPriority - bPriority;
-        });
-        
-        setAnnouncements(anns);
-        
-        // 检查是否需要显示弹窗（高优先级/紧急公告，且未在本地存储中标记为已读）
-        const storedRead = localStorage.getItem('readAnnouncements') || '';
-        const readIds = storedRead ? JSON.parse(storedRead) : [];
-        const unreadAnn = anns.find((a: { id: string }) => !readIds.includes(a.id));
-        
-        if (unreadAnn) {
-          setCurrentAnnouncement(unreadAnn);
-          setShowAnnouncementModal(true);
-        }
-      }
-    } catch (error) {
-      console.error('获取公告失败:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchAnnouncements();
-    }
-  }, [isAuthenticated, fetchAnnouncements]);
-
-  // 关闭公告弹窗并标记为已读
   const handleCloseAnnouncement = () => {
     if (currentAnnouncement) {
       const storedRead = localStorage.getItem('readAnnouncements') || '[]';
@@ -324,8 +130,6 @@ export default function Header() {
         localStorage.setItem('readAnnouncements', JSON.stringify(readIds));
       }
     }
-    
-    // 显示下一条未读公告
     const nextIndex = announcementIndex + 1;
     if (nextIndex < announcements.length) {
       setAnnouncementIndex(nextIndex);
@@ -337,438 +141,292 @@ export default function Header() {
     }
   };
 
-  // Cleanup timeout
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => () => { if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current); }, []);
 
+  // Click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowUserMenu(false);
-      }
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
-      }
-      // Close mobile menu on outside click
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setShowUserMenu(false);
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) setShowNotifications(false);
       const target = event.target as HTMLElement;
-      if (!target.closest('.header-nav') && !target.closest('.header-hamburger')) {
-        setMobileMenuOpen(false);
-      }
+      if (!target.closest('.header-mobile-nav') && !target.closest('.header-hamburger-btn')) setMobileMenuOpen(false);
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 全局快捷键：监听自定义事件显示帮助弹窗
   useEffect(() => {
     const handler = () => setShowShortcutsHelp(true);
     window.addEventListener('show-shortcuts-help', handler);
     return () => window.removeEventListener('show-shortcuts-help', handler);
   }, []);
 
-  // 激活全局快捷键
   useKeyboardShortcuts({ enabled: true });
 
-  const handleLogout = () => {
-    logout();
-    setShowUserMenu(false);
-  };
+  const handleLogout = () => { logout(); setShowUserMenu(false); };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-    }
+    if (searchQuery.trim()) router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
   };
 
   const handleNotificationClick = async (notification: { id: string; linkUrl?: string | null }) => {
     try {
-      await fetch('/api/v1/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [notification.id] })
-      });
+      await markNotificationsRead([notification.id]);
       setUnreadCount(prev => Math.max(0, prev - 1));
-      setNotifications(prev =>
-        prev.map(n =>
-          n.id === notification.id ? { ...n, isRead: true } : n
-        )
-      );
-      if (notification.linkUrl) {
-        router.push(notification.linkUrl);
-        setShowNotifications(false);
-      }
-    } catch (error) {
-      console.error('标记通知已读失败:', error);
-    }
+      setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n));
+      if (notification.linkUrl) { router.push(notification.linkUrl); setShowNotifications(false); }
+    } catch { /* ignore */ }
   };
 
   const handleMarkAllRead = async () => {
     try {
-      await fetch('/api/v1/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true })
-      });
+      await markAllNotificationsRead();
       setUnreadCount(0);
-      setNotifications(prev =>
-        prev.map(n => ({ ...n, isRead: true }))
-      );
-    } catch (error) {
-      console.error('标记全部已读失败:', error);
-    }
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    } catch { /* ignore */ }
   };
 
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return '刚刚';
-    if (diffMins < 60) return `${diffMins} 分钟前`;
-    if (diffHours < 24) return `${diffHours} 小时前`;
-    if (diffDays < 7) return `${diffDays} 天前`;
-    return date.toLocaleDateString('zh-CN');
+  // Notification type helpers
+  const typeEmoji: Record<string, string> = {
+    system: '📢', discussion: '💬', comment: '💭', mention: '@',
+    star: '⭐', fork: '⭐', fork_request: '🔀', fork_approved: '✅', fork_rejected: '❌',
   };
+
+  const typeCn: Record<string, string> = {
+    critical: '紧急', warning: '重要',
+  };
+
+  const connectionIcon = {
+    connected: <WifiIcon />,
+    disconnected: <WifiOffIcon />,
+    reconnecting: <RefreshIcon />,
+  };
+  const connectionTitle = {
+    connected: '实时通知已连接',
+    disconnected: '实时通知已断开',
+    reconnecting: '正在重新连接...',
+  };
+
+  // Tailwind 公共类
+  const iconBtnClass = 'relative flex items-center justify-center w-9 h-9 p-0 text-[var(--ds-text-secondary)] bg-transparent border-none cursor-pointer hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] transition-colors';
 
   return (
-    <header className="header">
-      <div className="header-content">
-        {/* 左侧区域：Logo + 导航链接 */}
-        <div className="header-left">
-          <a
-            href="/"
-            className="header-logo"
-          >
+    <header className="sticky top-0 z-50 w-full h-[var(--ds-header-height)] bg-[var(--ds-surface-overlay)] backdrop-blur-md transition-colors duration-300 border-b border-[var(--ds-border-default)]">
+      <div className="flex items-center justify-between w-full h-full px-6">
+        {/* 左侧：Logo + 导航 */}
+        <div className="flex items-center gap-6 flex-shrink-0">
+          <Link href="/" className="flex items-center gap-2 text-[var(--ds-accent-default)] hover:text-[var(--ds-accent-hover)] no-underline transition-colors">
             <LogoIcon />
-            <span className="header-logo-text">文件平台</span>
-          </a>
-
-          <nav className={`header-nav${mobileMenuOpen ? ' show-mobile' : ''}`}>
-            <Link href="/discussions" className="header-nav-link" onClick={() => setMobileMenuOpen(false)}>讨论</Link>
-            <Link href="/explore" className="header-nav-link" onClick={() => setMobileMenuOpen(false)}>探索</Link>
+            <span className="text-lg font-semibold tracking-tight hidden sm:inline">文件平台</span>
+          </Link>
+          <nav className={clsx('flex items-center gap-1', mobileMenuOpen && 'flex-col absolute top-[var(--header-height)] left-0 w-full bg-[var(--ds-page-bg)] border-b border-[var(--ds-border-default)] p-4 z-50')}>
+            <Link href="/discussions" className="flex items-center px-3 py-2 text-sm font-medium font-sans text-[var(--ds-text-secondary)] no-underline rounded-[var(--ds-radius-sm)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] active:text-[var(--ds-accent-default)] active:bg-[var(--ds-accent-subtle)] transition-colors" onClick={() => setMobileMenuOpen(false)}>讨论</Link>
+            <Link href="/explore" className="flex items-center px-3 py-2 text-sm font-medium font-sans text-[var(--ds-text-secondary)] no-underline rounded-[var(--ds-radius-sm)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] active:text-[var(--ds-accent-default)] active:bg-[var(--ds-accent-subtle)] transition-colors" onClick={() => setMobileMenuOpen(false)}>探索</Link>
           </nav>
         </div>
 
-        {/* 中间区域：搜索框（居中） */}
-        <div className="header-center">
-          <form className="header-search" onSubmit={handleSearch}>
+        {/* 中间：搜索框 */}
+        <div className="flex-1 flex justify-center max-w-[480px] mx-6 hidden md:flex">
+          <form className="w-full max-w-[320px] relative" onSubmit={handleSearch}>
             <input
-              type="search"
-              placeholder="搜索仓库、讨论..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="header-search-input"
+              type="search" placeholder="搜索仓库、讨论..."
+              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-9 px-3 text-sm text-[var(--ds-text-primary)] bg-[var(--ds-surface-inset)] border border-[var(--ds-border-default)] placeholder:[var(--ds-text-tertiary)] focus:outline-none focus:border-[var(--ds-accent-default)] focus:ring-2 focus:ring-[var(--ds-accent-subtle)] transition-colors"
             />
           </form>
         </div>
 
-        {/* 右侧区域：操作按钮 */}
-        <div className="header-right">
-          {/* Hamburger menu button (mobile only) */}
-          <button
-            className="header-hamburger"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="菜单"
-          >
+        {/* 右侧：操作按钮 */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button className={clsx('header-hamburger-btn hidden max-md:flex items-center justify-center w-9 h-9 text-[var(--ds-text-secondary)] bg-transparent border-none cursor-pointer hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] transition-colors')} onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="菜单">
             <MenuIcon />
-          </button>
+          </Button>
           {isAuthenticated ? (
             <>
-              {/* Create new */}
-              <Link href="/new" className="header-create-btn" title="创建仓库">
-                <PlusIcon />
-              </Link>
-              {/* Notifications Dropdown */}
-              <div className="header-dropdown" ref={notificationRef}>
-                <button
-                  className={`header-icon-btn ${showNotifications ? 'active' : ''}`}
-                  title="通知"
-                  onClick={() => setShowNotifications(!showNotifications)}
-                >
+              <Link href="/new" className={iconBtnClass} title="创建仓库"><PlusIcon /></Link>
+
+              {/* 通知下拉 */}
+              <div className="relative" ref={notificationRef}>
+                <Button className={clsx(iconBtnClass, showNotifications && 'text-[var(--ds-text-primary)] bg-[var(--ds-surface-subtle)]')} title="通知" onClick={() => setShowNotifications(!showNotifications)}>
                   <BellIcon />
                   {unreadCount > 0 && (
-                    <span className="notification-badge">
+                    <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-[4px] text-[10px] font-semibold text-white bg-[var(--ds-danger-default)] rounded-full">
                       {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                   )}
-                  {/* SSE 连接状态指示器 */}
-                  <span 
-                    className={`sse-status-indicator ${connectionStatus}`}
-                    title={
-                      connectionStatus === 'connected' ? '实时通知已连接' :
-                      connectionStatus === 'reconnecting' ? '正在重新连接...' : '实时通知已断开'
-                    }
-                  >
-                    {connectionStatus === 'connected' && <WifiIcon />}
-                    {connectionStatus === 'disconnected' && <WifiOffIcon />}
-                    {connectionStatus === 'reconnecting' && <RefreshIcon />}
+                  <span className={clsx('absolute -bottom-0.5 -right-0.5 text-[10px]', connectionStatus === 'connected' && 'text-[var(--ds-success-default)]', connectionStatus === 'disconnected' && 'text-[var(--ds-danger-default)]', connectionStatus === 'reconnecting' && 'text-[var(--ds-warning-default)] animate-spin')} title={connectionTitle[connectionStatus]}>
+                    {connectionIcon[connectionStatus]}
                   </span>
-                </button>
+                </Button>
                 {showNotifications && (
-                  <div className="dropdown-menu notification-dropdown">
-                    {/* 头部 */}
-                    <div className="notification-dropdown-header">
-                      <div className="dropdown-header-title">
-                        <BellIcon />
-                        <span>通知</span>
-                        {unreadCount > 0 && (
-                          <span className="unread-count-badge">{unreadCount}</span>
-                        )}
+                  <div className="absolute top-[calc(100%+8px)] -right-16 min-w-[360px] max-w-[400px] bg-[var(--ds-surface-default)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] shadow z-50 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--ds-border-default)]">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ds-text-primary)]">
+                        <BellIcon /> 通知
+                        {unreadCount > 0 && <span className="px-2 py-0.5 text-xs font-semibold bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)] rounded-full">{unreadCount}</span>}
                       </div>
                       {unreadCount > 0 && (
-                        <button 
-                          className="mark-all-read-btn"
-                          onClick={handleMarkAllRead}
-                        >
-                          全部已读
-                        </button>
+                        <Button className="text-xs text-[var(--ds-accent-default)] hover:underline" onClick={handleMarkAllRead}>全部已读</Button>
                       )}
                     </div>
-                    
-                    {/* 新通知 Toast */}
+
+                    {/* Toast */}
                     {showToast && newNotification && (
-                      <div className="new-notification-toast">
-                        <div className="toast-icon">
-                          {newNotification.type === 'system' && <span>📢</span>}
-                          {newNotification.type === 'discussion' && <span>💬</span>}
-                          {newNotification.type === 'comment' && <span>💭</span>}
-                          {newNotification.type === 'mention' && <span>@</span>}
-                          {(newNotification.type === 'star' || newNotification.type === 'fork') && <span>⭐</span>}
-                          {newNotification.type === 'fork_request' && <span>🔀</span>}
-                          {newNotification.type === 'fork_approved' && <span>✅</span>}
-                          {newNotification.type === 'fork_rejected' && <span>❌</span>}
-                        </div>
-                        <div className="toast-content">
-                          <p className="toast-title">{newNotification.title}</p>
-                          <p className="toast-text">{newNotification.content}</p>
+                      <div className="flex items-start gap-3 mx-3 mt-3 p-3 bg-[var(--ds-accent-subtle)] border border-[var(--ds-accent-default)]/20">
+                        <span>{typeEmoji[newNotification.type] || '🔔'}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[var(--ds-text-primary)]">{newNotification.title}</p>
+                          <p className="text-xs text-[var(--ds-text-secondary)] truncate">{newNotification.content}</p>
                         </div>
                       </div>
                     )}
-                    
-                    {/* 通知列表 */}
+
                     {notifications.length === 0 ? (
-                      <div className="notification-empty">
-                        <div className="empty-icon">
-                          <BellIcon />
-                        </div>
-                        <p className="empty-title">暂无通知</p>
-                        <p className="empty-desc">有新的通知会在这里显示</p>
+                      <div className="flex flex-col items-center py-8 text-[var(--ds-text-secondary)]">
+                        <BellIcon /><p className="mt-2 text-sm font-medium">暂无通知</p>
+                        <p className="text-xs">有新的通知会在这里显示</p>
                       </div>
                     ) : (
-                      <div className="notification-list">
-                        {notifications.slice(0, 6).map((notification) => (
-                          <div 
-                            key={notification.id}
-                            className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
-                            onClick={() => handleNotificationClick(notification)}
-                          >
-                            <div className="notification-icon-wrapper">
-                              <div className={`notification-icon notification-icon-${notification.type}`}>
-                                {notification.type === 'system' && '📢'}
-                                {notification.type === 'discussion' && '💬'}
-                                {notification.type === 'comment' && '💭'}
-                                {notification.type === 'mention' && '@'}
-                                {(notification.type === 'star' || notification.type === 'fork') && '⭐'}
-                                {notification.type === 'fork_request' && '🔀'}
-                                {notification.type === 'fork_approved' && '✅'}
-                                {notification.type === 'fork_rejected' && '❌'}
-                                {(!notification.type || !['system', 'discussion', 'comment', 'mention', 'star', 'fork', 'fork_request', 'fork_approved', 'fork_rejected'].includes(notification.type)) && '🔔'}
-                              </div>
-                              {!notification.isRead && <span className="unread-dot" />}
+                      <div className="max-h-[360px] overflow-y-auto">
+                        {notifications.slice(0, 6).map(n => (
+                          <button key={n.id} type="button" className={clsx('w-full text-left flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-[var(--ds-surface-subtle)] transition-colors border-b border-[var(--ds-border-muted)] last:border-b-0', !n.isRead && 'bg-[var(--ds-surface-inset)]')} onClick={() => handleNotificationClick(n)}>
+                            <span className="text-lg mt-0.5">{typeEmoji[n.type] || '🔔'}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-[var(--ds-text-primary)] truncate">{n.title}</p>
+                              <p className="text-xs text-[var(--ds-text-secondary)] truncate mt-0.5">{n.content}</p>
+                              <span className="text-xs text-[var(--ds-text-tertiary)]">{formatTimeAgo(n.createdAt)}</span>
                             </div>
-                            <div className="notification-content">
-                              <p className="notification-title">{notification.title}</p>
-                              <p className="notification-text">{notification.content}</p>
-                              <span className="notification-time">
-                                {formatTimeAgo(notification.createdAt)}
-                              </span>
-                            </div>
-                          </div>
+                            {!n.isRead && <span className="w-2 h-2 mt-1.5 rounded-full bg-[var(--ds-accent-default)] flex-shrink-0" />}
+                          </button>
                         ))}
                       </div>
                     )}
-                    
-                    {/* 公告列表 */}
+
                     {announcements.length > 0 && (
-                      <div className="announcements-section">
-                        <div className="dropdown-divider" />
-                        <div className="announcements-header">
+                      <>
+                        <div className="border-t border-[var(--ds-border-default)] px-4 py-2 flex items-center justify-between text-xs text-[var(--ds-text-secondary)]">
                           <span>📢 系统公告</span>
-                          <span className="announcements-count">{announcements.length}</span>
+                          <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded-full">{announcements.length}</span>
                         </div>
-                        {announcements.slice(0, 2).map((announcement) => (
-                          <div 
-                            key={announcement.id}
-                            className={`notification-item announcement-item announcement-${announcement.type}`}
-                            onClick={() => {
-                              setCurrentAnnouncement(announcement);
-                              setAnnouncementIndex(announcements.findIndex(a => a.id === announcement.id));
-                              setShowAnnouncementModal(true);
-                              setShowNotifications(false);
-                            }}
-                          >
-                            <div className="notification-icon-wrapper">
-                              <div className="notification-icon notification-icon-announcement">
-                                📢
-                              </div>
-                            </div>
-                            <div className="notification-content">
-                              <p className="notification-title">
-                                <span className={`announcement-badge badge-${announcement.type}`}>
-                                  {announcement.type === 'critical' ? '紧急' :
-                                   announcement.type === 'warning' ? '重要' : '通知'}
+                        {announcements.slice(0, 2).map(a => (
+                          <button key={a.id} type="button" className="w-full text-left flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-[var(--ds-surface-subtle)] border-b border-[var(--ds-border-muted)] last:border-b-0" onClick={() => {
+                            setCurrentAnnouncement(a);
+                            setAnnouncementIndex(announcements.findIndex(x => x.id === a.id));
+                            setShowAnnouncementModal(true);
+                            setShowNotifications(false);
+                          }}>
+                            <span>📢</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-[var(--ds-text-primary)] truncate">
+                                <span className={clsx('inline-block px-1.5 py-0.5 mr-1 text-xs font-medium rounded', a.type === 'critical' ? 'bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]' : a.type === 'warning' ? 'bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]' : 'bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)]')}>
+                                  {typeCn[a.type] || '通知'}
                                 </span>
-                                {announcement.title}
+                                {a.title}
                               </p>
-                              <span className="notification-time">
-                                {announcement.priority === 'urgent' || announcement.priority === 'high' ? '高优先级' : '普通'}
-                              </span>
+                              <span className="text-xs text-[var(--ds-text-tertiary)]">{a.priority === 'urgent' || a.priority === 'high' ? '高优先级' : '普通'}</span>
                             </div>
-                          </div>
+                          </button>
                         ))}
-                      </div>
+                      </>
                     )}
-                    
-                    {/* 查看全部 */}
                     {notifications.length > 0 && (
-                      <Link 
-                        href="/notifications" 
-                        className="view-all-link"
-                        onClick={() => setShowNotifications(false)}
-                      >
+                      <Link href="/notifications" className="block px-4 py-3 text-sm text-center text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline border-t border-[var(--ds-border-muted)]" onClick={() => setShowNotifications(false)}>
                         查看全部通知
                       </Link>
                     )}
                   </div>
                 )}
               </div>
-              {/* Theme Toggle */}
-              <button
-                className="header-icon-btn"
-                onClick={toggleTheme}
-                title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
-              >
+
+              {/* 主题切换 */}
+              <Button className="relative flex items-center justify-center w-9 h-9 p-0 text-[var(--ds-text-secondary)] border border-[var(--ds-border-default)] bg-[var(--ds-surface-default)] rounded-[var(--ds-radius-sm)] cursor-pointer hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] transition-colors" onClick={toggleTheme} title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}>
                 {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-              </button>
-              {/* User menu */}
-              <div className="header-dropdown" ref={menuRef}>
-                <button 
-                  className="header-avatar-btn"
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                >
-                  <div className="header-avatar-stack">
-                    {user?.avatarUrl ? (
-                      <img 
-                        src={user.avatarUrl} 
-                        alt={user?.username || 'User'}
-                        className="header-avatar"
-                      />
-                    ) : (
-                      <LogoIcon />
-                    )}
+              </Button>
+
+              {/* 用户菜单 */}
+              <div className="relative" ref={menuRef}>
+                <Button className="flex items-center gap-1 py-1 pl-1 pr-2 bg-transparent border-none rounded-[var(--ds-radius-sm)] cursor-pointer hover:bg-[var(--ds-surface-subtle)] transition-colors" onClick={() => setShowUserMenu(!showUserMenu)}>
+                  <div className="flex w-7 h-7 rounded-full overflow-hidden">
+                    {user?.avatarUrl ? <img src={getAvatarDisplayUrl(user.avatarUrl) ?? undefined} alt={user?.username || 'User'} className="w-full h-full object-cover" /> : <LogoIcon />}
                   </div>
                   <ChevronDownIcon />
-                </button>
+                </Button>
                 {showUserMenu && (
-                  <div className="dropdown-menu dropdown-menu-user">
-                    <div className="dropdown-user-header">
-                      <div className="dropdown-user-avatar">
-                        {user?.avatarUrl ? (
-                          <img src={user.avatarUrl} alt={user?.username || 'User'} />
-                        ) : (
-                          <LogoIcon />
-                        )}
+                  <div className="absolute top-[calc(100%+8px)] right-0 min-w-[200px] bg-[var(--ds-surface-default)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] shadow z-50 overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--ds-border-default)]">
+                      <div className="flex w-10 h-10 rounded-full overflow-hidden">
+                        {user?.avatarUrl ? <img src={getAvatarDisplayUrl(user.avatarUrl) ?? undefined} alt={user?.username || 'User'} className="w-full h-full object-cover" /> : <LogoIcon />}
                       </div>
-                      <div className="dropdown-user-info">
-                        <span className="dropdown-user-name">{user?.username}</span>
-                        <span className="dropdown-user-username">@{user?.username}</span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-[var(--ds-text-primary)]">{user?.username}</span>
+                        <span className="text-xs text-[var(--ds-text-secondary)]">@{user?.username}</span>
                       </div>
                     </div>
-                    <div className="dropdown-divider" />
-                    <Link href={`/${user?.username}`} className="dropdown-item" onClick={() => setShowUserMenu(false)}>
-                      <UserIcon />
-                      您的个人资料
+                    <Link href={`/${user?.username}`} className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline transition-colors" onClick={() => setShowUserMenu(false)}>
+                      <UserIcon /> 您的个人资料
                     </Link>
-                    <Link href="/settings" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
-                      <SettingsIcon />
-                      设置
+                    <Link href="/settings" className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline transition-colors" onClick={() => setShowUserMenu(false)}>
+                      <SettingsIcon /> 设置
                     </Link>
                     {(user?.role === 'super_admin' || user?.role === 'admin') && (
                       <>
-                        <div className="dropdown-divider" />
-                        <Link href="/admin" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
-                          <AdminIcon />
-                          管理面板
+                        <div className="border-t border-[var(--ds-border-muted)] my-1" />
+                        <Link href="/admin" className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline transition-colors" onClick={() => setShowUserMenu(false)}>
+                          <AdminIcon /> 管理面板
                         </Link>
                       </>
                     )}
-                    <div className="dropdown-divider" />
-                    <button className="dropdown-item danger" onClick={handleLogout}>
-                      <LogoutIcon />
-                      退出登录
-                    </button>
+                    <div className="border-t border-[var(--ds-border-muted)] my-1" />
+                    <Button className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-[var(--ds-danger-default)] hover:bg-[var(--ds-danger-subtle)] transition-colors" onClick={handleLogout}>
+                      <LogoutIcon /> 退出登录
+                    </Button>
                   </div>
                 )}
               </div>
             </>
           ) : (
             <>
-              <Link href="/login" className="header-nav-link">
-                登录
-              </Link>
-              <Link href="/register" className="btn btn-primary btn-sm">
-                注册
-              </Link>
+              <Link href="/login" className="flex items-center px-3 py-2 text-sm font-medium text-[var(--ds-text-secondary)] no-underline hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] transition-colors">登录</Link>
+              <Link href="/register"><Button>注册</Button></Link>
             </>
           )}
         </div>
       </div>
 
       {/* 公告弹窗 */}
-      {showAnnouncementModal && currentAnnouncement && (
-        <div className="announcement-modal-overlay" onClick={handleCloseAnnouncement}>
-          <div 
-            className={`announcement-modal announcement-${currentAnnouncement.type}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="announcement-modal-header">
-              <div className="announcement-modal-title">
-                <span className={`announcement-badge badge-${currentAnnouncement.type}`}>
-                  {currentAnnouncement.type === 'critical' ? '紧急' :
-                   currentAnnouncement.type === 'warning' ? '重要' : '通知'}
-                </span>
-                <span>{currentAnnouncement.title}</span>
-              </div>
-              <button className="announcement-modal-close" onClick={handleCloseAnnouncement}>×</button>
+      <Modal
+        isOpen={showAnnouncementModal && !!currentAnnouncement}
+        onClose={handleCloseAnnouncement}
+        title="公告详情"
+        maxWidth="512px"
+        footer={
+          <>
+            {announcements.length > 1 && (
+              <span className="text-xs text-[var(--ds-text-secondary)] mr-auto">{announcementIndex + 1} / {announcements.length}</span>
+            )}
+            <Button onClick={handleCloseAnnouncement}>
+              我已知晓
+            </Button>
+          </>
+        }
+      >
+        {currentAnnouncement && (
+          <>
+            <div className="flex items-center gap-2 mb-2">
+              <span className={clsx('px-2 py-0.5 text-xs font-medium rounded', currentAnnouncement.type === 'critical' ? 'bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]' : currentAnnouncement.type === 'warning' ? 'bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]' : 'bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)]')}>
+                {typeCn[currentAnnouncement.type] || '通知'}
+              </span>
+              <span className="text-sm font-semibold text-[var(--ds-text-primary)]">{currentAnnouncement.title}</span>
             </div>
-            <div className="announcement-modal-content">
+            <div className="text-sm text-[var(--ds-text-primary)] max-h-[60vh] overflow-y-auto">
               <p dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(currentAnnouncement.content) }} />
             </div>
-            <div className="announcement-modal-footer">
-              {announcements.length > 1 && (
-                <span className="announcement-progress">
-                  {announcementIndex + 1} / {announcements.length}
-                </span>
-              )}
-              <button className="btn btn-primary btn-sm" onClick={handleCloseAnnouncement}>
-                我已知晓
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showShortcutsHelp && (
-        <KeyboardShortcutsHelpModal onClose={() => setShowShortcutsHelp(false)} />
-      )}
+          </>
+        )}
+      </Modal>
+
+      {showShortcutsHelp && <KeyboardShortcutsHelpModal onClose={() => setShowShortcutsHelp(false)} />}
     </header>
   );
 }

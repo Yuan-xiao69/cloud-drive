@@ -10,6 +10,15 @@ export interface Notification {
   content: string;
   linkUrl?: string;
   timestamp: number;
+  /** API 响应附加字段 */
+  isRead?: boolean;
+  createdAt?: string;
+  priority?: string;
+  sender?: {
+    id: string;
+    username: string;
+    avatarUrl: string | null;
+  } | null;
 }
 
 interface UseNotificationStreamOptions {
@@ -138,6 +147,7 @@ export async function fetchNotifications(params?: {
   limit?: number;
   isRead?: boolean;
   type?: string;
+  priority?: string;
 }): Promise<{
   items: Notification[];
   pagination: {
@@ -153,6 +163,7 @@ export async function fetchNotifications(params?: {
   if (params?.limit) searchParams.set('limit', String(params.limit));
   if (params?.isRead !== undefined) searchParams.set('isRead', String(params.isRead));
   if (params?.type) searchParams.set('type', params.type);
+  if (params?.priority) searchParams.set('priority', params.priority);
 
   const response = await fetch(`/api/v1/notifications?${searchParams.toString()}`);
   const data = await response.json();
@@ -210,5 +221,20 @@ export async function deleteNotifications(ids: string[]): Promise<void> {
   if (!response.ok) {
     const data = await response.json();
     throw new Error(data.message || '删除通知失败');
+  }
+}
+
+
+/**
+ * 清空所有已读通知
+ */
+export async function clearReadNotifications(): Promise<void> {
+  const response = await fetch('/api/v1/notifications?readAll=true', {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.message || '清空已读通知失败');
   }
 }

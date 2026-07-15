@@ -4,25 +4,21 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/ip-blacklist/[id] - 移除 IP 黑名单条目
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // DELETE /api/v1/admin/ip-blacklist/[id] - 移除 IP 黑名单条目
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
+    const { id } = params;
 
-    // 检查条目是否存在
     const entry = await prisma.iPBlacklist.findUnique({
       where: { id },
     });
@@ -31,14 +27,13 @@ export async function DELETE(
       return errors.notFound('IP 黑名单条目不存在');
     }
 
-    // 删除条目
     await prisma.iPBlacklist.delete({
       where: { id },
     });
 
-    // 记录审计日志
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'delete',
       targetType: 'ip_blacklist',
       targetId: id,
@@ -46,7 +41,5 @@ export async function DELETE(
     });
 
     return success(null, 'IP 已从黑名单移除');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

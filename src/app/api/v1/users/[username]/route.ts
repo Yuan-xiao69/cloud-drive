@@ -5,22 +5,35 @@ export const dynamic = 'force-dynamic';
  * PATCH /api/v1/users/[username] - 更新个人资料（需本人）
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, error, ErrorCodes } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser, requireAdmin, isAuthError } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
+import { UserService } from '@/services/user-service';
+
+const updateProfileSchema = z.object({
+  username: z.string().optional(),
+  bio: z.string().optional(),
+  location: z.string().optional(),
+  website: z.string().optional(),
+  avatarUrl: z.string().optional(),
+});
 
 // GET /api/v1/users/[username] - 获取用户资料
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string }> }
-): Promise<Response> {
-  try {
-    const { username } = await params;
+export const GET = defineRoute({
+  auth: 'optional',
+  async handler({ user, params }) {
+    const { username } = params;
 
-    const user = await prisma.user.findFirst({
-      where: { username },
+    const isAdmin = user?.role === 'admin';
+
+    const whereClause: Record<string, unknown> = { username };
+    if (!isAdmin) {
+      whereClause.isBanned = false;
+    }
+
+    const dbUser = await prisma.user.findFirst({
+      where: whereClause,
       select: {
         id: true,
         username: true,
@@ -43,83 +56,52 @@ export async function GET(
       },
     });
 
-    if (!user) {
+    if (!dbUser) {
       return error(ErrorCodes.NOT_FOUND, { message: '用户不存在' });
     }
 
     return success({
-      id: user.id,
-      username: user.username,
-      avatarUrl: user.avatarUrl ?? undefined,
-      bio: user.bio ?? undefined,
-      location: user.location ?? undefined,
-      website: user.website ?? undefined,
-      role: user.role,
-      isBanned: user.isBanned,
-      mfaEnabled: user.mfaEnabled,
-      createdAt: user.createdAt.toISOString(),
+      id: dbUser.id,
+      username: dbUser.username,
+      avatarUrl: dbUser.avatarUrl ?? undefined,
+      bio: dbUser.bio ?? undefined,
+      location: dbUser.location ?? undefined,
+      website: dbUser.website ?? undefined,
+      role: dbUser.role,
+      isBanned: dbUser.isBanned,
+      mfaEnabled: dbUser.mfaEnabled,
+      createdAt: dbUser.createdAt.toISOString(),
       stats: {
-        reposCount: user._count.repositories,
-        followersCount: user._count.followers,
-        followingCount: user._count.following,
+        reposCount: dbUser._count.repositories,
+        followersCount: dbUser._count.followers,
+        followingCount: dbUser._count.following,
       },
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取用户资料失败');
-  }
-}
+  },
+});
 
 // PATCH /api/v1/users/[username] - 更新个人资料
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: updateProfileSchema,
+  async handler({ user, body, params }) {
+    const { username } = params;
 
-    const { username } = await params;
-
-    // 只能修改自己的资料
-    const user = await prisma.user.findFirst({
+    // 只能修改自己的资料 — 先获取目标用户 ID
+    const dbUser = await prisma.user.findFirst({
       where: { username },
-      select: { id: true, username: true },
+      select: { id: true },
     });
 
-    if (!user) {
+    if (!dbUser) {
       return error(ErrorCodes.NOT_FOUND, { message: '用户不存在' });
     }
 
-    if (user.id !== auth.userId) {
+    if (dbUser.id !== user!.id) {
       return error(ErrorCodes.FORBIDDEN, { message: '只能修改自己的资料' });
     }
 
-    const body = await req.json();
-    const { bio, location, website, avatarUrl } = body;
-
-    const updated = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        ...(bio !== undefined && { bio }),
-        ...(location !== undefined && { location }),
-        ...(website !== undefined && { website }),
-        ...(avatarUrl !== undefined && { avatarUrl }),
-      },
-      select: {
-        id: true,
-        username: true,
-        avatarUrl: true,
-        bio: true,
-        location: true,
-        website: true,
-        updatedAt: true,
-      },
-    });
-
+    const updated = await UserService.updateProfile(user!.id, body);
     return success(updated, '资料更新成功');
-  } catch (err) {
-    return handlePrismaError(err, '更新资料失败');
-  }
-}
+  },
+});

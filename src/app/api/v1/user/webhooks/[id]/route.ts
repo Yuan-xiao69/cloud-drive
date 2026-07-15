@@ -6,27 +6,21 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/user/webhooks/[id] - 删除 Webhook
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, error, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
+import { validateExternalUrl } from '@/lib/url-validator';
 
 // GET /api/v1/user/webhooks/[id]
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { id } = await params;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    const { id } = params;
 
     const webhook = await prisma.webhook.findFirst({
-      where: { id, userId: auth.userId },
+      where: { id, userId: user!.id },
       include: {
         repo: {
           select: { id: true, name: true },
@@ -47,29 +41,27 @@ export async function GET(
         deliveryCount: webhook._count.deliveries,
       },
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取 Webhook 详情失败');
-  }
-}
+  },
+});
 
 // PUT /api/v1/user/webhooks/[id]
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { id } = await params;
-    const body = await req.json();
+export const PUT = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    name: z.string().optional(),
+    url: z.string().optional(),
+    secret: z.string().nullable().optional(),
+    contentType: z.string().optional(),
+    events: z.array(z.string()).optional(),
+    isActive: z.boolean().optional(),
+  }),
+  async handler({ user, body, params }) {
+    const { id } = params;
     const { name, url, secret, contentType, events, isActive } = body;
 
     // 验证 Webhook 存在且属于当前用户
     const existing = await prisma.webhook.findFirst({
-      where: { id, userId: auth.userId },
+      where: { id, userId: user!.id },
     });
 
     if (!existing) {
@@ -88,10 +80,16 @@ export async function PUT(
     if (typeof name === 'string' && name.trim().length > 0) {
       updateData.name = name.trim();
     }
-    if (typeof url === 'string' && url.startsWith('http')) {
+    if (typeof url === 'string') {
+      const urlCheck = validateExternalUrl(url);
+      if (!urlCheck.safe) {
+        return errors.badRequest(urlCheck.reason!);
+      }
       updateData.url = url;
     }
-    if ('secret' in body) {
+    // secret 字段显式提供时允许更新（包括设为 null 清空）
+    
+    if (secret !== undefined) {
       updateData.secret = secret || null;
     }
     if (contentType === 'json' || contentType === 'form') {
@@ -114,27 +112,18 @@ export async function PUT(
     });
 
     return success({ webhook }, 'Webhook 更新成功');
-  } catch (err) {
-    return handlePrismaError(err, '更新 Webhook 失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/user/webhooks/[id]
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { id } = await params;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    const { id } = params;
 
     // 验证 Webhook 存在且属于当前用户
     const existing = await prisma.webhook.findFirst({
-      where: { id, userId: auth.userId },
+      where: { id, userId: user!.id },
     });
 
     if (!existing) {
@@ -146,7 +135,5 @@ export async function DELETE(
     });
 
     return success({ message: 'Webhook 已删除' });
-  } catch (err) {
-    return handlePrismaError(err, '删除 Webhook 失败');
-  }
-}
+  },
+});

@@ -1,35 +1,30 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
+import { recordAuditLog } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 const VALID_ROLES = ['user', 'admin', 'super_admin'] as const;
 
 // PATCH /api/v1/admin/users/[id]/role - 修改用户角色
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    role: z.enum(VALID_ROLES),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 仅超级管理员可修改角色
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('仅超级管理员可修改用户角色');
     }
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id } = params;
     const { role } = body;
-
-    if (!role || !VALID_ROLES.includes(role)) {
-      return errors.badRequest(`无效的角色，可选值: ${VALID_ROLES.join(', ')}`);
-    }
 
     const targetUser = await prisma.user.findUnique({
       where: { id },
@@ -44,7 +39,7 @@ export async function PATCH(
       return errors.forbidden('无法修改系统内置账号的角色');
     }
 
-    if (targetUser.id === auth.userId) {
+    if (targetUser.id === user!.id) {
       return errors.forbidden('无法修改自己的角色');
     }
 
@@ -55,9 +50,10 @@ export async function PATCH(
       data: { role },
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
-      userId: auth.userId,
+      adminId: user!.id,
+      userId: user!.id,
       actionType: 'update_role',
       targetType: 'user',
       targetId: id,
@@ -65,7 +61,5 @@ export async function PATCH(
     });
 
     return success({ userId: id, previousRole, newRole: role }, '用户角色已更新');
-  } catch (err) {
-    return handlePrismaError(err, '修改用户角色失败');
-  }
-}
+  },
+});

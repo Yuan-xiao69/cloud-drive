@@ -5,48 +5,27 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, error } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
 import { ErrorCodes } from '@/lib/api/v1';
-import { getAuthUser } from '@/lib/auth';
+import { getFile } from '@/lib/storage';
+import { checkRepoAccess } from '@/lib/auth/access';
 
 // GET /api/v1/repos/[username]/[repoName]/blob/[...path] - 获取文件内容
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string; path: string[] }> }
-): Promise<Response> {
-  try {
-    const { username, repoName, path: pathSegments } = await params;
+export const GET = defineRoute({
+  auth: 'optional',
+  handler: async ({ req, params }) => {
+    const { username, repoName } = params;
+    const pathSegments = params.path as unknown as string[];
     const filePath = '/' + pathSegments.join('/');
     const { searchParams } = new URL(req.url);
     const branch = searchParams.get('branch') || undefined;
 
-    // 查找仓库
-    const repo = await prisma.repository.findFirst({
-      where: {
-        owner: { username },
-        name: repoName,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        ownerId: true,
-        visibility: true,
-        defaultBranch: true,
-      },
-    });
+    const access = await checkRepoAccess(req, { username, repoName }, 'read');
+    if (!access.allowed) return access.error;
 
-    if (!repo) {
-      return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
-    }
-
-    // 私有仓库需要认证
-    if (repo.visibility !== 1) {
-      const auth = await getAuthUser(req);
-      if (!auth) {
-        return errors.unauthorized('私有仓库需要登录');
-      }
-    }
+    const repo = access.repo;
 
     // 查找分支
     let branchRecord: { id: string } | null = null;
@@ -59,7 +38,6 @@ export async function GET(
         select: { id: true },
       });
     } else {
-      // 默认查找主分支
       branchRecord = await prisma.branch.findFirst({
         where: {
           repoId: repo.id,
@@ -68,7 +46,6 @@ export async function GET(
         select: { id: true },
       });
       if (!branchRecord) {
-        // 尝试第一个分支
         branchRecord = await prisma.branch.findFirst({
           where: { repoId: repo.id },
           select: { id: true },
@@ -85,14 +62,13 @@ export async function GET(
     const fileName = pathSegments[pathSegments.length - 1];
     const parentPathSegments = pathSegments.slice(0, -1);
 
-    // 从外向内逐层查找父目录
     let currentParentId: string | null = null;
     let foundAllDirs = true;
 
     for (let i = 0; i < parentPathSegments.length; i++) {
       const segmentName = parentPathSegments[i];
 
-      const dir = await prisma.repoItem.findFirst({
+      const dir: { id: string } | null = await prisma.repoItem.findFirst({
         where: {
           repoId: repo.id,
           branchId: branchId,
@@ -112,7 +88,6 @@ export async function GET(
       currentParentId = dir.id;
     }
 
-    // 查找文件
     const file = await prisma.repoItem.findFirst({
       where: {
         repoId: repo.id,
@@ -122,38 +97,48 @@ export async function GET(
         type: 'file',
         isDeleted: false,
         ...(foundAllDirs ? {} : {
-          // 如果没有找到所有父目录，使用路径匹配
           path: filePath,
         }),
       },
-      select: { id: true, content: true, mimeType: true, fileSize: true, name: true },
+      select: { id: true, storagePath: true, mimeType: true, fileSize: true, name: true, path: true },
     });
 
-    // 如果找不到，尝试模糊匹配
-    if (!file && foundAllDirs) {
-      const allFilesInParent = await prisma.repoItem.findMany({
-        where: {
-          repoId: repo.id,
-          branchId: branchId,
-          parentId: currentParentId,
-          type: 'file',
-          isDeleted: false,
-        },
-        select: { id: true, content: true, mimeType: true, fileSize: true, name: true },
+    const repoId = repo.id;
+    async function readContent(target: { storagePath?: string | null }) {
+      if (target.storagePath) {
+        const buf = await getFile(target.storagePath);
+        if (buf) return buf.toString('base64');
+      }
+      const chunks = await prisma.repoFileChunk.findMany({
+        where: { repoId, branchId, fileName, status: 'completed' },
+        orderBy: { chunkIndex: 'asc' },
+        select: { chunkData: true },
       });
-      
-      // 尝试匹配文件名
-      const matchedFile = allFilesInParent.find(f => 
-        f.name === fileName || 
-        decodeURIComponent(f.name) === fileName ||
-        f.name === decodeURIComponent(fileName)
-      );
-      
-      if (matchedFile) {
-        const contentBase64 = matchedFile.content
-          ? Buffer.from(matchedFile.content).toString('base64')
-          : '';
+      return chunks.map(c => c.chunkData).join('') || '';
+    }
 
+    if (file) {
+      const contentBase64 = await readContent(file);
+      return success({
+        content: contentBase64,
+        mimeType: file.mimeType || 'application/octet-stream',
+        name: file.name,
+        size: Number(file.fileSize),
+        path: filePath,
+      });
+    }
+
+    // 模糊匹配降级
+    if (foundAllDirs) {
+      const allFilesInParent = await prisma.repoItem.findMany({
+        where: { repoId: repo.id, branchId, parentId: currentParentId, type: 'file', isDeleted: false },
+        select: { id: true, storagePath: true, mimeType: true, fileSize: true, name: true },
+      });
+      const matchedFile = allFilesInParent.find(f =>
+        f.name === fileName || decodeURIComponent(f.name) === fileName || f.name === decodeURIComponent(fileName)
+      );
+      if (matchedFile) {
+        const contentBase64 = await readContent(matchedFile);
         return success({
           content: contentBase64,
           mimeType: matchedFile.mimeType || 'application/octet-stream',
@@ -164,23 +149,6 @@ export async function GET(
       }
     }
 
-    if (file) {
-      // Base64 编码内容
-      const contentBase64 = file.content
-        ? Buffer.from(file.content).toString('base64')
-        : '';
-
-      return success({
-        content: contentBase64,
-        mimeType: file.mimeType || 'application/octet-stream',
-        name: file.name,
-        size: Number(file.fileSize),
-        path: filePath,
-      });
-    }
-
     return error(ErrorCodes.NOT_FOUND, { message: '文件不存在' });
-  } catch (err) {
-    return handlePrismaError(err, '获取文件内容失败');
-  }
-}
+  },
+});

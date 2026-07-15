@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import Header from '@/components/layout/Header';
+import { Button, Input, PageLayout, PageLayoutContent, Empty } from '@/components/design';
 import {
   ArrowLeft,
   Clock,
@@ -16,11 +18,13 @@ import {
   Trash2,
   AlertCircle,
   CheckCircle,
-} from '@/components/ui/icons';
+} from '@/components/design/icons';
 import { formatTimeAgo } from '@/lib/utils';
-import { tokenManager } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
+import { useAuth } from '@/lib/providers';
 import ReportModal from '@/components/common/ReportModal';
 import ActionMenu from '@/components/common/ActionMenu';
+import toast from 'react-hot-toast';
 
 interface Comment {
   id: string;
@@ -75,7 +79,7 @@ function renderLine(line: string, lineKey: number): React.ReactNode {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: '#0969da' }}
+          style={{ color: 'var(--ds-accent-default)' }}
         >
           {text}
         </a>
@@ -105,9 +109,17 @@ export default function PRDetailPage() {
   const [pr, setPR] = useState<PRDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
-  const [isOwner, setIsOwner] = useState(false);
-  const [isAuthor, setIsAuthor] = useState(false);
+
+  const { user: currentUser } = useAuth();
+
+  const isOwner = useMemo(() =>
+    !!(currentUser && pr && currentUser.username === pr.repository.owner.username),
+    [currentUser, pr]
+  );
+  const isAuthor = useMemo(() =>
+    !!(currentUser && pr && currentUser.id === pr.author.id),
+    [currentUser, pr]
+  );
 
   // 编辑状态
   const [isEditing, setIsEditing] = useState(false);
@@ -116,25 +128,10 @@ export default function PRDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   // 评论状态
-  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commentError, setCommentError] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
-
-  // 获取当前用户信息
-  useEffect(() => {
-    const token = tokenManager.getAccessToken();
-    if (!token) return;
-    fetch('/api/v1/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(d => {
-        if (d.code === 200) setCurrentUser(d.data);
-      })
-      .catch(() => {});
-  }, []);
 
   // 拉取 PR 详情
   useEffect(() => {
@@ -145,14 +142,8 @@ export default function PRDetailPage() {
         const data = await res.json();
         if (data.code === 200) {
           setPR(data.data);
-          setComments(data.data.comments || []);
           setEditTitle(data.data.title);
           setEditContent(data.data.content);
-          const u = currentUser;
-          if (u) {
-            setIsOwner(data.data.repository.owner.username === username);
-            setIsAuthor(data.data.author.id === u.id);
-          }
         } else {
           setError(data.message || '无法加载拉取请求');
         }
@@ -163,36 +154,20 @@ export default function PRDetailPage() {
       }
     }
     fetchPR();
-  }, [username, repoName, prId, currentUser]);
+  }, [username, repoName, prId]);
 
   // 合并/关闭/重新打开
   const handleAction = async (action: 'merge' | 'close' | 'reopen') => {
     if (!pr) return;
-    const confirmMsg = {
-      merge: '确定要合并此拉取请求吗？',
-      close: '确定要关闭此拉取请求吗？',
-      reopen: '确定要重新打开此拉取请求吗？',
-    };
-    if (!confirm(confirmMsg[action])) return;
-
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/pulls/${prId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
+      const data = await api.patch<{ status: string }>(`/api/v1/repos/${username}/${repoName}/pulls/${prId}`, { action });
       if (data.code === 200) {
         setPR(prev => prev ? { ...prev, status: data.data.status } : null);
       } else {
-        alert(data.message || '操作失败');
+        toast.error(data.message || '操作失败');
       }
     } catch {
-      alert('网络错误');
+      toast.error('网络错误');
     }
   };
 
@@ -201,24 +176,15 @@ export default function PRDetailPage() {
     if (!editTitle.trim()) return;
     setIsSaving(true);
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/pulls/${prId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ title: editTitle, content: editContent }),
-      });
-      const data = await res.json();
+      const data = await api.patch(`/api/v1/repos/${username}/${repoName}/pulls/${prId}`, { title: editTitle, content: editContent });
       if (data.code === 200) {
         setPR(prev => prev ? { ...prev, title: editTitle, content: editContent } : null);
         setIsEditing(false);
       } else {
-        alert(data.message || '保存失败');
+        toast.error(data.message || '保存失败');
       }
     } catch {
-      alert('网络错误');
+      toast.error('网络错误');
     } finally {
       setIsSaving(false);
     }
@@ -231,20 +197,10 @@ export default function PRDetailPage() {
     setIsSubmitting(true);
     setCommentError('');
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/pulls/${prId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ content: newComment }),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setComments(prev => [...prev, data.data]);
+      const data = await api.post<Comment>(`/api/v1/repos/${username}/${repoName}/pulls/${prId}`, { content: newComment });
+      if (data.code === 201) {
+        setPR(prev => prev ? { ...prev, comments: [...prev.comments, data.data], commentsCount: prev.commentsCount + 1 } : null);
         setNewComment('');
-        setPR(prev => prev ? { ...prev, commentsCount: prev.commentsCount + 1 } : null);
       } else {
         setCommentError(data.message || '发送失败');
       }
@@ -257,25 +213,16 @@ export default function PRDetailPage() {
 
   // 删除评论
   const handleDeleteComment = async (commentId: string) => {
-    if (!confirm('确定删除此评论？')) return;
+
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(
-        `/api/v1/repos/${username}/${repoName}/pulls/${prId}?commentId=${commentId}`,
-        {
-          method: 'DELETE',
-          headers: { ...(token && { Authorization: `Bearer ${token}` }) },
-        }
-      );
-      const data = await res.json();
+      const data = await api.delete(`/api/v1/repos/${username}/${repoName}/pulls/${prId}?commentId=${commentId}`);
       if (data.code === 200) {
-        setComments(prev => prev.filter(c => c.id !== commentId));
-        setPR(prev => prev ? { ...prev, commentsCount: Math.max(0, prev.commentsCount - 1) } : null);
+        setPR(prev => prev ? { ...prev, comments: prev.comments.filter(c => c.id !== commentId), commentsCount: Math.max(0, prev.commentsCount - 1) } : null);
       } else {
-        alert(data.message || '删除失败');
+        toast.error(data.message || '删除失败');
       }
     } catch {
-      alert('网络错误');
+      toast.error('网络错误');
     }
   };
 
@@ -305,764 +252,337 @@ export default function PRDetailPage() {
 
   if (isLoading) {
     return (
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
-        <div style={{ height: 32, background: 'var(--skeleton-bg)', borderRadius: 6, marginBottom: 24 }} />
-        <div style={{ height: 200, background: 'var(--skeleton-bg)', borderRadius: 6 }} />
-      </div>
+      <PageLayout containerWidth="medium"><PageLayoutContent>
+        <div style={{ height: 32, background: 'var(--ds-surface-subtle)', borderRadius: 6, marginBottom: 24 }} />
+        <div style={{ height: 200, background: 'var(--ds-surface-subtle)', borderRadius: 6 }} />
+      </PageLayoutContent></PageLayout>
     );
   }
 
   if (error || !pr) {
     return (
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '64px 24px', textAlign: 'center' }}>
-        <AlertCircle size={48} style={{ color: 'var(--color-danger-fg)', marginBottom: 16 }} />
-        <h2 style={{ marginBottom: 8 }}>{error || '拉取请求不存在'}</h2>
-        <button className="btn btn-secondary" onClick={() => router.back()}>
-          返回
-        </button>
-      </div>
+      <PageLayout containerWidth="medium"><PageLayoutContent>
+        <Empty
+          icon={<AlertCircle size={40} />}
+          title={error || '拉取请求不存在'}
+          action={{ label: '返回', onClick: () => router.back() }}
+        />
+      </PageLayoutContent></PageLayout>
     );
   }
 
   return (
-    <div className="pr-detail-container">
-      {/* Header */}
-      <div className="pr-detail-header">
-        <button className="back-link" onClick={() => router.back()}>
-          <ArrowLeft size={16} />
-          <span>返回拉取请求列表</span>
-        </button>
+    <PageLayout containerWidth="medium"><PageLayoutContent>
+      <Header />
+    {/* Header */}
+    <div className="mb-5">
+      <Button variant="ghost" className="mb-4" onClick={() => router.back()}>
+        <ArrowLeft size={16} />
+        <span>返回拉取请求列表</span>
+      </Button>
 
-        <div className="pr-detail-title-row">
-          <div className="pr-status-icon">
-            <span className={`status-badge ${pr.status}`}>
-              <StatusIcon status={pr.status} />
-              {getStatusText(pr.status)}
-            </span>
-          </div>
-
-          {isAuthor && !isEditing && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setIsEditing(true)}>
-              <Edit3 size={14} />
-              编辑
-            </button>
-          )}
-
-          {/* 操作按钮 */}
-          <div className="pr-actions">
-            {pr.status === 'open' && isOwner && (
-              <button className="btn btn-primary btn-sm" onClick={() => handleAction('merge')}>
-                <GitMerge size={14} />
-                合并
-              </button>
-            )}
-            {(isAuthor || isOwner) && pr.status === 'open' && (
-              <button className="btn btn-secondary btn-sm" onClick={() => handleAction('close')}>
-                <XCircle size={14} />
-                关闭
-              </button>
-            )}
-            {(isAuthor || isOwner) && pr.status === 'closed' && (
-              <button className="btn btn-secondary btn-sm" onClick={() => handleAction('reopen')}>
-                <CheckCircle size={14} />
-                重新打开
-              </button>
-            )}
-          </div>
+      <div className="flex items-center gap-3 flex-wrap mb-3">
+        <div className="flex-shrink-0">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-sm font-medium rounded-full ${pr.status === 'open' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' : pr.status === 'merged' ? 'bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)]' : 'bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]'}`}>
+            <StatusIcon status={pr.status} />
+            {getStatusText(pr.status)}
+          </span>
         </div>
 
-        {/* Title */}
+        {isAuthor && !isEditing && (
+          <Button variant="secondary" onClick={() => setIsEditing(true)}>
+            <Edit3 size={14} />
+            编辑
+          </Button>
+        )}
+
+        {/* 操作按钮 */}
+        <div className="flex gap-2 ml-auto">
+          {pr.status === 'open' && isOwner && (
+            <Button variant="primary" onClick={() => handleAction('merge')}>
+              <GitMerge size={14} />
+              合并
+            </Button>
+          )}
+          {(isAuthor || isOwner) && pr.status === 'open' && (
+            <Button variant="secondary" onClick={() => handleAction('close')}>
+              <XCircle size={14} />
+              关闭
+            </Button>
+          )}
+          {(isAuthor || isOwner) && pr.status === 'closed' && (
+            <Button variant="secondary" onClick={() => handleAction('reopen')}>
+              <CheckCircle size={14} />
+              重新打开
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Title */}
+      <div className="flex items-center gap-2">
         {isEditing ? (
-          <input
-            className="pr-edit-title"
+          <Input
+            className="text-2xl font-semibold"
             value={editTitle}
             onChange={e => setEditTitle(e.target.value)}
             placeholder="拉取请求标题"
-            autoFocus
           />
         ) : (
-          <h1 className="pr-detail-title">{pr.title}</h1>
+          <h1 className="text-2xl font-semibold m-0 leading-relaxed">{pr.title}</h1>
         )}
-        {currentUser && !isOwner && pr && (
-          <button
-            className="btn btn-default btn-sm"
+        {currentUser && !isAuthor && pr && (
+          <Button
+            variant="secondary"
+            className="flex-shrink-0"
             onClick={() => setShowReportModal(true)}
-            title="举报此 Pull Request"
-            style={{ marginLeft: 8, flexShrink: 0 }}
+            title="举报此合并请求"
           >
             举报
-          </button>
+          </Button>
         )}
       </div>
+    </div>
 
-      {/* 分支信息 */}
-      <div className="pr-branch-info">
-        <span className="branch-label source">
-          <GitBranch size={14} />
-          {pr.sourceBranch}
-          {pr.sourceRepo && (
-            <span className="cross-repo">({pr.sourceRepo.owner.username}/{pr.sourceRepo.name})</span>
-          )}
-        </span>
-        <ArrowRight size={16} />
-        <span className="branch-label target">
-          <GitBranch size={14} />
-          {pr.targetBranch}
-        </span>
-      </div>
+    {/* 分支信息 */}
+    <div className="flex items-center gap-3 p-3 bg-[var(--ds-surface-subtle)] rounded-[var(--ds-radius-sm)] mb-6 text-sm">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded font-mono text-sm bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]">
+        <GitBranch size={14} />
+        {pr.sourceBranch}
+        {pr.sourceRepo && (
+          <span className="text-xs opacity-80">({pr.sourceRepo.owner.username}/{pr.sourceRepo.name})</span>
+        )}
+      </span>
+      <ArrowRight size={16} className="text-[var(--ds-text-secondary)]" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded font-mono text-sm bg-[var(--ds-surface-subtle)] text-[var(--ds-text-primary)]">
+        <GitBranch size={14} />
+        {pr.targetBranch}
+      </span>
+    </div>
 
-      {/* Main Layout */}
-      <div className="pr-detail-layout">
-        {/* Post */}
-        <article className="pr-post">
-          <div className="pr-post-header">
-            <Link href={`/${pr.author.username}`} className="post-author">
-              <img
-                src={pr.author.avatarUrl || '/default-avatar.png'}
-                alt={pr.author.username}
-                className="author-avatar"
-              />
-              <span>{pr.author.username}</span>
-            </Link>
-            <span className="meta-item">
-              <Clock size={14} />
-              {formatTimeAgo(pr.createdAt)}
-            </span>
-          </div>
-
-          {isEditing ? (
-            <div className="pr-edit-body">
-              <textarea
-                className="form-input"
-                rows={10}
-                value={editContent}
-                onChange={e => setEditContent(e.target.value)}
-                placeholder="描述你的更改..."
-              />
-              <div className="edit-actions">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setIsEditing(false);
-                    setEditTitle(pr.title);
-                    setEditContent(pr.content);
-                  }}
-                >
-                  取消
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSaveEdit}
-                  disabled={isSaving || !editTitle.trim()}
-                >
-                  {isSaving ? '保存中...' : '保存'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="pr-post-content">
-              {pr.content ? (
-                renderContent(pr.content)
-              ) : (
-                <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>暂无描述</p>
-              )}
-            </div>
-          )}
-        </article>
-
-        {/* Sidebar */}
-        <aside className="pr-sidebar">
-          <div className="sidebar-card">
-            <h3 className="sidebar-card-title">关于此拉取请求</h3>
-            <div className="sidebar-info-list">
-              <div className="sidebar-info-item">
-                <span className="sidebar-info-label">状态</span>
-                <span className={`status-badge ${pr.status}`}>
-                  <StatusIcon status={pr.status} />
-                  {getStatusText(pr.status)}
-                </span>
-              </div>
-              <div className="sidebar-info-item">
-                <span className="sidebar-info-label">评论</span>
-                <span className="sidebar-info-value">{pr.commentsCount}</span>
-              </div>
-              <div className="sidebar-info-item">
-                <span className="sidebar-info-label">创建时间</span>
-                <span className="sidebar-info-value">
-                  {new Date(pr.createdAt).toLocaleDateString('zh-CN')}
-                </span>
-              </div>
-              <div className="sidebar-info-item">
-                <span className="sidebar-info-label">源分支</span>
-                <span className="sidebar-info-value branch">
-                  <GitBranch size={12} />
-                  {pr.sourceBranch}
-                </span>
-              </div>
-              <div className="sidebar-info-item">
-                <span className="sidebar-info-label">目标分支</span>
-                <span className="sidebar-info-value branch">
-                  <GitBranch size={12} />
-                  {pr.targetBranch}
-                </span>
-              </div>
-              {pr.sourceRepo && (
-                <div className="sidebar-info-item">
-                  <span className="sidebar-info-label">源仓库</span>
-                  <Link
-                    href={`/${pr.sourceRepo.owner.username}/${pr.sourceRepo.name}`}
-                    className="sidebar-info-link"
-                  >
-                    {pr.sourceRepo.owner.username}/{pr.sourceRepo.name}
-                  </Link>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="sidebar-card">
-            <Link href={`/${pr.author.username}`} className="sidebar-author">
-              <img
-                src={pr.author.avatarUrl || '/default-avatar.png'}
-                alt={pr.author.username}
-                className="author-avatar-lg"
-              />
-              <span className="sidebar-author-name">{pr.author.username}</span>
-            </Link>
-            {pr.author.bio && (
-              <p className="sidebar-author-bio">{pr.author.bio}</p>
-            )}
-          </div>
-        </aside>
-      </div>
-
-      {/* Comment Section */}
-      <div className="pr-comments">
-        <div className="comment-section-header">
-          <Send size={18} />
-          <h2>{comments.length} 条评论</h2>
+    {/* Main Layout */}
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_280px] gap-8">
+      {/* Post */}
+      <article className="bg-[var(--ds-page-bg)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] overflow-hidden">
+        <div className="flex items-center gap-3 p-4 border-b border-[var(--ds-border-default)] bg-[var(--ds-surface-subtle)]">
+          <Link href={`/${pr.author.username}`} className="flex items-center gap-2 no-underline text-[var(--ds-text-primary)] font-medium">
+            <img
+              src={pr.author.avatarUrl || '/default-avatar.png'}
+              alt={pr.author.username}
+              className="w-8 h-8 rounded-full object-cover"
+            />
+            <span>{pr.author.username}</span>
+          </Link>
+          <span className="flex items-center gap-1 text-[13px] text-[var(--ds-text-secondary)]">
+            <Clock size={14} />
+            {formatTimeAgo(pr.createdAt)}
+          </span>
         </div>
 
-        {commentError && (
-          <div className="comment-error">
-            <AlertCircle size={16} />
-            {commentError}
-          </div>
-        )}
-
-        {comments.length === 0 && (
-          <div className="comment-empty">
-            <Send size={32} className="comment-empty-icon" />
-            <p>暂无评论，发表第一条评论吧</p>
-          </div>
-        )}
-
-        {comments.map(comment => (
-          <div key={comment.id} className="comment-item">
-            <div className="comment-main">
-              <div className="comment-header">
-                <Link href={`/${comment.author.username}`} className="comment-author">
-                  <img
-                    src={comment.author.avatarUrl || '/default-avatar.png'}
-                    alt={comment.author.username}
-                    className="comment-avatar"
-                  />
-                  <span className="comment-author-name">{comment.author.username}</span>
-                </Link>
-                <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
-                {(comment.author.id === currentUser?.id || isOwner) && (
-                  <button
-                    className="comment-delete-btn"
-                    onClick={() => handleDeleteComment(comment.id)}
-                    title="删除评论"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-                {currentUser && comment.author.id !== currentUser?.id && (
-                  <ActionMenu
-                    type="comment"
-                    targetId={comment.id}
-                    targetTitle={comment.content.slice(0, 50)}
-                  />
-                )}
-              </div>
-              <div className="comment-content">{renderContent(comment.content)}</div>
-            </div>
-          </div>
-        ))}
-
-        {/* New comment form */}
-        {currentUser ? (
-          <form onSubmit={handleSubmitComment} className="new-comment-form">
-            <textarea
-              className="comment-textarea"
-              placeholder="写下你的评论..."
-              value={newComment}
-              onChange={e => setNewComment(e.target.value)}
-              rows={4}
+        {isEditing ? (
+          <div className="p-5">
+            <Input
+              multiline
+              rows={10}
+              className="min-h-[200px]"
+              value={editContent}
+              onChange={e => setEditContent(e.target.value)}
+              placeholder="描述你的更改..."
             />
-            <div className="new-comment-footer">
-              <span className="comment-hint">支持 Markdown 格式</span>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={isSubmitting || !newComment.trim()}
+            <div className="flex justify-end gap-2 mt-3">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditTitle(pr.title);
+                  setEditContent(pr.content);
+                }}
               >
-                <Send size={14} />
-                {isSubmitting ? '发送中...' : '发表评论'}
-              </button>
+                取消
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleSaveEdit}
+                disabled={isSaving || !editTitle.trim()}
+              >
+                {isSaving ? '保存中...' : '保存'}
+              </Button>
             </div>
-          </form>
+          </div>
         ) : (
-          <div className="comment-login-prompt">
-            <p>
-              <Link href="/login" className="link">登录</Link> 后参与评论
-            </p>
+          <div className="p-5 text-[15px] leading-relaxed">
+            {pr.content ? (
+              renderContent(pr.content)
+            ) : (
+              <p className="text-[var(--ds-text-secondary)] italic">暂无描述</p>
+            )}
           </div>
         )}
+      </article>
+
+      {/* Sidebar */}
+      <aside className="flex flex-col gap-5">
+        <div className="bg-[var(--ds-page-bg)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] p-4">
+          <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] m-0 mb-3">关于此拉取请求</h3>
+          <div className="flex flex-col gap-2.5">
+            <div className="flex justify-between items-center text-[13px]">
+              <span className="text-[var(--ds-text-secondary)]">状态</span>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-sm font-medium rounded-full ${pr.status === 'open' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' : pr.status === 'merged' ? 'bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)]' : 'bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]'}`}>
+                <StatusIcon status={pr.status} />
+                {getStatusText(pr.status)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-[13px]">
+              <span className="text-[var(--ds-text-secondary)]">评论</span>
+              <span className="font-medium">{pr.commentsCount}</span>
+            </div>
+            <div className="flex justify-between items-center text-[13px]">
+              <span className="text-[var(--ds-text-secondary)]">创建时间</span>
+              <span className="font-medium">
+                {new Date(pr.createdAt).toLocaleDateString('zh-CN')}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-[13px]">
+              <span className="text-[var(--ds-text-secondary)]">源分支</span>
+              <span className="inline-flex items-center gap-1 font-mono text-xs font-medium">
+                <GitBranch size={12} />
+                {pr.sourceBranch}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-[13px]">
+              <span className="text-[var(--ds-text-secondary)]">目标分支</span>
+              <span className="inline-flex items-center gap-1 font-mono text-xs font-medium">
+                <GitBranch size={12} />
+                {pr.targetBranch}
+              </span>
+            </div>
+            {pr.sourceRepo && (
+              <div className="flex justify-between items-center text-[13px]">
+                <span className="text-[var(--ds-text-secondary)]">源仓库</span>
+                <Link
+                  href={`/${pr.sourceRepo.owner.username}/${pr.sourceRepo.name}`}
+                  className="text-[var(--ds-accent-default)] no-underline hover:underline"
+                >
+                  {pr.sourceRepo.owner.username}/{pr.sourceRepo.name}
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-[var(--ds-page-bg)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] p-4">
+          <Link href={`/${pr.author.username}`} className="flex items-center gap-2.5 no-underline text-[var(--ds-text-primary)] mb-2">
+            <img
+              src={pr.author.avatarUrl || '/default-avatar.png'}
+              alt={pr.author.username}
+              className="w-10 h-10 rounded-full object-cover"
+            />
+            <span className="font-medium">{pr.author.username}</span>
+          </Link>
+          {pr.author.bio && (
+            <p className="text-[13px] text-[var(--ds-text-secondary)] m-0 leading-relaxed">{pr.author.bio}</p>
+          )}
+        </div>
+      </aside>
+    </div>
+
+    {/* Comment Section */}
+    <div className="mt-8">
+      <div className="flex items-center gap-2 mb-5 pb-3 border-b border-[var(--ds-border-default)]">
+        <Send size={18} />
+        <h2 className="text-base font-semibold m-0">{pr.comments.length} 条评论</h2>
       </div>
 
-      <style jsx global>{`
-        .pr-detail-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 32px 24px;
-        }
-
-        .pr-detail-header {
-          margin-bottom: 20px;
-        }
-
-        .back-link {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          color: var(--color-text-secondary);
-          font-size: 14px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 0;
-          margin-bottom: 16px;
-        }
-
-        .back-link:hover {
-          color: var(--color-text);
-        }
-
-        .pr-detail-title-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex-wrap: wrap;
-          margin-bottom: 12px;
-        }
-
-        .status-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 4px 12px;
-          font-size: 14px;
-          font-weight: 500;
-          border-radius: 100px;
-        }
-
-        .status-badge.open {
-          background: var(--color-success-bg);
-          color: var(--color-success-fg);
-        }
-
-        .status-badge.merged {
-          background: #f6eefd;
-          color: #8250df;
-        }
-
-        .status-badge.closed {
-          background: var(--color-danger-bg);
-          color: var(--color-danger-fg);
-        }
-
-        .pr-actions {
-          display: flex;
-          gap: 8px;
-        }
-
-        .pr-edit-title {
-          width: 100%;
-          font-size: 24px;
-          font-weight: 600;
-          padding: 8px 12px;
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          background: var(--input-bg);
-          color: var(--color-text);
-        }
-
-        .pr-detail-title {
-          font-size: 24px;
-          font-weight: 600;
-          margin: 0;
-          line-height: 1.3;
-        }
-
-        .pr-branch-info {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          background: var(--code-bg);
-          border-radius: 6px;
-          margin-bottom: 24px;
-          font-size: 14px;
-        }
-
-        .branch-label {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 4px 10px;
-          border-radius: 4px;
-          font-family: var(--font-mono);
-        }
-
-        .branch-label.source {
-          background: #dafbe1;
-          color: #1a7f37;
-        }
-
-        .branch-label.target {
-          background: var(--hover-bg);
-          color: var(--color-text);
-        }
-
-        .cross-repo {
-          font-size: 12px;
-          opacity: 0.8;
-        }
-
-        .pr-detail-layout {
-          display: grid;
-          grid-template-columns: 1fr 280px;
-          gap: 32px;
-        }
-
-        .pr-post {
-          background: var(--bg-primary);
-          border: 1px solid var(--border-color);
-          border-radius: 8px;
-          overflow: hidden;
-        }
-
-        .pr-post-header {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 16px;
-          border-bottom: 1px solid var(--border-color);
-          background: var(--bg-secondary);
-        }
-
-        .post-author {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          text-decoration: none;
-          color: var(--color-text);
-          font-weight: 500;
-        }
-
-        .author-avatar {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          object-fit: cover;
-        }
-
-        .meta-item {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 13px;
-          color: var(--color-text-secondary);
-        }
-
-        .pr-post-content {
-          padding: 20px;
-          font-size: 15px;
-          line-height: 1.6;
-        }
-
-        .pr-edit-body {
-          padding: 20px;
-        }
-
-        .pr-edit-body textarea {
-          width: 100%;
-          min-height: 200px;
-        }
-
-        .edit-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-          margin-top: 12px;
-        }
-
-        .pr-sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .sidebar-card {
-          background: var(--bg-primary);
-          border: 1px solid var(--border-color);
-          border-radius: 8px;
-          padding: 16px;
-        }
-
-        .sidebar-card-title {
-          font-size: 14px;
-          font-weight: 600;
-          margin: 0 0 12px;
-          color: var(--color-text);
-        }
-
-        .sidebar-info-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .sidebar-info-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 13px;
-        }
-
-        .sidebar-info-label {
-          color: var(--color-text-secondary);
-        }
-
-        .sidebar-info-value {
-          font-weight: 500;
-        }
-
-        .sidebar-info-value.branch {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          font-family: var(--font-mono);
-          font-size: 12px;
-        }
-
-        .sidebar-info-link {
-          color: var(--link-color);
-          text-decoration: none;
-        }
-
-        .sidebar-info-link:hover {
-          text-decoration: underline;
-        }
-
-        .sidebar-author {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          text-decoration: none;
-          color: var(--color-text);
-          margin-bottom: 8px;
-        }
-
-        .author-avatar-lg {
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          object-fit: cover;
-        }
-
-        .sidebar-author-name {
-          font-weight: 500;
-        }
-
-        .sidebar-author-bio {
-          font-size: 13px;
-          color: var(--color-text-secondary);
-          margin: 0;
-          line-height: 1.4;
-        }
-
-        .pr-comments {
-          margin-top: 32px;
-        }
-
-        .comment-section-header {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 20px;
-          padding-bottom: 12px;
-          border-bottom: 1px solid var(--border-color);
-        }
-
-        .comment-section-header h2 {
-          font-size: 16px;
-          font-weight: 600;
-          margin: 0;
-        }
-
-        .comment-error {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px;
-          background: var(--color-danger-bg);
-          color: var(--color-danger-fg);
-          border-radius: 6px;
-          margin-bottom: 16px;
-          font-size: 14px;
-        }
-
-        .comment-empty {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 48px;
-          text-align: center;
-          color: var(--color-text-secondary);
-        }
-
-        .comment-empty-icon {
-          opacity: 0.3;
-          margin-bottom: 12px;
-        }
-
-        .comment-item {
-          padding: 20px 0;
-          border-bottom: 1px solid var(--border-color);
-        }
-
-        .comment-header {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 10px;
-        }
-
-        .comment-author {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          text-decoration: none;
-          color: var(--color-text);
-        }
-
-        .comment-avatar {
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          object-fit: cover;
-        }
-
-        .comment-author-name {
-          font-weight: 500;
-          font-size: 14px;
-        }
-
-        .comment-time {
-          font-size: 12px;
-          color: var(--color-text-secondary);
-        }
-
-        .comment-delete-btn {
-          margin-left: auto;
-          background: none;
-          border: none;
-          cursor: pointer;
-          color: var(--color-text-secondary);
-          padding: 4px;
-          border-radius: 4px;
-        }
-
-        .comment-delete-btn:hover {
-          color: var(--color-danger-fg);
-          background: var(--color-danger-bg);
-        }
-
-        .comment-content {
-          font-size: 14px;
-          line-height: 1.6;
-          color: var(--color-text);
-        }
-
-        .new-comment-form {
-          margin-top: 20px;
-        }
-
-        .comment-textarea {
-          width: 100%;
-          min-height: 100px;
-          padding: 12px;
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          font-size: 14px;
-          font-family: inherit;
-          background: var(--input-bg);
-          color: var(--color-text);
-          resize: vertical;
-        }
-
-        .comment-textarea:focus {
-          outline: none;
-          border-color: var(--accent-color);
-        }
-
-        .new-comment-footer {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-top: 8px;
-        }
-
-        .comment-hint {
-          font-size: 12px;
-          color: var(--color-text-secondary);
-        }
-
-        .comment-login-prompt {
-          padding: 20px;
-          text-align: center;
-          background: var(--bg-secondary);
-          border-radius: 6px;
-          margin-top: 20px;
-        }
-
-        .comment-login-prompt p {
-          margin: 0;
-          color: var(--color-text-secondary);
-        }
-
-        @media (max-width: 768px) {
-          .pr-detail-layout {
-            grid-template-columns: 1fr;
-          }
-
-          .pr-sidebar {
-            order: -1;
-          }
-        }
-      `}</style>
-      {showReportModal && pr && (
-        <ReportModal
-          targetType="pullrequest"
-          targetId={pr.id}
-          targetTitle={pr.title}
-          onClose={() => setShowReportModal(false)}
+      {commentError && (
+        <div className="flex items-center gap-2 p-3 bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)] rounded-[var(--ds-radius-sm)] mb-4 text-sm">
+          <AlertCircle size={16} />
+          {commentError}
+        </div>
+      )}
+
+      {pr.comments.length === 0 && (
+        <Empty
+          icon={<Send size={32} />}
+          title="暂无评论"
+          description="发表第一条评论吧"
         />
       )}
+
+      {pr.comments.map(comment => (
+        <div key={comment.id} className="py-5 border-b border-[var(--ds-border-default)]">
+          <div className="comment-main">
+            <div className="flex items-center gap-2 mb-2.5">
+              <Link href={`/${comment.author.username}`} className="flex items-center gap-2 no-underline text-[var(--ds-text-primary)]">
+                <img
+                  src={comment.author.avatarUrl || '/default-avatar.png'}
+                  alt={comment.author.username}
+                  className="w-7 h-7 rounded-full object-cover"
+                />
+                <span className="font-medium text-sm">{comment.author.username}</span>
+              </Link>
+              <span className="text-xs text-[var(--ds-text-secondary)]">{formatTimeAgo(comment.createdAt)}</span>
+              {(comment.author.id === currentUser?.id || isOwner) && (
+                <Button
+                  variant="ghost"
+                  className="ml-auto"
+                  onClick={() => handleDeleteComment(comment.id)}
+                  title="删除评论"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              )}
+              {currentUser && comment.author.id !== currentUser?.id && (
+                <ActionMenu
+                  type="comment"
+                  targetId={comment.id}
+                  targetTitle={comment.content.slice(0, 50)}
+                />
+              )}
+            </div>
+            <div className="text-sm leading-relaxed text-[var(--ds-text-primary)]">{renderContent(comment.content)}</div>
+          </div>
+        </div>
+      ))}
+
+      {/* New comment form */}
+      {currentUser ? (
+        <form onSubmit={handleSubmitComment} className="mt-5">
+          <Input
+            multiline
+            rows={4}
+            placeholder="写下你的评论..."
+            value={newComment}
+            onChange={e => setNewComment(e.target.value)}
+          />
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-xs text-[var(--ds-text-secondary)]">支持 Markdown 格式</span>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={isSubmitting || !newComment.trim()}
+            >
+              <Send size={14} />
+              {isSubmitting ? '发送中...' : '发表评论'}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="p-5 text-center bg-[var(--ds-surface-subtle)] rounded-[var(--ds-radius-sm)] mt-5">
+          <p className="m-0 text-[var(--ds-text-secondary)]">
+            <Link href="/login" className="text-[var(--ds-accent-default)]">登录</Link> 后参与评论
+          </p>
+        </div>
+      )}
     </div>
+
+    {showReportModal && pr && (
+      <ReportModal
+        targetType="pullrequest"
+        targetId={pr.id}
+        targetTitle={pr.title}
+        onClose={() => setShowReportModal(false)}
+      />
+    )}
+    </PageLayoutContent></PageLayout>
   );
 }

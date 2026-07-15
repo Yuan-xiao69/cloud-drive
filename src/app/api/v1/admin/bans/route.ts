@@ -7,17 +7,19 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/bans - 删除封禁记录
  */
 
-import { NextRequest } from 'next/server';
-import { success, paginated, handlePrismaError, errors, parsePagination, buildPaginationMeta } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { paginated, errors, parsePagination, buildPaginationMeta, success } from '@/lib/api/v1';
+import { recordAuditLog } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { BanService } from '@/services/ban-service';
 
 // GET /api/v1/admin/bans - 获取封禁列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const sp = req.nextUrl.searchParams;
@@ -177,177 +179,93 @@ export async function GET(req: NextRequest): Promise<Response> {
 
     const pagination = buildPaginationMeta(total, page, size);
     return paginated(items, pagination);
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // POST /api/v1/admin/bans - 添加封禁
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    userId: z.string(),
+    reason: z.string(),
+    banType: z.enum(['permanent', 'temporary']).optional().default('permanent'),
+    expiresAt: z.string().optional(),
+  }),
+  async handler({ req, user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { userId, reason, banType = 'permanent', expiresAt } = body;
-
-    if (!userId || !reason) {
-      return errors.badRequest('缺少必填字段：userId, reason');
-    }
-
-    const targetUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, username: true, isSystem: true },
-    });
-
-    if (!targetUser) {
-      return errors.notFound('用户');
-    }
-
-    if (targetUser.isSystem) {
-      return errors.forbidden('无法封禁系统内置账号');
-    }
-
-    if (targetUser.id === auth.userId) {
-      return errors.forbidden('无法封禁自己');
-    }
-
-    if (banType !== 'permanent' && banType !== 'temporary') {
-      return errors.badRequest('无效的封禁类型');
-    }
 
     if (banType === 'temporary' && !expiresAt) {
       return errors.badRequest('临时封禁必须设置过期时间');
     }
 
-    const existingBan = await prisma.userBan.findFirst({
-      where: {
-        userId,
-        isActive: true,
-        OR: [
-          { banType: 'permanent' },
-          { banType: 'temporary', expiresAt: { gt: new Date() } },
-        ],
-      },
-    });
+    const ipAddress =
+      req.headers.get('x-forwarded-for') ||
+      req.headers.get('x-real-ip') ||
+      undefined;
 
-    if (existingBan) {
-      return errors.conflict('该用户已被封禁，请先解除现有封禁');
-    }
+    const ban = await BanService.execute(
+      user!.id,
+      userId,
+      reason,
+      banType as 'permanent' | 'temporary',
+      expiresAt,
+      ipAddress,
+    );
 
-    const ban = await prisma.userBan.create({
-      data: {
-        userId,
-        bannerId: auth.userId,
-        reason,
-        banType,
-        expiresAt: banType === 'temporary' ? new Date(expiresAt) : null,
-        isActive: true,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { isBanned: true },
-    });
-
-    await recordAuditLog({
-      adminId: auth.userId,
-      actionType: 'create_ban',
-      targetType: 'user',
-      targetId: userId,
-      details: { reason, banType, expiresAt },
-      ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-    });
-
-    return success({
-      id: ban.id,
-      userId: ban.userId,
-      username: ban.user.username,
-      reason: ban.reason,
-      banType: ban.banType,
-      expiresAt: ban.expiresAt?.toISOString() ?? null,
-      isActive: ban.isActive,
-      createdAt: ban.createdAt.toISOString(),
-    }, '用户已被封禁');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+    return success(ban, '用户已被封禁');
+  },
+});
 
 // PUT /api/v1/admin/bans - 解封用户
-export async function PUT(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PUT = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    userId: z.string(),
+    unbanReason: z.string(),
+  }),
+  async handler({ req, user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { userId, unbanReason } = body;
 
-    if (!userId || !unbanReason) {
-      return errors.badRequest('缺少必填字段：userId, unbanReason');
-    }
-
+    // 查找目标用户的活跃封禁记录以获取 banId
     const existingBan = await prisma.userBan.findFirst({
-      where: {
-        userId,
-        isActive: true,
-      },
+      where: { userId, isActive: true },
+      select: { id: true },
     });
 
     if (!existingBan) {
       return errors.notFound('未找到该用户的活跃封禁记录');
     }
 
-    await prisma.userBan.update({
-      where: { id: existingBan.id },
-      data: {
-        isActive: false,
-        unbanReason,
-        unbannedAt: new Date(),
-        unbannedBy: auth.userId,
-      },
-    });
+    const ipAddress =
+      req.headers.get('x-forwarded-for') ||
+      req.headers.get('x-real-ip') ||
+      undefined;
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: { isBanned: false },
-    });
+    const result = await BanService.revoke(
+      existingBan.id,
+      user!.id,
+      unbanReason,
+      ipAddress,
+    );
 
-    await recordAuditLog({
-      adminId: auth.userId,
-      actionType: 'remove_ban',
-      targetType: 'user',
-      targetId: userId,
-      details: { unbanReason, previousBanId: existingBan.id },
-      ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
-    });
-
-    return success({ userId }, '用户已解封');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+    return success(result, '用户已解封');
+  },
+});
 
 // DELETE /api/v1/admin/bans - 删除封禁记录
-export async function DELETE(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const sp = req.nextUrl.searchParams;
@@ -365,14 +283,11 @@ export async function DELETE(req: NextRequest): Promise<Response> {
       return errors.notFound('封禁记录');
     }
 
-    // 使用事务保证"删除记录 + 解封用户"的原子性
     await prisma.$transaction(async (tx) => {
-      // 先删除封禁记录
       await tx.userBan.delete({
         where: { id: banId },
       });
 
-      // 再解封用户
       if (ban.isActive) {
         await tx.user.update({
           where: { id: ban.userId },
@@ -381,8 +296,9 @@ export async function DELETE(req: NextRequest): Promise<Response> {
       }
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'delete_ban_record',
       targetType: 'user_ban',
       targetId: banId,
@@ -391,7 +307,5 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     });
 
     return success({ banId }, '封禁记录已删除');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

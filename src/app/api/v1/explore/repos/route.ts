@@ -4,24 +4,19 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/explore/repos - 获取推荐仓库列表
  */
 
-import { NextRequest } from 'next/server';
-import { success, paginated, error, handlePrismaError } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { paginated } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { parsePagination, buildPaginationMeta } from '@/lib/api/v1/pagination';
 
-export async function GET(
-  req: NextRequest
-): Promise<Response> {
-  try {
+export const GET = defineRoute({
+  auth: 'optional',
+  async handler({ req, user }) {
     const { searchParams } = new URL(req.url);
     const { page, size, skip } = parsePagination(searchParams);
     const sort = searchParams.get('sort') || 'stars'; // stars | forks | recent | trending
     const language = searchParams.get('language') || undefined;
     const keyword = searchParams.get('q') || undefined;
-
-    // 获取当前用户（如果有）
-    const auth = await getAuthUser(req);
 
     // 构建查询条件
     const where: Record<string, unknown> = {
@@ -29,9 +24,9 @@ export async function GET(
     };
 
     // 排除当前用户已屏蔽的用户仓库（如果已登录）
-    if (auth) {
+    if (user) {
       const blockedUserIds = await prisma.userBlock.findMany({
-        where: { blockerId: auth.userId },
+        where: { blockerId: user.id },
         select: { blockedId: true },
       });
       if (blockedUserIds.length > 0) {
@@ -132,7 +127,5 @@ export async function GET(
     }));
 
     return paginated(items, buildPaginationMeta(total, page, size));
-  } catch (err) {
-    return handlePrismaError(err, '获取仓库列表失败');
-  }
-}
+  },
+});

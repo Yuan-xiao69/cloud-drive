@@ -43,17 +43,28 @@ let redisClient: RedisClientInterface | null = null;
 
 async function getRedisClient(): Promise<RedisClientInterface> {
   if (redisClient) return redisClient;
-  
+
+  // 优先复用项目统一 Redis 客户端
+  try {
+    const { getRedisClient: getSharedRedis } = await import('./redis-client');
+    const shared = await getSharedRedis();
+    if (shared) {
+      redisClient = shared as unknown as RedisClientInterface;
+      return redisClient;
+    }
+  } catch { /* 降级到独立连接 */ }
+
   const { default: Redis } = await import('ioredis');
   const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-  const client = new Redis(redisUrl, { 
+  const client = new Redis(redisUrl, {
     maxRetriesPerRequest: 3,
-    lazyConnect: true 
+    lazyConnect: true
   });
-  
-  // 将 ioredis 实例断言为我们的接口类型（仅包含需要的方法）
+
+  await client.connect();
+
   redisClient = client as unknown as RedisClientInterface;
-  
+
   return redisClient;
 }
 

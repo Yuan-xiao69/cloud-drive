@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Button, Card, Input, PageLayout, PageLayoutContent } from '@/components/design';
 
 interface RepoInfo {
   id: string;
@@ -44,21 +46,29 @@ function formatFileSize(bytes: number): string {
 function formatRelativeTime(date: Date): string {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  const weeks = Math.floor(days / 7);
-  const months = Math.floor(days / 30);
-  const years = Math.floor(days / 365);
+  const isPast = diff >= 0;
+  const absSeconds = Math.floor(Math.abs(diff) / 1000);
+  const absMinutes = Math.floor(absSeconds / 60);
+  const absHours = Math.floor(absMinutes / 60);
+  const absDays = Math.floor(absHours / 24);
+  const absWeeks = Math.floor(absDays / 7);
+  const absMonths = Math.floor(absDays / 30);
+  const absYears = Math.floor(absDays / 365);
 
-  if (seconds < 60) return '刚刚';
-  if (minutes < 60) return `${minutes}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  if (days < 7) return `${days}天前`;
-  if (weeks < 4) return `${weeks}周前`;
-  if (months < 12) return `${months}个月前`;
-  return `${years}年前`;
+  if (isPast) {
+    if (absSeconds < 60) return '刚刚';
+    if (absMinutes < 60) return `${absMinutes}分钟前`;
+    if (absHours < 24) return `${absHours}小时前`;
+    if (absDays < 7) return `${absDays}天前`;
+    if (absWeeks < 4) return `${absWeeks}周前`;
+    if (absMonths < 12) return `${absMonths}个月前`;
+    return `${absYears}年前`;
+  }
+  if (absSeconds < 60) return '即将';
+  if (absMinutes < 60) return `${absMinutes}分钟后过期`;
+  if (absHours < 24) return `${absHours}小时后过期`;
+  if (absDays < 7) return `${absDays}天后过期`;
+  return date.toLocaleDateString('zh-CN');
 }
 
 function getFileIcon(name: string, type: string) {
@@ -68,7 +78,7 @@ function getFileIcon(name: string, type: string) {
   const iconMap: Record<string, string> = {
     // 图片
     jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', webp: '🖼️', svg: '🖼️',
-    // 代码
+    // 文件
     js: '📜', ts: '📜', jsx: '📜', tsx: '📜', py: '📜', java: '📜', cpp: '📜', c: '📜',
     // 文档
     md: '📝', txt: '📝', doc: '📝', docx: '📝', pdf: '📄',
@@ -102,15 +112,18 @@ export default function SharePage() {
     setCurrentPath(path);
 
     try {
-      const url = new URL(`/api/share/${token}`, window.location.origin);
+      const url = new URL(`/api/v1/share/${token}`, window.location.origin);
       if (path) url.searchParams.set('path', path);
       if (pwd) url.searchParams.set('password', pwd);
 
       const res = await fetch(url.toString());
       const result = await res.json();
 
-      if (!result.success) {
-        if (result.code === 'PASSWORD_REQUIRED') {
+      // 后端 API 返回格式: { code: number, message: string, data: any }
+      // code 为 200/201 表示成功
+      if (result.code !== 200 && result.code !== 201) {
+        // 检查是否需要密码（后端返回 code=200 但 data.requiresPassword=true）
+        if (result.data?.requiresPassword) {
           setNeedsPassword(true);
           setLoading(false);
           return;
@@ -136,14 +149,14 @@ export default function SharePage() {
     setPasswordError(false);
 
     try {
-      const res = await fetch(`/api/v1/share/${token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
+      // 后端使用 GET 方法，密码通过 query 参数传递
+      const url = new URL(`/api/v1/share/${token}`, window.location.origin);
+      url.searchParams.set('password', password);
+      const res = await fetch(url.toString());
       const result = await res.json();
 
-      if (!result.success) {
+      // 后端 API 返回格式: { code: number, message: string, data: any }
+      if (result.code !== 200 && result.code !== 201) {
         setPasswordError(true);
         return;
       }
@@ -168,69 +181,63 @@ export default function SharePage() {
   // 密码输入页面
   if (needsPassword) {
     return (
-      <div className="min-h-screen bg-[var(--color-canvas-default)]">
-        <div className="container">
-          <div className="share-password-container">
-            <div className="share-password-box">
-              <div className="share-password-icon">🔒</div>
-              <h1 className="share-password-title">此链接受密码保护</h1>
-              <p className="share-password-desc">请输入访问密码</p>
+      <PageLayout containerWidth="wide"><PageLayoutContent>
+        <div className="max-w-lg mx-auto p-6 flex items-center justify-center min-h-[60vh]">
+          <Card className="p-8 max-w-sm w-full">
+            <div className="text-center text-4xl mb-4">🔒</div>
+            <h1 className="text-xl font-semibold text-center mb-2 text-[var(--ds-text-primary)]">此链接受密码保护</h1>
+            <p className="text-center text-[var(--ds-text-secondary)] mb-6 text-sm">请输入访问密码</p>
 
-              <form onSubmit={handlePasswordSubmit} className="share-password-form">
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="输入访问密码"
-                  className={`share-password-input ${passwordError ? 'error' : ''}`}
-                  autoFocus
-                />
-                {passwordError && (
-                  <p className="share-password-error">密码错误，请重试</p>
-                )}
-                <button type="submit" className="share-password-btn">
-                  验证密码
-                </button>
-              </form>
-            </div>
-          </div>
+            <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="输入访问密码"
+                state={passwordError ? 'error' : 'normal'}
+              />
+              {passwordError && (
+                <p className="text-[var(--ds-danger-default)] text-sm">密码错误，请重试</p>
+              )}
+              <Button type="submit" variant="primary" block>
+                验证密码
+              </Button>
+            </form>
+          </Card>
         </div>
-      </div>
+      </PageLayoutContent></PageLayout>
     );
   }
 
   // 错误页面
   if (error) {
     return (
-      <div className="min-h-screen bg-[var(--color-canvas-default)]">
-        <div className="container">
-          <div className="share-error-container">
-            <div className="share-error-icon">⚠️</div>
-            <h1 className="share-error-title">无法访问此链接</h1>
-            <p className="share-error-desc">{error}</p>
-            <button
-              className="share-error-btn"
-              onClick={() => router.push('/')}
-            >
+      <PageLayout containerWidth="wide"><PageLayoutContent>
+        <div className="max-w-lg mx-auto p-6">
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="text-5xl mb-4">⚠️</div>
+            <h1 className="text-2xl font-semibold mb-2 text-[var(--ds-text-primary)]">无法访问此链接</h1>
+            <p className="text-[var(--ds-text-secondary)] mb-6">{error}</p>
+            <Button variant="primary" onClick={() => router.push('/')}>
               返回首页
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </PageLayoutContent></PageLayout>
     );
   }
 
   // 加载状态
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--color-canvas-default)]">
-        <div className="container">
-          <div className="share-loading">
-            <div className="share-loading-spinner"></div>
-            <p>加载中...</p>
+      <PageLayout containerWidth="wide"><PageLayoutContent>
+        <div className="max-w-lg mx-auto p-6">
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-8 h-8 border-4 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] rounded-full animate-spin"></div>
+            <p className="text-[var(--ds-text-secondary)] text-sm">加载中...</p>
           </div>
         </div>
-      </div>
+      </PageLayoutContent></PageLayout>
     );
   }
 
@@ -239,23 +246,23 @@ export default function SharePage() {
   const isFile = !!data.item;
 
   return (
-    <div className="min-h-screen bg-[var(--color-canvas-default)]">
+    <PageLayout containerWidth="wide"><PageLayoutContent>
       {/* Header */}
-      <header className="share-header">
-        <div className="container">
-          <div className="share-header-content">
-            <div className="share-repo-info">
-              <span className="share-repo-icon">📦</span>
-              <a href={`/${data.repo.owner.username}`} className="share-owner-link">
+      <header className="border-b border-[var(--ds-border-default)] bg-[var(--ds-surface-subtle)] py-3">
+        <div className="max-w-lg mx-auto px-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-base">📦</span>
+              <Link href={`/${data.repo.owner.username}`} className="text-[var(--ds-accent-default)] hover:underline">
                 {data.repo.owner.username}
-              </a>
-              <span className="share-repo-sep">/</span>
-              <span className="share-repo-name">{data.repo.name}</span>
+              </Link>
+              <span className="text-[var(--ds-text-secondary)]">/</span>
+              <span className="font-semibold text-[var(--ds-text-primary)]">{data.repo.name}</span>
             </div>
-            <div className="share-meta">
-              <span className="share-badge">分享链接</span>
+            <div className="flex items-center gap-3">
+              <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)] border border-[var(--ds-accent-muted)]">分享链接</span>
               {data.expiresAt && (
-                <span className="share-expires">
+                <span className="text-xs text-[var(--ds-text-secondary)]">
                   过期时间: {formatRelativeTime(new Date(data.expiresAt))}
                 </span>
               )}
@@ -264,66 +271,66 @@ export default function SharePage() {
         </div>
       </header>
 
-      <div className="container">
-        <div className="share-content">
+      <div className="max-w-lg mx-auto p-6">
+        <div className="py-6">
           {/* Breadcrumb */}
-          <div className="share-breadcrumb">
-            <button
-              className="share-breadcrumb-item"
-              onClick={() => handleNavigate('')}
-            >
+          <div className="flex items-center gap-1 text-sm mb-4">
+            <Button variant="ghost" onClick={() => handleNavigate('')}>
               根目录
-            </button>
+            </Button>
             {data.path && data.path.split('/').map((part, index, arr) => (
-              <span key={index} className="share-breadcrumb-item">
-                <span className="share-breadcrumb-sep">/</span>
-                <button
-                  className="share-breadcrumb-link"
+              <span key={index} className="flex items-center">
+                <span className="text-[var(--ds-text-secondary)] mx-0.5">/</span>
+                <Button
+                  variant="ghost"
                   onClick={() => handleNavigate(arr.slice(0, index + 1).join('/'))}
                 >
                   {part}
-                </button>
+                </Button>
               </span>
             ))}
           </div>
 
           {/* 文件/文件夹列表 */}
           {isFile ? (
-            <div className="share-file-viewer">
-              <div className="share-file-header">
-                <span className="share-file-icon">{getFileIcon(data.item!.name, 'file')}</span>
-                <span className="share-file-name">{data.item!.name}</span>
-                <span className="share-file-size">{formatFileSize(data.item!.size || 0)}</span>
+            <Card>
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--ds-border-default)] bg-[var(--ds-surface-subtle)]">
+                <span className="text-xl">{getFileIcon(data.item!.name, 'file')}</span>
+                <span className="font-semibold text-[var(--ds-text-primary)] flex-1 min-w-0 truncate">{data.item!.name}</span>
+                <span className="text-sm text-[var(--ds-text-secondary)] flex-shrink-0">{formatFileSize(data.item!.size || 0)}</span>
               </div>
-              <div className="share-file-content">
+              <div className="p-4 overflow-auto">
                 {data.item!.content ? (
-                  <pre className="code-raw-view"><code>{data.item!.content}</code></pre>
+                  <pre className="text-sm font-mono whitespace-pre-wrap bg-[var(--ds-surface-subtle)] p-4 rounded"><code>{data.item!.content}</code></pre>
                 ) : (
-                  <div className="share-file-empty">暂无内容预览</div>
+                  <div className="text-center py-10 text-[var(--ds-text-secondary)]">暂无内容预览</div>
                 )}
               </div>
-            </div>
+            </Card>
           ) : (
-            <div className="share-file-list">
+            <Card>
               {/* 目录头部 */}
-              <div className="share-list-header">
-                <span className="share-list-name">名称</span>
-                <span className="share-list-meta">修改时间</span>
-                <span className="share-list-size">大小</span>
+              <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--ds-border-default)] bg-[var(--ds-surface-subtle)] text-sm font-semibold text-[var(--ds-text-primary)]">
+                <span className="flex-1">名称</span>
+                <span className="w-36 text-right">修改时间</span>
+                <span className="w-20 text-right">大小</span>
               </div>
 
               {/* 返回上级 */}
               {data.path && (
                 <div
-                  className="share-list-item share-list-item-parent"
+                  role="button"
+                  tabIndex={0}
+                  className="flex items-center gap-3 px-4 py-2 border-b border-[var(--ds-border-default)] cursor-pointer hover:bg-[var(--ds-surface-subtle)] transition-colors text-[var(--ds-text-secondary)]"
                   onClick={() => handleNavigate(data.path.split('/').slice(0, -1).join('/'))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleNavigate(data.path.split('/').slice(0, -1).join('/')); }}
                 >
-                  <div className="share-list-item-main">
-                    <span className="share-item-icon">📁</span>
-                    <span className="share-item-name">..</span>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-lg flex-shrink-0">📁</span>
+                    <span className="truncate">..</span>
                   </div>
-                  <span className="share-item-time">-</span>
-                  <span className="share-item-size">-</span>
+                  <span className="w-36 text-sm text-[var(--ds-text-secondary)] text-right flex-shrink-0">-</span>
+                  <span className="w-20 text-sm text-[var(--ds-text-secondary)] text-right flex-shrink-0">-</span>
                 </div>
               )}
 
@@ -331,29 +338,32 @@ export default function SharePage() {
               {data.items?.map((item) => (
                 <div
                   key={item.id}
-                  className="share-list-item"
+                  role="button"
+                  tabIndex={0}
+                  className="flex items-center gap-3 px-4 py-2 border-b border-[var(--ds-border-default)] last:border-b-0 cursor-pointer hover:bg-[var(--ds-surface-subtle)] transition-colors"
                   onClick={() => handleItemClick(item)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleItemClick(item); }}
                 >
-                  <div className="share-list-item-main">
-                    <span className="share-item-icon">{getFileIcon(item.name, item.type)}</span>
-                    <span className="share-item-name">{item.name}</span>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-lg flex-shrink-0">{getFileIcon(item.name, item.type)}</span>
+                    <span className="truncate text-[var(--ds-text-primary)]">{item.name}</span>
                   </div>
-                  <span className="share-item-time">
+                  <span className="w-36 text-sm text-[var(--ds-text-secondary)] text-right flex-shrink-0">
                     {formatRelativeTime(new Date(item.updatedAt))}
                   </span>
-                  <span className="share-item-size">
+                  <span className="w-20 text-sm text-[var(--ds-text-secondary)] text-right flex-shrink-0">
                     {item.type === 'dir' ? '-' : formatFileSize(item.size || 0)}
                   </span>
                 </div>
               ))}
 
               {(!data.items || data.items.length === 0) && (
-                <div className="share-list-empty">此目录为空</div>
+                <div className="text-center py-8 text-[var(--ds-text-secondary)]">此目录为空</div>
               )}
-            </div>
+            </Card>
           )}
         </div>
       </div>
-    </div>
+    </PageLayoutContent></PageLayout>
   );
 }

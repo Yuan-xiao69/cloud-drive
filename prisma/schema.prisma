@@ -7,6 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Domain: user
 model User {
   id                 String               @id @default(cuid())
   uid                String?              @map("uid") @db.VarChar(9) // 9位顺序编号，超级管理员uid为"000000000"
@@ -15,6 +16,7 @@ model User {
   passwordHash       String               @map("password_hash") @db.VarChar(255)
   bio                String?
   avatarUrl          String?              @map("avatar_url") @db.VarChar(2000)
+  avatarVersion      Int                  @default(1) @map("avatar_version")
   role               String               @default("user") @db.VarChar(20)
   isBanned           Boolean              @default(false) @map("is_banned")
   mfaEnabled         Boolean              @default(false) @map("mfa_enabled")
@@ -27,6 +29,7 @@ model User {
   notifyReply        Boolean              @default(true) @map("notify_reply")
   deletedAt          DateTime?            @map("deleted_at")
   isSystem           Boolean              @default(false) @map("is_system")
+  tokenVersion       Int                  @default(0) @map("token_version")
   auditLogs          AdminAuditLog[]
   discussions        Discussion[]
   discussionComments DiscussionComment[]
@@ -59,9 +62,14 @@ model User {
   blockedUsers       UserBlock[]          @relation("Blocker")
   apiKeys            ApiKey[]
   webhooks           Webhook[]
+  subscriptions      Subscriber[]         @relation("SubscriberUser")
+  assignedIssues     Issue[]              @relation("IssueAssignee")
+  collaborations     RepoCollaborator[]   @relation("CollaboratorUser")
+  invitedCollaborators RepoCollaborator[] @relation("CollaboratorInviter")
 }
 
 // User Ban Table - 用户封禁记录
+/// Domain: user
 model UserBan {
   id          String    @id @default(cuid())
   userId      String    @map("user_id")
@@ -84,6 +92,7 @@ model UserBan {
   @@index([expiresAt])
 }
 
+/// Domain: system
 model Notification {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
@@ -103,6 +112,7 @@ model Notification {
   @@index([priority])
 }
 
+/// Domain: repo
 model Repository {
   id            String          @id @default(cuid())
   ownerId       String          @map("owner_id")
@@ -136,11 +146,13 @@ model Repository {
   fileChunks    RepoFileChunk[]
   forkRequests  ForkRequest[]
   webhooks      Webhook[]       @relation("RepoWebhooks")
+  collaborators RepoCollaborator[]
 
   @@unique([ownerId, name])
   @@index([ownerId])
 }
 
+/// Domain: repo
 model Branch {
   id        String     @id @default(cuid())
   repoId    String     @map("repo_id")
@@ -155,6 +167,7 @@ model Branch {
   @@index([repoId])
 }
 
+/// Domain: repo
 model RepoItem {
   id          String       @id @default(cuid())
   repoId      String       @map("repo_id")
@@ -162,7 +175,6 @@ model RepoItem {
   parentId    String?      @map("parent_id")
   name        String       @db.VarChar(255)
   type        String       @db.VarChar(10)
-  content     String?
   fileHash    String?      @map("file_hash") @db.VarChar(64)
   fileSize    BigInt       @default(0) @map("file_size")
   mimeType    String?      @map("mime_type") @db.VarChar(100)
@@ -189,11 +201,12 @@ model RepoItem {
 }
 
 // 文件版本历史 - 记录文件每次修改的快照
+/// Domain: repo
 model FileVersion {
   id          String    @id @default(cuid())
   fileId      String    @map("file_id") // 关联的 RepoItem ID
   version     Int       @default(1) // 版本号
-  content     String?  @db.Text // 版本内容快照（可为 null 表示内容未变更）
+  storagePath String?   @map("storage_path") @db.VarChar(500) // 版本快照在 MinIO 的存储路径
   fileHash    String?   @map("file_hash") @db.VarChar(64) // 内容哈希
   fileSize    BigInt    @default(0) @map("file_size") // 文件大小
   changeSize  BigInt    @default(0) @map("change_size") // 相比上一版本的变化大小（正数增加，负数减少）
@@ -207,6 +220,7 @@ model FileVersion {
 }
 
 // 分片上传记录 - 存储大文件分片信息
+/// Domain: repo
 model RepoFileChunk {
   id          String     @id @default(cuid())
   repoId      String     @map("repo_id")
@@ -235,6 +249,7 @@ model RepoFileChunk {
   @@index([expiresAt])
 }
 
+/// Domain: repo
 model Star {
   id        String     @id @default(cuid())
   userId    String     @map("user_id")
@@ -246,6 +261,7 @@ model Star {
   @@unique([userId, repoId])
 }
 
+/// Domain: repo
 model Watcher {
   id        String     @id @default(cuid())
   userId    String     @map("user_id")
@@ -257,15 +273,21 @@ model Watcher {
   @@unique([userId, repoId])
 }
 
+/// Domain: social
 model Discussion {
   id        String              @id @default(cuid())
   authorId  String              @map("author_id")
   title     String              @db.VarChar(200)
   content   String
   category  String              @db.VarChar(20)
+  // qa(问答) / share(分享) / suggestion(建议) / announce(公告) / general(闲聊)
   status    String              @default("open") @db.VarChar(20)
   viewCount Int                 @default(0) @map("view_count")
   isDeleted Boolean             @default(false) @map("is_deleted")
+  tags      String[]            @default([])
+  // 自由标签，如 ["经验分享", "最佳实践"]
+  isWiki    Boolean             @default(false) @map("is_wiki")
+  // 允许非作者编辑（类 Wiki 模式）
   createdAt DateTime            @default(now()) @map("created_at")
   updatedAt DateTime            @updatedAt @map("updated_at")
   author    User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
@@ -276,6 +298,7 @@ model Discussion {
   @@index([category])
 }
 
+/// Domain: social
 model DiscussionComment {
   id           String              @id @default(cuid())
   discussionId String              @map("discussion_id")
@@ -295,6 +318,7 @@ model DiscussionComment {
 }
 
 // DiscussionLike - 讨论点赞
+/// Domain: social
 model DiscussionLike {
   id           String     @id @default(cuid())
   discussionId String     @map("discussion_id")
@@ -310,6 +334,7 @@ model DiscussionLike {
   @@index([userId])
 }
 
+/// Domain: social
 model Report {
   id          String    @id @default(cuid())
   reporterId  String    @map("reporter_id")
@@ -327,6 +352,7 @@ model Report {
   @@index([status])
 }
 
+/// Domain: system
 model AdminAuditLog {
   id         String   @id @default(cuid())
   adminId    String   @map("admin_id")
@@ -344,6 +370,7 @@ model AdminAuditLog {
   @@index([createdAt])
 }
 
+/// Domain: user
 model LoginHistory {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
@@ -356,6 +383,7 @@ model LoginHistory {
   @@index([userId, createdAt])
 }
 
+/// Domain: user
 model PasswordReset {
   id        String   @id @default(cuid())
   userId    String   @map("user_id") @db.VarChar(100)
@@ -370,6 +398,7 @@ model PasswordReset {
 }
 
 // System Config Table
+/// Domain: system
 model SystemConfig {
   key         String   @id
   value       String   @db.Text
@@ -381,25 +410,37 @@ model SystemConfig {
 }
 
 // Issue model
+/// Domain: social
 model Issue {
-  id           String         @id @default(cuid())
-  repositoryId String         @map("repository_id")
-  authorId     String         @map("author_id")
-  title        String         @db.VarChar(255)
-  content      String
-  status       String         @default("open") @db.VarChar(20)
-  isDeleted    Boolean        @default(false) @map("is_deleted")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
-  repository   Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  author       User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  comments     IssueComment[]
-  labels       IssueLabel[]
+  id             String         @id @default(cuid())
+  repositoryId   String         @map("repository_id")
+  authorId       String         @map("author_id")
+  assigneeId     String?        @map("assignee_id")
+  title          String         @db.VarChar(255)
+  content        String
+  status         String         @default("open") @db.VarChar(20)
+  priority       String         @default("normal") @db.VarChar(20)
+  // urgent / high / normal / low
+  dueDate        DateTime?      @map("due_date")
+  relatedFileId  String?        @map("related_file_id")
+  templateType   String?        @map("template_type") @db.VarChar(20)
+  // bug / feature / question
+  isDeleted      Boolean        @default(false) @map("is_deleted")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  repository     Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  author         User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  assignee       User?          @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  comments       IssueComment[]
+  labels         IssueLabel[]
 
   @@index([repositoryId, status])
   @@index([authorId])
+  @@index([assigneeId])
+  @@index([priority])
 }
 
+/// Domain: social
 model IssueComment {
   id        String   @id @default(cuid())
   issueId   String   @map("issue_id")
@@ -414,6 +455,7 @@ model IssueComment {
   @@index([issueId, createdAt])
 }
 
+/// Domain: social
 model IssueLabel {
   id      String @id @default(cuid())
   issueId String @map("issue_id")
@@ -425,6 +467,7 @@ model IssueLabel {
 }
 
 // PullRequest model
+/// Domain: social
 model PullRequest {
   id           String               @id @default(cuid())
   repositoryId String               @map("repository_id")
@@ -447,6 +490,7 @@ model PullRequest {
   @@index([authorId])
 }
 
+/// Domain: social
 model PullRequestComment {
   id            String      @id @default(cuid())
   pullRequestId String      @map("pull_request_id")
@@ -462,6 +506,7 @@ model PullRequestComment {
 }
 
 // 用户操作日志 - 记录所有用户操作
+/// Domain: system
 model UserActivityLog {
   id         String   @id @default(cuid())
   userId     String   @map("user_id")
@@ -485,6 +530,7 @@ model UserActivityLog {
 }
 
 // Hidden Content Table - 被隐藏的内容
+/// Domain: social
 model HiddenContent {
   id            String    @id @default(cuid())
   targetType    String    @map("target_type") @db.VarChar(20) // repository, discussion, issue, pullrequest
@@ -505,6 +551,7 @@ model HiddenContent {
 
 // User Penalty Table - 用户处罚记录
 // 处罚类型：mute(禁言)、repo_limit(仓库限制)、storage_limit(存储限制)
+/// Domain: user
 model UserPenalty {
   id           String    @id @default(cuid())
   userId       String    @map("user_id") // 被处罚用户
@@ -520,6 +567,8 @@ model UserPenalty {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   user         User      @relation("PenaltyUser", fields: [userId], references: [id], onDelete: Cascade)
+  templateId   String?   @map("template_id")
+  template     PenaltyTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   applier      User      @relation("PenaltyAdmin", fields: [appliedBy], references: [id], onDelete: Cascade)
   notes        PenaltyNote[]
 
@@ -530,6 +579,7 @@ model UserPenalty {
 }
 
 // Penalty Template Table - 处罚模板
+/// Domain: user
 model PenaltyTemplate {
   id              String   @id @default(cuid())
   name            String   @db.VarChar(100) // 模板名称
@@ -542,12 +592,14 @@ model PenaltyTemplate {
   createdBy       String   @map("created_by") // 创建人
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
+  penalties       UserPenalty[]
 
   @@index([penaltyType])
   @@index([isActive])
 }
 
 // Penalty Note Table - 处罚备注
+/// Domain: user
 model PenaltyNote {
   id        String   @id @default(cuid())
   penaltyId String   @map("penalty_id") // 关联的处罚ID
@@ -560,6 +612,7 @@ model PenaltyNote {
 }
 
 // Appeal Table - 用户申诉记录
+/// Domain: system
 model Appeal {
   id         String    @id @default(cuid())
   userId     String    @map("user_id") // 申诉用户
@@ -582,6 +635,7 @@ model Appeal {
 }
 
 // Announcement Table - 系统公告
+/// Domain: system
 model Announcement {
   id          String    @id @default(cuid())
   title       String    @db.VarChar(200) // 标题
@@ -602,6 +656,7 @@ model Announcement {
 }
 
 // SecurityEvent Table - 安全事件记录
+/// Domain: system
 model SecurityEvent {
   id         String    @id @default(cuid())
   eventType  String    @map("event_type") @db.VarChar(50) // login_failed, brute_force, suspicious_ip, rate_limit, etc.
@@ -613,7 +668,8 @@ model SecurityEvent {
   status     String    @default("open") @db.VarChar(20) // open, investigated, resolved, false_positive
   resolvedAt DateTime? @map("resolved_at")
   resolvedBy String?   @map("resolved_by")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  blacklists  IPBlacklist[]
+  createdAt   DateTime  @default(now()) @map("created_at")
 
   @@index([eventType])
   @@index([severity])
@@ -623,6 +679,7 @@ model SecurityEvent {
 }
 
 // IPBlacklist Table - IP 黑名单
+/// Domain: system
 model IPBlacklist {
   id        String    @id @default(cuid())
   ipAddress String    @map("ip_address") @db.VarChar(45)
@@ -635,12 +692,15 @@ model IPBlacklist {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
+  event       SecurityEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
   @@index([ipAddress])
   @@index([isActive])
   @@index([expiresAt])
 }
 
 // ShareLink Table - 分享链接
+/// Domain: repo
 model ShareLink {
   id        String  @id @default(cuid())
   token     String  @unique @map("token") @db.VarChar(64)
@@ -671,6 +731,7 @@ model ShareLink {
 }
 
 // ForkRequest - Fork 申请记录
+/// Domain: repo
 model ForkRequest {
   id          String    @id @default(cuid())
   repoId      String    @map("repo_id")
@@ -697,6 +758,7 @@ model ForkRequest {
 }
 
 // UserFollow - 用户关注关系
+/// Domain: user
 model UserFollow {
   id          String   @id @default(cuid())
   followerId  String   @map("follower_id") // 关注者
@@ -712,7 +774,26 @@ model UserFollow {
   @@index([followingId])
 }
 
+// Subscriber Table - 内容订阅关系
+// 用户主动订阅某个 Issue/PR/Discussion/Repository 的通知
+/// Domain: user
+model Subscriber {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  targetType String   @db.VarChar(20) // 目标类型：issue | pull_request | discussion | repository
+  targetId   String   @map("target_id") // 目标 ID
+  reason     String   @default("manual") @db.VarChar(20) // 订阅原因：author | mentioned | manual | watching
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation("SubscriberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@map("subscriber")
+}
+
 // User Block Table - 用户拉黑关系
+/// Domain: user
 model UserBlock {
   id        String   @id @default(cuid())
   blockerId String   @map("blocker_id")   // 拉黑者
@@ -727,7 +808,30 @@ model UserBlock {
   @@index([blockedId])
 }
 
+// Repo Collaborator Table - 仓库协作者
+/// Domain: repo
+model RepoCollaborator {
+  id         String    @id @default(cuid())
+  repoId     String    @map("repo_id")
+  userId     String    @map("user_id")
+  role       String    @default("write")
+  // admin / write / triage / read
+  invitedBy  String    @map("invited_by")
+  acceptedAt DateTime? @map("accepted_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  repo    Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  user    User       @relation("CollaboratorUser", fields: [userId], references: [id], onDelete: Cascade)
+  inviter User       @relation("CollaboratorInviter", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@unique([repoId, userId])
+  @@index([repoId])
+  @@index([userId])
+  @@map("repo_collaborator")
+}
+
 // API Key Table - 用户 API 密钥
+/// Domain: user
 model ApiKey {
   id           String    @id @default(cuid())
   userId       String    @map("user_id")
@@ -751,6 +855,7 @@ model ApiKey {
 }
 
 // Webhook Table - Webhook 配置
+/// Domain: repo
 model Webhook {
   id          String    @id @default(cuid())
   repoId      String?   @map("repo_id") // 关联仓库（null=全局 webhook）
@@ -776,6 +881,7 @@ model Webhook {
 }
 
 // WebhookDelivery Table - Webhook 投递记录
+/// Domain: repo
 model WebhookDelivery {
   id          String    @id @default(cuid())
   webhookId   String    @map("webhook_id")
@@ -792,4 +898,23 @@ model WebhookDelivery {
 
   @@index([webhookId])
   @@index([createdAt])
+}
+
+// AsyncJob Table - 异步任务队列（数据库轮询模式，替代内存事件总线）
+/// Domain: system
+model AsyncJob {
+  id         String   @id @default(cuid())
+  type       String   @db.VarChar(50) // 任务类型：send_notification, record_audit, fire_webhook, create_version
+  payload    Json     // 任务负载数据
+  status     String   @default("pending") @db.VarChar(20) // pending, processing, done, failed
+  runAt      DateTime @default(now()) @map("run_at") // 计划执行时间
+  retryCount Int      @default(0) @map("retry_count") // 已重试次数
+  maxRetries Int      @default(3) @map("max_retries") // 最大重试次数
+  error      String?  @db.Text // 失败时的错误信息
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([status, runAt])
+  @@index([type])
+  @@map("async_job")
 }

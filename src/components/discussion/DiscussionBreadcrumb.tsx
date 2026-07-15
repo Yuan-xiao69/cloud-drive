@@ -25,7 +25,7 @@ export default function DiscussionBreadcrumb({
   ]);
 
   return (
-    <div className="discussion-breadcrumb">
+    <div className="py-2">
       <Breadcrumb items={breadcrumbs} maxLength={40} />
     </div>
   );

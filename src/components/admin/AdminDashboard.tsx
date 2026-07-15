@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Button, Card } from '@/components/design';
 import {
   DashboardIcon,
   UsersIcon,
@@ -25,8 +26,8 @@ export default function AdminDashboard({
 }: AdminDashboardProps) {
   if (isLoading) {
     return (
-      <div className="loading-container">
-        <div className="loading-spinner" />
+      <div className="flex flex-col items-center gap-3 py-8 text-[var(--ds-text-secondary)]">
+        <div className="w-5 h-5 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] rounded-full animate-spin" />
         <p>加载中...</p>
       </div>
     );
@@ -34,107 +35,123 @@ export default function AdminDashboard({
 
   if (!dashboardData) {
     return (
-      <div className="empty-state">
+      <div className="flex flex-col items-center py-12 text-[var(--ds-text-secondary)]">
         <DashboardIcon />
-        <p>暂无数据</p>
-        <button className="btn btn-primary" onClick={onRefresh}>
+        <p className="mt-2">暂无数据</p>
+        <Button variant="primary" className="mt-4" onClick={onRefresh}>
           重新加载
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="dashboard-content">
+    <div className="flex flex-col gap-6">
       {/* Stats Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card variant="subtle" padding="md" className="flex items-center gap-3">
+          <div className="text-[var(--ds-text-secondary)]">
             <UsersIcon />
           </div>
-          <div className="stat-info">
-            <span className="stat-value">{dashboardData.totalUsers.toLocaleString()}</span>
-            <span className="stat-label">总用户数</span>
+          <div className="flex flex-col">
+            <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{dashboardData.totalUsers.toLocaleString()}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">总用户数</span>
           </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon highlight">
+        </Card>
+        <Card variant="subtle" padding="md" className="flex items-center gap-3">
+          <div className="text-[var(--ds-accent-default)]">
             <UsersIcon />
           </div>
-          <div className="stat-info">
-            <span className="stat-value">{dashboardData.newUsersToday.toLocaleString()}</span>
-            <span className="stat-label">今日新用户</span>
+          <div className="flex flex-col">
+            <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{dashboardData.newUsersToday.toLocaleString()}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">今日新用户</span>
           </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">
+        </Card>
+        <Card variant="subtle" padding="md" className="flex items-center gap-3">
+          <div className="text-[var(--ds-text-secondary)]">
             <RepoIcon />
           </div>
-          <div className="stat-info">
-            <span className="stat-value">{dashboardData.totalPublicRepos.toLocaleString()}</span>
-            <span className="stat-label">公开仓库</span>
+          <div className="flex flex-col">
+            <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{dashboardData.totalPublicRepos.toLocaleString()}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">公开仓库</span>
           </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon warning">
+        </Card>
+        <Card variant="subtle" padding="md" className="flex items-center gap-3">
+          <div className="text-[var(--ds-warning-default)]">
             <FlagIcon />
           </div>
-          <div className="stat-info">
-            <span className="stat-value">{dashboardData.pendingReports}</span>
-            <span className="stat-label">待处理举报</span>
+          <div className="flex flex-col">
+            <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{dashboardData.pendingReports}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">待处理举报</span>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Quick Actions */}
-      <div className="action-cards">
-        <h2 className="section-title">快速操作</h2>
-        <div className="action-grid">
-          <button className="action-card" onClick={() => onNavigate('users')}>
-            <UsersIcon />
-            <span>用户管理</span>
-          </button>
-          <button className="action-card" onClick={() => onNavigate('repos')}>
-            <RepoIcon />
-            <span>仓库管理</span>
-          </button>
-          <button className="action-card" onClick={() => onNavigate('reports')}>
-            <FlagIcon />
-            <span>处理举报</span>
+      <div className="mt-2">
+        <h2 className="text-base font-semibold text-[var(--ds-text-primary)] mb-4">快速操作</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Button
+            variant="secondary"
+            icon={<UsersIcon />}
+            className="flex-col p-4 text-sm w-full"
+            onClick={() => onNavigate('users')}
+          >
+            用户管理
+          </Button>
+          <Button
+            variant="secondary"
+            icon={<RepoIcon />}
+            className="flex-col p-4 text-sm w-full"
+            onClick={() => onNavigate('repos')}
+          >
+            仓库管理
+          </Button>
+          <Button
+            variant="secondary"
+            icon={<FlagIcon />}
+            className="flex-col p-4 text-sm w-full relative"
+            onClick={() => onNavigate('reports')}
+          >
+            处理举报
             {(dashboardData?.pendingReports ?? 0) > 0 && (
-              <span className="badge">{dashboardData?.pendingReports}</span>
+              <span className="absolute top-1 right-1 text-xs px-2 py-0.5 bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)] rounded-full font-medium">{dashboardData?.pendingReports}</span>
             )}
-          </button>
-          <button className="action-card" onClick={() => onNavigate('audit')}>
-            <HistoryIcon />
-            <span>查看日志</span>
-          </button>
+          </Button>
+          <Button
+            variant="secondary"
+            icon={<HistoryIcon />}
+            className="flex-col p-4 text-sm w-full"
+            onClick={() => onNavigate('audit')}
+          >
+            查看日志
+          </Button>
         </div>
       </div>
 
       {/* Recent Reports */}
       {dashboardData?.recentReports && dashboardData.recentReports.length > 0 ? (
-        <div className="recent-section">
-          <h2 className="section-title">最新举报</h2>
-          <div className="report-list">
+        <div className="mt-2">
+          <h2 className="text-base font-semibold text-[var(--ds-text-primary)] mb-4">最新举报</h2>
+          <div className="flex flex-col gap-2">
             {dashboardData.recentReports.slice(0, 3).map((report: ReportSummary) => (
-              <div key={report.id} className="report-card">
-                <div className="report-header">
-                  <span className="report-type label label-danger">{report.targetType}</span>
-                  <span className="report-time">{new Date(report.createdAt).toLocaleDateString()}</span>
+              <Card key={report.id} variant="subtle" padding="md">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs px-2 py-0.5 bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)] rounded-full font-medium">{report.targetType}</span>
+                  <span className="text-xs text-[var(--ds-text-secondary)]">{new Date(report.createdAt).toLocaleDateString()}</span>
                 </div>
-                <h3 className="report-target">{report.reason}</h3>
-                <p className="report-meta">举报人: @{report.reporterUsername || '未知'}</p>
-              </div>
+                <h3 className="text-sm font-medium text-[var(--ds-text-primary)] mb-1 truncate">{report.reason}</h3>
+                <p className="text-xs text-[var(--ds-text-secondary)]">举报人: @{report.reporterUsername || '未知'}</p>
+              </Card>
             ))}
           </div>
         </div>
       ) : !isLoading && (
-        <div className="recent-section">
-          <h2 className="section-title">最新举报</h2>
-          <div className="empty-state">
+        <div className="mt-2">
+          <h2 className="text-base font-semibold text-[var(--ds-text-primary)] mb-4">最新举报</h2>
+          <div className="flex flex-col items-center py-12 text-[var(--ds-text-secondary)]">
             <FlagIcon />
-            <p>暂无待处理的举报</p>
+            <p className="mt-2">暂无待处理的举报</p>
           </div>
         </div>
       )}

@@ -4,8 +4,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { SearchIcon, XIcon } from './AdminIcons';
+import { SearchIcon } from './AdminIcons';
 import type { BanRecord, BanFormData } from './AdminTypes';
+import { formatDate } from '@/lib/utils';
+import { Button, Card, Modal, ModalFooter, Input, Field } from '@/components/design';
 
 // ===== 图标 =====
 const ShieldIcon = () => (
@@ -39,7 +41,7 @@ interface UnbanFormData {
   unbanReason: string;
 }
 
-interface AdminBansEnhancedProps {
+export interface AdminBansEnhancedProps {
   bans: BanRecord[];
   bansTotal: number;
   bansPage: number;
@@ -73,14 +75,6 @@ interface AdminBansEnhancedProps {
 }
 
 const PAGE_SIZE = 20;
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
 
 function formatDateShort(dateStr: string | null): string {
   if (!dateStr) return '-';
@@ -133,45 +127,45 @@ export default function AdminBansEnhanced({
     <div className="space-y-5">
       {/* ===== 统计卡片 ===== */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 border border-red-100 dark:border-red-900/40">
-          <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 mb-1">
+        <Card variant="surface" padding="none" className="p-3 bg-[var(--ds-danger-subtle)] border border-[var(--ds-danger-default)]">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--ds-danger-default)] mb-1">
             <BanIconSvg />
             活跃封禁
           </div>
-          <div className="text-2xl font-bold text-red-700 dark:text-red-300">{activeBans}</div>
-          <div className="text-xs text-red-500 dark:text-red-400 mt-0.5">当前封禁中</div>
-        </div>
-        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3 border border-orange-100 dark:border-orange-900/40">
-          <div className="flex items-center gap-1.5 text-xs text-orange-600 dark:text-orange-400 mb-1">
+          <div className="text-2xl font-bold text-[var(--ds-danger-default)]">{activeBans}</div>
+          <div className="text-xs text-[var(--ds-danger-default)] mt-0.5">当前封禁中</div>
+        </Card>
+        <Card variant="surface" padding="none" className="p-3 bg-[var(--ds-warning-subtle)] border border-[var(--ds-warning-default)]">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--ds-warning-default)] mb-1">
             <ShieldIcon />
             永久封禁
           </div>
-          <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">{permanentBans}</div>
-          <div className="text-xs text-orange-500 dark:text-orange-400 mt-0.5">永久生效</div>
-        </div>
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 border border-yellow-100 dark:border-yellow-900/40">
-          <div className="flex items-center gap-1.5 text-xs text-yellow-600 dark:text-yellow-400 mb-1">
+          <div className="text-2xl font-bold text-[var(--ds-warning-default)]">{permanentBans}</div>
+          <div className="text-xs text-[var(--ds-warning-default)] mt-0.5">永久生效</div>
+        </Card>
+        <Card variant="surface" padding="none" className="p-3 bg-[var(--ds-warning-subtle)] border border-[var(--ds-warning-default)]">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--ds-warning-default)] mb-1">
             <ClockIcon />
             临时封禁
           </div>
-          <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">{temporaryBans}</div>
-          <div className="text-xs text-yellow-500 dark:text-yellow-400 mt-0.5">有期限</div>
-        </div>
-        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-100 dark:border-green-900/40">
-          <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 mb-1">
+          <div className="text-2xl font-bold text-[var(--ds-warning-default)]">{temporaryBans}</div>
+          <div className="text-xs text-[var(--ds-warning-default)] mt-0.5">有期限</div>
+        </Card>
+        <Card variant="surface" padding="none" className="p-3 bg-[var(--ds-success-subtle)] border border-[var(--ds-success-default)]">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--ds-success-default)] mb-1">
             <CheckCircleIcon />
             已解封
           </div>
-          <div className="text-2xl font-bold text-green-700 dark:text-green-300">{expiredBans}</div>
-          <div className="text-xs text-green-500 dark:text-green-400 mt-0.5">本页统计</div>
-        </div>
+          <div className="text-2xl font-bold text-[var(--ds-success-default)]">{expiredBans}</div>
+          <div className="text-xs text-[var(--ds-success-default)] mt-0.5">本页统计</div>
+        </Card>
       </div>
 
       {/* ===== 操作栏 ===== */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--ds-text-secondary)]">
               <SearchIcon />
             </span>
             <input
@@ -179,46 +173,47 @@ export default function AdminBansEnhanced({
               placeholder="搜索用户名/邮箱..."
               value={bansSearch}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-blue-500 w-52"
+              className="pl-8 pr-3 py-1.5 text-sm border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] bg-[var(--ds-surface-default)] text-[var(--ds-text-primary)] outline-none focus:ring-1 focus:ring-[var(--ds-accent-default)] w-52"
             />
           </div>
           <select
             value={bansStatus}
             onChange={(e) => onStatusChange(e.target.value)}
-            className="py-1.5 px-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none"
+            className="py-1.5 px-2 text-sm border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] bg-[var(--ds-surface-default)] text-[var(--ds-text-primary)] outline-none"
           >
             <option value="all">全部封禁</option>
             <option value="active">活跃封禁</option>
             <option value="expired">已解封</option>
           </select>
-          <span className="text-xs text-gray-400 dark:text-gray-500">共 {bansTotal} 条</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">共 {bansTotal} 条</span>
         </div>
-        <button
+        <Button
+          variant="danger"
+          size="sm"
           onClick={onOpenBanModal}
-          className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors font-medium"
         >
           + 封禁用户
-        </button>
+        </Button>
       </div>
 
       {/* ===== 封禁列表 ===== */}
       {bansLoading ? (
-        <div className="text-center py-12 text-gray-400">
-          <div className="inline-block w-5 h-5 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin mb-2" />
+        <div className="text-center py-12 text-[var(--ds-text-secondary)]">
+          <div className="inline-block w-5 h-5 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] rounded-full animate-spin mb-2" />
           <div className="text-sm">加载中...</div>
         </div>
       ) : bans.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-[var(--ds-text-secondary)]">
           <div className="flex justify-center mb-3 opacity-40">
             <BanIconSvg />
           </div>
           <div className="text-sm">暂无封禁记录</div>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="overflow-x-auto rounded-[var(--ds-radius-sm)] border border-[var(--ds-border-default)]">
           <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700 text-left text-gray-500 dark:text-gray-400">
+              <tr className="bg-[var(--ds-surface-subtle)] border-b border-[var(--ds-border-default)] text-left text-[var(--ds-text-secondary)]">
                 <th className="px-3 py-2.5 font-medium">用户</th>
                 <th className="px-3 py-2.5 font-medium">封禁原因</th>
                 <th className="px-3 py-2.5 font-medium">类型</th>
@@ -233,29 +228,29 @@ export default function AdminBansEnhanced({
               {bans.map((ban) => (
                 <tr
                   key={ban.id}
-                  className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+                  className="border-b border-[var(--ds-border-muted)] hover:bg-[var(--ds-surface-subtle)] transition-colors"
                 >
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       {ban.user.avatarUrl ? (
                         <img src={ban.user.avatarUrl} alt={ban.user.username} className="w-7 h-7 rounded-full object-cover" />
                       ) : (
-                        <div className="w-7 h-7 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-xs text-red-600 dark:text-red-400 font-semibold">
+                        <div className="w-7 h-7 rounded-full bg-[var(--ds-danger-subtle)] flex items-center justify-center text-xs text-[var(--ds-danger-default)] font-semibold">
                           {ban.user.username[0]?.toUpperCase()}
                         </div>
                       )}
                       <div>
-                        <div className="font-medium text-gray-900 dark:text-gray-100 text-sm">{ban.user.username}</div>
-                        <div className="text-xs text-gray-400">{ban.user.email}</div>
+                        <div className="font-medium text-[var(--ds-text-primary)] text-sm">{ban.user.username}</div>
+                        <div className="text-xs text-[var(--ds-text-secondary)]">{ban.user.email}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className="text-gray-700 dark:text-gray-300 max-w-[180px] block truncate text-sm" title={ban.reason}>
+                    <span className="text-[var(--ds-text-primary)] max-w-[180px] block truncate text-sm" title={ban.reason}>
                       {ban.reason}
                     </span>
                     {ban.unbanReason && (
-                      <div className="text-xs text-green-600 dark:text-green-400 mt-0.5 truncate max-w-[180px]" title={ban.unbanReason}>
+                      <div className="text-xs text-[var(--ds-success-default)] mt-0.5 truncate max-w-[180px]" title={ban.unbanReason}>
                         解封: {ban.unbanReason}
                       </div>
                     )}
@@ -263,66 +258,68 @@ export default function AdminBansEnhanced({
                   <td className="px-3 py-2.5">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
                       ban.banType === 'permanent'
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        ? 'bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]'
                         : ban.banType === 'temporary'
-                        ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                        ? 'bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]'
+                        : 'bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]'
                     }`}>
                       {ban.banType === 'permanent' ? '永久' : ban.banType === 'temporary' ? '临时' : '未知'}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap">
+                  <td className="px-3 py-2.5 text-[var(--ds-text-secondary)] text-xs whitespace-nowrap">
                     {ban.banType === 'permanent' ? (
-                      <span className="text-red-500">永久</span>
+                      <span className="text-[var(--ds-danger-default)]">永久</span>
                     ) : (
-                      formatDate(ban.expiresAt)
+                      ban.expiresAt ? formatDate(ban.expiresAt) : '-'
                     )}
                   </td>
                   <td className="px-3 py-2.5">
                     {ban.isOrphaned ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]">
                         孤立记录
                       </span>
                     ) : ban.isActive ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--ds-danger-default)] inline-block" />
                         封禁中
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--ds-success-default)] inline-block" />
                         已解封
                       </span>
                     )}
                   </td>
                   <td className="px-3 py-2.5">
-                    <div className="text-xs text-gray-700 dark:text-gray-300">{ban.banner.username}</div>
+                    <div className="text-xs text-[var(--ds-text-primary)]">{ban.banner.username}</div>
                     {ban.unbannedBy && (
-                      <div className="text-xs text-gray-400 mt-0.5">解封: {ban.unbannedBy}</div>
+                      <div className="text-xs text-[var(--ds-text-secondary)] mt-0.5">解封: {ban.unbannedBy}</div>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-gray-500 dark:text-gray-500 text-xs whitespace-nowrap">
+                  <td className="px-3 py-2.5 text-[var(--ds-text-secondary)] text-xs whitespace-nowrap">
                     <div>{formatDateShort(ban.createdAt)}</div>
                     {ban.unbannedAt && (
-                      <div className="text-green-500 mt-0.5">{formatDateShort(ban.unbannedAt)}</div>
+                      <div className="text-[var(--ds-success-default)] mt-0.5">{formatDateShort(ban.unbannedAt)}</div>
                     )}
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       {ban.isActive && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => onOpenUnbanModal(ban)}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                         >
                           解封
-                        </button>
+                        </Button>
                       )}
-                      <button
+                      <Button
+                        variant="danger"
+                        size="sm"
                         onClick={() => onOpenDeleteBanModal(ban)}
-                        className="text-xs text-red-500 hover:underline"
                       >
                         删除
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -335,188 +332,135 @@ export default function AdminBansEnhanced({
       {/* ===== 分页 ===== */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-2">
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => onPageChange(bansPage - 1)}
             disabled={bansPage <= 1}
-            className="px-3 py-1 text-sm border border-gray-200 dark:border-gray-700 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             上一页
-          </button>
-          <span className="text-sm text-gray-500">{bansPage} / {totalPages}</span>
-          <button
+          </Button>
+          <span className="text-sm text-[var(--ds-text-secondary)]">{bansPage} / {totalPages}</span>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => onPageChange(bansPage + 1)}
             disabled={bansPage >= totalPages}
-            className="px-3 py-1 text-sm border border-gray-200 dark:border-gray-700 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             下一页
-          </button>
+          </Button>
         </div>
       )}
 
       {/* ===== 封禁用户 Modal ===== */}
       {showBanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">封禁用户</h3>
-              <button onClick={onCloseBanModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <XIcon />
-              </button>
+        <Modal isOpen onClose={onCloseBanModal} title="封禁用户" maxWidth="448px" footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={onCloseBanModal}>取消</Button>
+            <Button variant="danger" size="sm" onClick={onBanSubmit} disabled={banSaving || !banForm.userId || !banForm.reason} loading={banSaving}>{banSaving ? '处理中...' : '确认封禁'}</Button>
+          </>
+        }>
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="ban-user-id" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1">
+                用户 ID <span className="text-[var(--ds-danger-default)]">*</span>
+              </label>
+              <Input
+                id="ban-user-id"
+                type="text"
+                value={banForm.userId}
+                onChange={(e) => onFormChange('userId', e.target.value)}
+                placeholder="输入用户 ID"
+              />
             </div>
-            <div className="space-y-3">
+            <div>
+              <label htmlFor="ban-reason" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1">
+                封禁原因 <span className="text-[var(--ds-danger-default)]">*</span>
+              </label>
+              <Input
+                id="ban-reason"
+                multiline
+                value={banForm.reason}
+                onChange={(e) => onFormChange('reason', e.target.value)}
+                placeholder="请填写封禁原因"
+                rows={3}
+              />
+            </div>
+            <div>
+              <label htmlFor="ban-type" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1">封禁类型</label>
+              <select
+                id="ban-type"
+                value={banForm.banType}
+                onChange={(e) => onFormChange('banType', e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] bg-[var(--ds-surface-default)] text-[var(--ds-text-primary)] outline-none"
+              >
+                <option value="permanent">永久封禁</option>
+                <option value="temporary">临时封禁</option>
+              </select>
+            </div>
+            {banForm.banType === 'temporary' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  用户 ID <span className="text-red-500">*</span>
+                <label htmlFor="ban-expires-at" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1">
+                  到期时间 <span className="text-[var(--ds-danger-default)]">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={banForm.userId}
-                  onChange={(e) => onFormChange('userId', e.target.value)}
-                  placeholder="输入用户 ID"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-blue-500"
+                <Input
+                  id="ban-expires-at"
+                  type="datetime-local"
+                  value={banForm.expiresAt}
+                  onChange={(e) => onFormChange('expiresAt', e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  封禁原因 <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={banForm.reason}
-                  onChange={(e) => onFormChange('reason', e.target.value)}
-                  placeholder="请填写封禁原因"
-                  rows={3}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">封禁类型</label>
-                <select
-                  value={banForm.banType}
-                  onChange={(e) => onFormChange('banType', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none"
-                >
-                  <option value="permanent">永久封禁</option>
-                  <option value="temporary">临时封禁</option>
-                </select>
-              </div>
-              {banForm.banType === 'temporary' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    到期时间 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={banForm.expiresAt}
-                    onChange={(e) => onFormChange('expiresAt', e.target.value)}
-                    min={new Date().toISOString().slice(0, 16)}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <button
-                type="button"
-                onClick={onCloseBanModal}
-                className="px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-              >
-                取消
-              </button>
-              <button
-                onClick={onBanSubmit}
-                disabled={banSaving || !banForm.userId || !banForm.reason}
-                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-60 transition-colors"
-              >
-                {banSaving ? '处理中...' : '确认封禁'}
-              </button>
-            </div>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* ===== 解封 Modal ===== */}
       {showUnbanModal && unbanBanRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                解封用户 — {unbanBanRecord.user.username}
-              </h3>
-              <button onClick={onCloseUnbanModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <XIcon />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded p-3 border border-gray-200 dark:border-gray-700">
-                <div>原封禁原因：{unbanBanRecord.reason}</div>
-                <div className="mt-1">
-                  类型：{unbanBanRecord.banType === 'permanent' ? '永久封禁' : '临时封禁'}
-                  {unbanBanRecord.expiresAt && ` (到期：${formatDate(unbanBanRecord.expiresAt)})`}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  解封原因 <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={unbanReason}
-                  onChange={(e) => onUnbanReasonChange(e.target.value)}
-                  placeholder="请填写解封原因"
-                  rows={3}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-                />
+        <Modal isOpen onClose={onCloseUnbanModal} title={`解封用户 — ${unbanBanRecord.user.username}`} maxWidth="448px" footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={onCloseUnbanModal}>取消</Button>
+            <Button variant="primary" size="sm" onClick={onUnbanSubmit} disabled={unbanSaving || !unbanReason} loading={unbanSaving}>{unbanSaving ? '处理中...' : '确认解封'}</Button>
+          </>
+        }>
+          <div className="space-y-3">
+            <div className="text-sm text-[var(--ds-text-secondary)] bg-[var(--ds-surface-subtle)] rounded-[var(--ds-radius-sm)] p-3 border border-[var(--ds-border-default)]">
+              <div>原封禁原因：{unbanBanRecord.reason}</div>
+              <div className="mt-1">
+                类型：{unbanBanRecord.banType === 'permanent' ? '永久封禁' : '临时封禁'}
+                {unbanBanRecord.expiresAt && ` (到期：${formatDate(unbanBanRecord.expiresAt)})`}
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <button
-                type="button"
-                onClick={onCloseUnbanModal}
-                className="px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-              >
-                取消
-              </button>
-              <button
-                onClick={onUnbanSubmit}
-                disabled={unbanSaving || !unbanReason}
-                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-60 transition-colors"
-              >
-                {unbanSaving ? '处理中...' : '确认解封'}
-              </button>
+            <div>
+              <label htmlFor="unban-reason" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1">
+                解封原因 <span className="text-[var(--ds-danger-default)]">*</span>
+              </label>
+              <Input
+                id="unban-reason"
+                multiline
+                value={unbanReason}
+                onChange={(e) => onUnbanReasonChange(e.target.value)}
+                placeholder="请填写解封原因"
+                rows={3}
+              />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* ===== 删除封禁记录确认 Modal ===== */}
       {showDeleteBanModal && deleteBanRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">删除封禁记录</h3>
-              <button onClick={onCloseDeleteBanModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <XIcon />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              确认删除用户 <strong>{deleteBanRecord.user.username}</strong> 的封禁记录？此操作不可撤销。
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={onCloseDeleteBanModal}
-                className="px-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-              >
-                取消
-              </button>
-              <button
-                onClick={onDeleteBanSubmit}
-                disabled={deleteBanSaving}
-                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-60 transition-colors"
-              >
-                {deleteBanSaving ? '删除中...' : '确认删除'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <Modal isOpen onClose={onCloseDeleteBanModal} title="删除封禁记录" maxWidth="384px" footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={onCloseDeleteBanModal}>取消</Button>
+            <Button variant="danger" size="sm" onClick={onDeleteBanSubmit} disabled={deleteBanSaving} loading={deleteBanSaving}>{deleteBanSaving ? '删除中...' : '确认删除'}</Button>
+          </>
+        }>
+          <p className="text-sm text-[var(--ds-text-secondary)]">
+            确认删除用户 <strong>{deleteBanRecord.user.username}</strong> 的封禁记录？此操作不可撤销。
+          </p>
+        </Modal>
       )}
     </div>
   );

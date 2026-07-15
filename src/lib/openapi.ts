@@ -469,7 +469,7 @@ export const apiRegistry: APIMeta[] = [
     summary: '获取讨论列表 (v1)',
     tags: ['讨论-v1'],
     parameters: [
-      { name: 'category', in: 'query', description: '分类: question/idea/request/team/share' },
+      { name: 'category', in: 'query', description: '分类: general/question/idea/share/help/announcement/request/team' },
       { name: 'sort', in: 'query', description: '排序: latest/hot' },
       { name: 'keyword', in: 'query', description: '搜索关键词' },
     ],
@@ -491,7 +491,7 @@ export const apiRegistry: APIMeta[] = [
         properties: {
           title: { type: 'string' },
           content: { type: 'string' },
-          category: { type: 'string', enum: ['question', 'idea', 'request', 'team', 'share'] },
+          category: { type: 'string', enum: ['general', 'question', 'idea', 'share', 'help', 'announcement', 'request', 'team'] },
         },
       },
     },
@@ -826,7 +826,7 @@ export const apiRegistry: APIMeta[] = [
   {
     path: '/api/v1/repos/{username}/{repoName}/pulls',
     method: 'POST',
-    summary: '创建 Pull Request (v1)',
+    summary: '创建合并请求 (v1)',
     tags: ['仓库-v1'],
     auth: true,
     requestBody: {

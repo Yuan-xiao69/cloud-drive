@@ -5,24 +5,19 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/repos/[id]/detail - 获取仓库详情
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/v1/admin/repos/[id]/detail - 获取仓库详情
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const resolvedParams = await params;
-    const repoId = resolvedParams.id;
+    const repoId = params.id;
 
     // 获取仓库基本信息
     const repo = await prisma.repository.findUnique({
@@ -218,8 +213,5 @@ export async function GET(
         expiresAt: p.expiresAt,
       })),
     });
-  } catch (err) {
-    console.error('获取仓库详情失败:', err);
-    return handlePrismaError(err);
-  }
-}
+  },
+});

@@ -5,17 +5,18 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/penalties - 添加处罚
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, paginated, handlePrismaError, errors, buildPaginationMeta } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, created, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // GET /api/v1/admin/penalties - 获取处罚列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const { searchParams } = new URL(req.url);
@@ -126,32 +127,31 @@ export async function GET(req: NextRequest): Promise<Response> {
         totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // POST /api/v1/admin/penalties - 添加处罚
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    userId: z.string(),
+    penaltyType: z.string(),
+    reason: z.string(),
+    value: z.number().optional().default(0),
+    expiresDays: z.number().optional(),
+  }),
+  async handler({ req, user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { userId, penaltyType, reason, value, expiresDays } = body;
-
-    if (!userId || !penaltyType || !reason) {
-      return errors.badRequest('缺少必填字段');
-    }
 
     const validTypes = ['mute', 'repo_limit', 'storage_limit'];
     if (!validTypes.includes(penaltyType)) {
       return errors.badRequest('无效的处罚类型');
     }
 
-    // 检查目标用户
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, username: true, isSystem: true, role: true },
@@ -165,11 +165,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       return errors.forbidden('不能对系统内置用户添加处罚');
     }
 
-    if (userId === auth.userId) {
+    if (userId === user!.id) {
       return errors.forbidden('不能对自己添加处罚');
     }
 
-    // 计算过期时间
     const expiresAt = expiresDays ? new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000) : null;
 
     const penalty = await prisma.userPenalty.create({
@@ -178,7 +177,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         penaltyType,
         reason,
         value: value || 0,
-        appliedBy: auth.userId,
+        appliedBy: user!.id,
         expiresAt,
         isActive: true,
       },
@@ -200,9 +199,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       },
     });
 
-    // 记录审计日志
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'penalty_create',
       targetType: 'user',
       targetId: userId,
@@ -217,7 +216,5 @@ export async function POST(req: NextRequest): Promise<Response> {
         remainingDays: expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null,
       },
     }, '处罚添加成功');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

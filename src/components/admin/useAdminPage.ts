@@ -1,4 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import toast from 'react-hot-toast';
+import { api } from '@/lib/api/client';
 import type {
   AdminTab,
   DashboardData,
@@ -12,6 +14,7 @@ import type {
   AuditLogEntry,
   Announcement,
   AnnouncementFormData,
+  AdminNotificationConfig,
   Appeal,
   Penalty,
   PenaltyFormData,
@@ -41,37 +44,55 @@ const API_BASE = '/api/v1/admin';
 // API 请求工具
 // ============================================================
 
-function getToken(): string | null {
-  if (typeof document === 'undefined') return null;
-  const cookies = document.cookie.split(';');
-  for (const c of cookies) {
-    const trimmed = c.trim();
-    if (trimmed.startsWith('access_token=')) {
-      const idx = trimmed.indexOf('=');
-      return trimmed.slice(idx + 1);
-    }
-  }
-  return null;
+// 每个 tab 独立的 AbortController，新请求到来时取消旧请求
+const abortControllers = new Map<string, AbortController>();
+
+function getAbortSignal(key: string): AbortSignal {
+  abortControllers.get(key)?.abort();
+  const controller = new AbortController();
+  abortControllers.set(key, controller);
+  return controller.signal;
 }
 
 async function adminFetch<T = unknown>(url: string, options?: RequestInit): Promise<T> {
-  const token = getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options?.headers as Record<string, string> | undefined),
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  const method = (options?.method || 'GET').toUpperCase();
+
+  let res: { code: number; message?: string; [key: string]: unknown };
+
+  if (method === 'GET') {
+    res = await api.get<T>(url) as unknown as { code: number; message?: string; [key: string]: unknown };
+  } else if (method === 'POST') {
+    const body = options?.body && typeof options.body === 'string' ? JSON.parse(options.body) : undefined;
+    res = await api.post<T>(url, body) as unknown as { code: number; message?: string; [key: string]: unknown };
+  } else if (method === 'PUT') {
+    const body = options?.body && typeof options.body === 'string' ? JSON.parse(options.body) : undefined;
+    res = await api.put<T>(url, body) as unknown as { code: number; message?: string; [key: string]: unknown };
+  } else if (method === 'DELETE') {
+    res = await api.delete<T>(url) as unknown as { code: number; message?: string; [key: string]: unknown };
+  } else {
+    // PATCH 或其他方法：用 fetch 直发（api 客户端暂不支持 PATCH/signal）
+    const fetchRes = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: options?.body,
+      signal: options?.signal,
+      credentials: 'include',
+    });
+    if (!fetchRes.ok) {
+      const errBody = await fetchRes.json().catch(() => ({}));
+      throw new Error(errBody.message || `请求失败 (${fetchRes.status})`);
+    }
+    res = await fetchRes.json();
   }
 
-  const res = await fetch(url, { ...options, headers });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `请求失败 (${res.status})`);
+  // 统一检查业务状态码：兼容 code=0 和 code=2xx 两种成功约定
+  // code 不存在、code===0、或 code 在 200-299 均视为成功
+  const code = res.code;
+  if (code === undefined || code === 0 || (code >= 200 && code < 300)) {
+    return res as unknown as T;
   }
 
-  return res.json();
+  throw new Error((res.message as string) || `业务错误 (code: ${code})`);
 }
 
 // ============================================================
@@ -207,6 +228,9 @@ export interface UseAdminPageReturn {
   fetchReportDetail: (reportId: string) => Promise<void>;
   fetchReportStats: () => Promise<void>;
 
+  // 用户详情获取（用于编辑后刷新详情面板）
+  fetchUserDetail: (userId: string) => Promise<void>;
+
   // 状态 - 审计日志
   auditLogs: AuditLogEntry[];
   setAuditLogs: (logs: AuditLogEntry[]) => void;
@@ -226,6 +250,7 @@ export interface UseAdminPageReturn {
   setAnnouncementsPage: (page: number) => void;
   announcementsLoading: boolean;
   setAnnouncementsLoading: (loading: boolean) => void;
+  announcementStats: { total: number; active: number; pinned: number; scheduled: number };
   showAnnouncementModal: boolean;
   setShowAnnouncementModal: (show: boolean) => void;
   announcementForm: AnnouncementFormData;
@@ -375,6 +400,14 @@ export interface UseAdminPageReturn {
   setSelectedDiscussionDetail: (detail: DiscussionDetail | null) => void;
 
   // 状态 - 通知管理
+  notifications: AdminNotificationConfig[];
+  setNotifications: (notifications: AdminNotificationConfig[]) => void;
+  notificationsTotal: number;
+  setNotificationsTotal: (total: number) => void;
+  notificationsPage: number;
+  setNotificationsPage: (page: number) => void;
+  notificationsLoading: boolean;
+  setNotificationsLoading: (loading: boolean) => void;
   sendTitle: string;
   setSendTitle: (title: string) => void;
   sendContent: string;
@@ -473,6 +506,7 @@ export interface UseAdminPageReturn {
   fetchBans: () => Promise<void>;
   fetchActivityLogs: () => Promise<void>;
   fetchBackupFiles: () => Promise<void>;
+  fetchNotifications: () => Promise<void>;
 
   // 操作处理函数
   handleDeleteUser: (userId: string) => Promise<void>;
@@ -489,7 +523,7 @@ export interface UseAdminPageReturn {
   handleCloseReportDetail: () => void;
   handlePenalizeFromReport: (report: ReportSummary, penaltyType: string, penaltyReason: string) => Promise<void>;
   handleOpenAnnouncementModal: (announcement?: Announcement | null) => void;
-  handleAnnouncementSubmit: () => Promise<void>;
+  handleAnnouncementSubmit: (formData?: AnnouncementFormData) => Promise<void>;
   handleDeleteAnnouncement: (id: string) => Promise<void>;
   handleToggleAnnouncementActive: (id: string, isActive: boolean) => Promise<void>;
   handleOpenAppealModal: (appeal: Appeal) => void;
@@ -510,6 +544,7 @@ export interface UseAdminPageReturn {
   handleDeleteDiscussion: (id: string) => Promise<void>;
   handleRestoreDiscussion: (id: string) => Promise<void>;
   handleSendNotification: (overrideData?: { title: string; content: string; type: string; targetRoles?: string[]; targetUserIds?: string[] }) => Promise<void>;
+  handleDeleteNotification: (id: string) => Promise<void>;
   handleOpenBanModal: () => void;
   handleCloseBanModal: () => void;
   handleBanSubmit: () => Promise<void>;
@@ -537,6 +572,23 @@ export interface UseAdminPageReturn {
 // ============================================================
 
 export function useAdminPage(): UseAdminPageReturn {
+  // ---- 防抖：避免搜索输入时频繁请求 ----
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
+
+  const debouncedRun = useCallback((key: string, fn: () => Promise<void> | void, delay = 300): Promise<void> => {
+    if (debounceTimers.current[key]) {
+      clearTimeout(debounceTimers.current[key]);
+    }
+    return new Promise<void>((resolve) => {
+      debounceTimers.current[key] = setTimeout(() => {
+        debounceTimers.current[key] = null;
+        const result = fn();
+        if (result instanceof Promise) result.then(resolve).catch(resolve);
+        else resolve();
+      }, delay);
+    });
+  }, []);
+
   // ---- 导航 & 权限 ----
   const [userRole, setUserRole] = useState<string>('');
   const [loadingRole, setLoadingRole] = useState(true);
@@ -608,6 +660,7 @@ export function useAdminPage(): UseAdminPageReturn {
   const [announcementsTotal, setAnnouncementsTotal] = useState(0);
   const [announcementsPage, setAnnouncementsPage] = useState(1);
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [announcementStats, setAnnouncementStats] = useState({ total: 0, active: 0, pinned: 0, scheduled: 0 });
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [announcementForm, setAnnouncementForm] = useState<AnnouncementFormData>(emptyAnnouncementForm);
   const [announcementSaving, setAnnouncementSaving] = useState(false);
@@ -691,6 +744,10 @@ export function useAdminPage(): UseAdminPageReturn {
   const [selectedDiscussionDetail, setSelectedDiscussionDetail] = useState<DiscussionDetail | null>(null);
 
   // ---- 通知管理 ----
+  const [notifications, setNotifications] = useState<AdminNotificationConfig[]>([]);
+  const [notificationsTotal, setNotificationsTotal] = useState(0);
+  const [notificationsPage, setNotificationsPage] = useState(1);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [sendTitle, setSendTitle] = useState('');
   const [sendContent, setSendContent] = useState('');
   const [sendType, setSendType] = useState('system');
@@ -743,12 +800,10 @@ export function useAdminPage(): UseAdminPageReturn {
   const fetchDashboard = useCallback(async () => {
     setDashboardLoading(true);
     try {
-      const res = await adminFetch<{ code: number; data: DashboardData }>(`${API_BASE}/dashboard`);
-      if (res.code === 200) {
-        setDashboardData(res.data);
-      }
-    } catch (err) {
-      console.error('加载仪表盘失败:', err);
+      const res = await adminFetch<{ code: number; data: DashboardData }>(`${API_BASE}/dashboard`, { signal: getAbortSignal('dashboard') });
+      setDashboardData(res.data);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') console.error('加载仪表盘失败:', err);
     } finally {
       setDashboardLoading(false);
     }
@@ -764,14 +819,13 @@ export function useAdminPage(): UseAdminPageReturn {
       if (userFilters.dateFrom) params.set('dateFrom', userFilters.dateFrom);
       if (userFilters.dateTo) params.set('dateTo', userFilters.dateTo);
       const res = await adminFetch<{ code: number; data: { items: UserSummary[]; total: number } }>(
-        `${API_BASE}/users?${params}`
+        `${API_BASE}/users?${params}`,
+        { signal: getAbortSignal('users') }
       );
-      if (res.code === 200) {
-        setUsers(res.data.items);
-        setUsersTotal(res.data.total);
-      }
-    } catch (err) {
-      console.error('加载用户列表失败:', err);
+      setUsers(res.data.items);
+      setUsersTotal(res.data.total);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') console.error('加载用户列表失败:', err);
     } finally {
       setUsersLoading(false);
     }
@@ -783,14 +837,13 @@ export function useAdminPage(): UseAdminPageReturn {
       const params = new URLSearchParams({ page: String(reposPage), size: String(PAGE_SIZE) });
       if (reposSearch) params.set('search', reposSearch);
       const res = await adminFetch<{ code: number; data: { items: RepositorySummary[]; total: number } }>(
-        `${API_BASE}/repos?${params}`
+        `${API_BASE}/repos?${params}`,
+        { signal: getAbortSignal('repos') }
       );
-      if (res.code === 200) {
-        setRepos(res.data.items);
-        setReposTotal(res.data.total);
-      }
-    } catch (err) {
-      console.error('加载仓库列表失败:', err);
+      setRepos(res.data.items);
+      setReposTotal(res.data.total);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') console.error('加载仓库列表失败:', err);
     } finally {
       setReposLoading(false);
     }
@@ -801,14 +854,13 @@ export function useAdminPage(): UseAdminPageReturn {
     try {
       const params = new URLSearchParams({ page: String(reportsPage), size: String(PAGE_SIZE) });
       const res = await adminFetch<{ code: number; data: { items: ReportSummary[]; total: number } }>(
-        `${API_BASE}/reports?${params}`
+        `${API_BASE}/reports?${params}`,
+        { signal: getAbortSignal('reports') }
       );
-      if (res.code === 200) {
-        setReports(res.data.items);
-        setReportsTotal(res.data.total);
-      }
-    } catch (err) {
-      console.error('加载举报列表失败:', err);
+      setReports(res.data.items);
+      setReportsTotal(res.data.total);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') console.error('加载举报列表失败:', err);
     } finally {
       setReportsLoading(false);
     }
@@ -821,11 +873,7 @@ export function useAdminPage(): UseAdminPageReturn {
       const res = await adminFetch<{ code: number; data: ReportDetail }>(
         `${API_BASE}/reports/${reportId}/detail`
       );
-      if (res.code === 200) {
-        setSelectedReportDetail(res.data);
-      } else {
-        console.error('获取举报详情失败:', (res as any).message);
-      }
+      setSelectedReportDetail(res.data);
     } catch (err) {
       console.error('获取举报详情失败:', err);
     } finally {
@@ -840,15 +888,23 @@ export function useAdminPage(): UseAdminPageReturn {
       const res = await adminFetch<{ code: number; data: ReportStats }>(
         `${API_BASE}/reports/stats`
       );
-      if (res.code === 200) {
-        setReportStats(res.data);
-      } else {
-        console.error('获取举报统计失败:', (res as any).message);
-      }
+      setReportStats(res.data);
     } catch (err) {
       console.error('获取举报统计失败:', err);
     } finally {
       setReportStatsLoading(false);
+    }
+  }, []);
+
+  // 获取用户详情（用于编辑后刷新详情面板）
+  const fetchUserDetail = useCallback(async (userId: string) => {
+    try {
+      const res = await adminFetch<{ code: number; data: UserDetail }>(
+        `${API_BASE}/users/${userId}/detail`
+      );
+      setSelectedUserDetail(res.data);
+    } catch (err) {
+      console.error('获取用户详情失败:', err);
     }
   }, []);
 
@@ -859,10 +915,8 @@ export function useAdminPage(): UseAdminPageReturn {
       const res = await adminFetch<{ code: number; data: { items: AuditLogEntry[]; pagination: { total: number } } }>(
         `${API_BASE}/audit-logs?${params}`
       );
-      if (res.code === 200) {
-        setAuditLogs(res.data.items || []);
-        setAuditLogsTotal(res.data.pagination?.total || 0);
-      }
+      setAuditLogs(res.data.items || []);
+      setAuditLogsTotal(res.data.pagination?.total || 0);
     } catch (err) {
       console.error('加载审计日志失败:', err);
     } finally {
@@ -874,13 +928,17 @@ export function useAdminPage(): UseAdminPageReturn {
     setAnnouncementsLoading(true);
     try {
       const params = new URLSearchParams({ page: String(announcementsPage), size: String(PAGE_SIZE) });
-      const res = await adminFetch<{ code: number; data: { items: Announcement[]; total: number } }>(
-        `${API_BASE}/announcements?${params}`
-      );
-      if (res.code === 200) {
-        setAnnouncements(res.data.items);
-        setAnnouncementsTotal(res.data.total);
-      }
+      const res = await adminFetch<{
+        code: number;
+        data: {
+          items: Announcement[];
+          pagination: { total: number };
+          stats: { total: number; active: number; pinned: number; scheduled: number };
+        };
+      }>(`${API_BASE}/announcements?${params}`);
+      setAnnouncements(res.data.items);
+      setAnnouncementsTotal(res.data.pagination.total);
+      setAnnouncementStats(res.data.stats);
     } catch (err) {
       console.error('加载公告列表失败:', err);
     } finally {
@@ -888,147 +946,147 @@ export function useAdminPage(): UseAdminPageReturn {
     }
   }, [announcementsPage]);
 
-  const fetchAppeals = useCallback(async () => {
-    setAppealsLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(appealsPage), size: String(PAGE_SIZE) });
-      if (appealsStatus) params.set('status', appealsStatus);
-      const res = await adminFetch<{ code: number; data: { items: Appeal[]; pagination: { total: number } } }>(
-        `${API_BASE}/appeals?${params}`
-      );
-      if (res.code === 200) {
+  const fetchAppeals = useCallback((): Promise<void> => {
+    return debouncedRun('appeals', async () => {
+      setAppealsLoading(true);
+      try {
+        const params = new URLSearchParams({ page: String(appealsPage), size: String(PAGE_SIZE) });
+        if (appealsStatus) params.set('status', appealsStatus);
+        const res = await adminFetch<{ code: number; data: { items: Appeal[]; pagination: { total: number } } }>(
+          `${API_BASE}/appeals?${params}`
+        );
         setAppeals(res.data.items || []);
         setAppealsTotal(res.data.pagination?.total || 0);
+      } catch (err) {
+        console.error('加载申诉列表失败:', err);
+      } finally {
+        setAppealsLoading(false);
       }
-    } catch (err) {
-      console.error('加载申诉列表失败:', err);
-    } finally {
-      setAppealsLoading(false);
-    }
-  }, [appealsPage, appealsStatus]);
+    });
+  }, [appealsPage, appealsStatus, debouncedRun]);
 
-  const fetchPenalties = useCallback(async () => {
-    setPenaltiesLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(penaltiesPage), size: String(PAGE_SIZE) });
-      if (penaltiesSearch) params.set('search', penaltiesSearch);
-      if (penaltiesType) params.set('type', penaltiesType);
-      if (penaltiesStatus) params.set('status', penaltiesStatus);
-      const res = await adminFetch<{ code: number; data: { items: Penalty[]; total: number } }>(
-        `${API_BASE}/penalties?${params}`
-      );
-      if (res.code === 200) {
+  const fetchPenalties = useCallback((): Promise<void> => {
+    return debouncedRun('penalties', async () => {
+      setPenaltiesLoading(true);
+      try {
+        const params = new URLSearchParams({ page: String(penaltiesPage), size: String(PAGE_SIZE) });
+        if (penaltiesSearch) params.set('search', penaltiesSearch);
+        if (penaltiesType) params.set('type', penaltiesType);
+        if (penaltiesStatus) params.set('status', penaltiesStatus);
+        const res = await adminFetch<{ code: number; data: { items: Penalty[]; total: number } }>(
+          `${API_BASE}/penalties?${params}`
+        );
         setPenalties(res.data.items);
         setPenaltiesTotal(res.data.total);
+      } catch (err) {
+        console.error('加载处罚列表失败:', err);
+      } finally {
+        setPenaltiesLoading(false);
       }
-    } catch (err) {
-      console.error('加载处罚列表失败:', err);
-    } finally {
-      setPenaltiesLoading(false);
-    }
-  }, [penaltiesPage, penaltiesSearch, penaltiesType, penaltiesStatus]);
+    });
+  }, [penaltiesPage, penaltiesSearch, penaltiesType, penaltiesStatus, debouncedRun]);
 
-  const fetchSecurityEvents = useCallback(async () => {
-    setSecurityLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(securityPage), size: String(PAGE_SIZE) });
-      if (securitySeverity) params.set('severity', securitySeverity);
-      if (securityStatus) params.set('status', securityStatus);
-      const res = await adminFetch<{ code: number; data: { items: SecurityEvent[]; pagination: { total: number } } }>(
-        `${API_BASE}/security-events?${params}`
-      );
-      if (res.code === 200) {
+  const fetchSecurityEvents = useCallback((): Promise<void> => {
+    return debouncedRun('security', async () => {
+      setSecurityLoading(true);
+      try {
+        const params = new URLSearchParams({ page: String(securityPage), size: String(PAGE_SIZE) });
+        if (securitySeverity) params.set('severity', securitySeverity);
+        if (securityStatus) params.set('status', securityStatus);
+        const res = await adminFetch<{ code: number; data: { items: SecurityEvent[]; pagination: { total: number } } }>(
+          `${API_BASE}/security-events?${params}`
+        );
         setSecurityEvents(res.data.items || []);
         setSecurityTotal(res.data.pagination?.total || 0);
+      } catch (err) {
+        console.error('加载安全事件失败:', err);
+      } finally {
+        setSecurityLoading(false);
       }
-    } catch (err) {
-      console.error('加载安全事件失败:', err);
-    } finally {
-      setSecurityLoading(false);
-    }
-  }, [securityPage, securitySeverity, securityStatus]);
+    });
+  }, [securityPage, securitySeverity, securityStatus, debouncedRun]);
 
-  const fetchIpBlacklist = useCallback(async () => {
-    setIpBlacklistLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(ipBlacklistPage), size: String(PAGE_SIZE) });
-      if (ipBlacklistSearch) params.set('search', ipBlacklistSearch);
-      const res = await adminFetch<{ code: number; data: { entries: IpBlacklistEntry[]; pagination: { total: number } } }>(
-        `${API_BASE}/ip-blacklist?${params}`
-      );
-      if (res.code === 200) {
+  const fetchIpBlacklist = useCallback((): Promise<void> => {
+    return debouncedRun('ipBlacklist', async () => {
+      setIpBlacklistLoading(true);
+      try {
+        const params = new URLSearchParams({ page: String(ipBlacklistPage), size: String(PAGE_SIZE) });
+        if (ipBlacklistSearch) params.set('search', ipBlacklistSearch);
+        const res = await adminFetch<{ code: number; data: { entries: IpBlacklistEntry[]; pagination: { total: number } } }>(
+          `${API_BASE}/ip-blacklist?${params}`
+        );
         setIpBlacklist(res.data.entries || []);
         setIpBlacklistTotal(res.data.pagination?.total || 0);
+      } catch (err) {
+        console.error('加载 IP 黑名单失败:', err);
+      } finally {
+        setIpBlacklistLoading(false);
       }
-    } catch (err) {
-      console.error('加载 IP 黑名单失败:', err);
-    } finally {
-      setIpBlacklistLoading(false);
-    }
-  }, [ipBlacklistPage, ipBlacklistSearch]);
+    });
+  }, [ipBlacklistPage, ipBlacklistSearch, debouncedRun]);
 
-  const fetchDiscussions = useCallback(async () => {
-    setDiscussionsLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(discussionsPage), size: String(PAGE_SIZE) });
-      if (discussionsSearch) params.set('keyword', discussionsSearch);
-      if (discussionsCategory) params.set('category', discussionsCategory);
-      if (discussionsStatus) params.set('status', discussionsStatus);
-      const res = await adminFetch<{ code: number; data: { items: DiscussionSummary[]; total: number } }>(
-        `${API_BASE}/discussions?${params}`
-      );
-      if (res.code === 200) {
+  const fetchDiscussions = useCallback((): Promise<void> => {
+    return debouncedRun('discussions', async () => {
+      setDiscussionsLoading(true);
+      try {
+        const params = new URLSearchParams({ page: String(discussionsPage), size: String(PAGE_SIZE) });
+        if (discussionsSearch) params.set('keyword', discussionsSearch);
+        if (discussionsCategory) params.set('category', discussionsCategory);
+        if (discussionsStatus) params.set('status', discussionsStatus);
+        const res = await adminFetch<{ code: number; data: { items: DiscussionSummary[]; total: number } }>(
+          `${API_BASE}/discussions?${params}`
+        );
         setAdminDiscussions(res.data.items);
         setDiscussionsTotal(res.data.total);
+      } catch (err) {
+        console.error('加载讨论列表失败:', err);
+      } finally {
+        setDiscussionsLoading(false);
       }
-    } catch (err) {
-      console.error('加载讨论列表失败:', err);
-    } finally {
-      setDiscussionsLoading(false);
-    }
-  }, [discussionsPage, discussionsSearch, discussionsCategory, discussionsStatus]);
+    });
+  }, [discussionsPage, discussionsSearch, discussionsCategory, discussionsStatus, debouncedRun]);
 
-  const fetchBans = useCallback(async () => {
-    setBansLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(bansPage), size: String(PAGE_SIZE) });
-      if (bansSearch) params.set('search', bansSearch);
-      if (bansStatus) params.set('status', bansStatus);
-      const res = await adminFetch<{ code: number; data: { items: BanRecord[]; total: number } }>(
-        `${API_BASE}/bans?${params}`
-      );
-      if (res.code === 200) {
+  const fetchBans = useCallback((): Promise<void> => {
+    return debouncedRun('bans', async () => {
+      setBansLoading(true);
+      try {
+        const params = new URLSearchParams({ page: String(bansPage), size: String(PAGE_SIZE) });
+        if (bansSearch) params.set('search', bansSearch);
+        if (bansStatus) params.set('status', bansStatus);
+        const res = await adminFetch<{ code: number; data: { items: BanRecord[]; total: number } }>(
+          `${API_BASE}/bans?${params}`
+        );
         setBans(res.data.items);
         setBansTotal(res.data.total);
+      } catch (err) {
+        console.error('加载封禁列表失败:', err);
+      } finally {
+        setBansLoading(false);
       }
-    } catch (err) {
-      console.error('加载封禁列表失败:', err);
-    } finally {
-      setBansLoading(false);
-    }
-  }, [bansPage, bansSearch, bansStatus]);
+    });
+  }, [bansPage, bansSearch, bansStatus, debouncedRun]);
 
-  const fetchActivityLogs = useCallback(async () => {
-    setActivityLogsLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(activityLogsPage), size: String(PAGE_SIZE) });
-      if (activityLogsSearch) params.set('search', activityLogsSearch);
-      if (activityLogsAction) params.set('action', activityLogsAction);
-      if (activityLogsStatus) params.set('status', activityLogsStatus);
-      const res = await adminFetch<{ code: number; data: { items: ActivityLogItem[]; total: number }; stats: ActivityLogStats }>(
-        `${API_BASE}/activity-logs?${params}`
-      );
-      if (res.code === 200) {
+  const fetchActivityLogs = useCallback((): Promise<void> => {
+    return debouncedRun('activityLogs', async () => {
+      setActivityLogsLoading(true);
+      try {
+        const params = new URLSearchParams({ page: String(activityLogsPage), size: String(PAGE_SIZE) });
+        if (activityLogsSearch) params.set('search', activityLogsSearch);
+        if (activityLogsAction) params.set('action', activityLogsAction);
+        if (activityLogsStatus) params.set('status', activityLogsStatus);
+        const res = await adminFetch<{ code: number; data: { items: ActivityLogItem[]; total: number }; stats: ActivityLogStats }>(
+          `${API_BASE}/activity-logs?${params}`
+        );
         setActivityLogs(res.data.items);
         setActivityLogsTotal(res.data.total);
         if (res.stats) setActivityLogStats(res.stats);
+      } catch (err) {
+        console.error('加载活动日志失败:', err);
+      } finally {
+        setActivityLogsLoading(false);
       }
-    } catch (err) {
-      console.error('加载活动日志失败:', err);
-    } finally {
-      setActivityLogsLoading(false);
-    }
-  }, [activityLogsPage, activityLogsSearch, activityLogsAction, activityLogsStatus]);
+    });
+  }, [activityLogsPage, activityLogsSearch, activityLogsAction, activityLogsStatus, debouncedRun]);
 
   const fetchBackupFiles = useCallback(async () => {
     setBackupLoading(true);
@@ -1036,10 +1094,8 @@ export function useAdminPage(): UseAdminPageReturn {
       const res = await adminFetch<{ code: number; data: { backups: BackupFile[]; stats: BackupStats } }>(
         `${API_BASE}/backup`
       );
-      if (res.code === 200) {
-        setBackupFiles(res.data?.backups || []);
-        if (res.data?.stats) setBackupStats(res.data.stats);
-      }
+      setBackupFiles(res.data?.backups || []);
+      if (res.data?.stats) setBackupStats(res.data.stats);
     } catch (err) {
       console.error('加载备份列表失败:', err);
     } finally {
@@ -1047,23 +1103,38 @@ export function useAdminPage(): UseAdminPageReturn {
     }
   }, []);
 
+  const fetchNotifications = useCallback(async () => {
+    setNotificationsLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(notificationsPage), size: String(PAGE_SIZE) });
+      const res = await adminFetch<{ code: number; data: { items: AdminNotificationConfig[]; total: number } }>(
+        `${API_BASE}/notifications?${params}`,
+        { signal: getAbortSignal('notifications') }
+      );
+      setNotifications(res.data.items || []);
+      setNotificationsTotal(res.data.total || 0);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') console.error('加载通知列表失败:', err);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, [notificationsPage]);
+
   // ============================================================
   // 操作处理函数
   // ============================================================
 
   // ---- 用户 ----
   const handleDeleteUser = useCallback(async (userId: string) => {
-    if (!confirm('确定要删除该用户吗？此操作不可逆。')) return;
     try {
       await adminFetch(`${API_BASE}/users/${userId}`, { method: 'DELETE' });
       fetchUsers();
     } catch (err) {
-      alert((err as Error).message || '删除失败');
+      toast.error((err as Error).message || '删除失败');
     }
   }, [fetchUsers]);
 
   const handleDeleteSelectedUsers = useCallback(async (userIds: string[]) => {
-    if (!confirm(`确定要删除选中的 ${userIds.length} 个用户吗？此操作不可逆。`)) return;
     try {
       await adminFetch(`${API_BASE}/users/batch-delete`, {
         method: 'POST',
@@ -1072,7 +1143,7 @@ export function useAdminPage(): UseAdminPageReturn {
       setSelectedUsers(new Set());
       fetchUsers();
     } catch (err) {
-      alert((err as Error).message || '批量删除失败');
+      toast.error((err as Error).message || '批量删除失败');
     }
   }, [fetchUsers]);
 
@@ -1081,11 +1152,15 @@ export function useAdminPage(): UseAdminPageReturn {
       await adminFetch(`${API_BASE}/users/${userId}/ban`, {
         method: banned ? 'POST' : 'DELETE',
       });
-      fetchUsers();
+      // 不在此处自动刷新列表，由调用方决定刷新时机（批量操作统一刷新）
+      // 如果详情面板正在显示该用户，刷新详情
+      if (selectedUserDetail?.id === userId) {
+        fetchUserDetail(userId);
+      }
     } catch (err) {
-      alert((err as Error).message || '操作失败');
+      toast.error((err as Error).message || '操作失败');
     }
-  }, [fetchUsers]);
+  }, [selectedUserDetail?.id, fetchUserDetail]);
 
   const handleMuteUser = useCallback((userId: string, username: string) => {
     setUserPenaltyForm({ ...emptyPenaltyForm, userId, username, type: 'mute' });
@@ -1104,17 +1179,15 @@ export function useAdminPage(): UseAdminPageReturn {
 
   // ---- 仓库 ----
   const handleDeleteRepo = useCallback(async (repoId: string) => {
-    if (!confirm('确定要删除该仓库吗？此操作不可逆。')) return;
     try {
       await adminFetch(`${API_BASE}/repos/${repoId}`, { method: 'DELETE' });
       fetchRepos();
     } catch (err) {
-      alert((err as Error).message || '删除失败');
+      toast.error((err as Error).message || '删除失败');
     }
   }, [fetchRepos]);
 
   const handleDeleteSelectedRepos = useCallback(async (repoIds: string[]) => {
-    if (!confirm(`确定要删除选中的 ${repoIds.length} 个仓库吗？此操作不可逆。`)) return;
     try {
       await adminFetch(`${API_BASE}/repos/batch-delete`, {
         method: 'POST',
@@ -1123,7 +1196,7 @@ export function useAdminPage(): UseAdminPageReturn {
       setSelectedRepos(new Set());
       fetchRepos();
     } catch (err) {
-      alert((err as Error).message || '批量删除失败');
+      toast.error((err as Error).message || '批量删除失败');
     }
   }, [fetchRepos]);
 
@@ -1147,7 +1220,7 @@ export function useAdminPage(): UseAdminPageReturn {
       setCurrentReportId(null);
       fetchReports();
     } catch (err) {
-      alert((err as Error).message || '操作失败');
+      toast.error((err as Error).message || '操作失败');
     } finally {
       setIsHandlingReport(false);
     }
@@ -1165,14 +1238,30 @@ export function useAdminPage(): UseAdminPageReturn {
 
   const handlePenalizeFromReport = useCallback(async (report: ReportSummary, penaltyType: string, penaltyReason: string) => {
     if (!penaltyReason.trim()) {
-      alert('请输入处罚原因');
-      return;
-    }
-    if (!confirm(`确定要对举报对象执行${penaltyType === 'mute' ? '禁言' : penaltyType === 'repo_limit' ? '仓库限制' : penaltyType === 'storage_limit' ? '存储限制' : '封禁'}处罚吗？`)) {
+      toast.error('请输入处罚原因');
       return;
     }
     setReportPenaltySaving(true);
     try {
+      // 先解析被举报对象的实际用户 ID
+      let targetUserId: string | undefined;
+      if (report.targetType === 'user') {
+        targetUserId = report.targetId;
+      } else {
+        const detailRes = await adminFetch<{ code: number; data?: { targetInfo?: { authorId?: string; ownerId?: string } } }>(
+          `${API_BASE}/reports/${report.id}/detail`
+        );
+        if (detailRes.code === 200 && detailRes.data?.targetInfo) {
+          targetUserId = detailRes.data.targetInfo.authorId
+            || detailRes.data.targetInfo.ownerId
+            || undefined;
+        }
+      }
+      if (!targetUserId) {
+        toast.error('无法获取被举报用户信息');
+        return;
+      }
+
       await adminFetch(`${API_BASE}/reports/${report.id}/handle`, {
         method: 'POST',
         body: JSON.stringify({ action: 'delete', note: `处罚用户: ${penaltyType} - ${penaltyReason}` }),
@@ -1180,17 +1269,17 @@ export function useAdminPage(): UseAdminPageReturn {
       await adminFetch(`${API_BASE}/penalties`, {
         method: 'POST',
         body: JSON.stringify({
-          username: report.targetId,
-          type: penaltyType,
+          userId: targetUserId,
+          penaltyType: penaltyType,
           reason: `举报处理处罚: ${penaltyReason}`,
-          duration: '7d',
+          expiresDays: 7,
         }),
       });
       handleCloseReportDetail();
       fetchReports();
       fetchPenalties();
     } catch (err) {
-      alert((err as Error).message || '处罚失败');
+      toast.error((err as Error).message || '处罚失败');
     } finally {
       setReportPenaltySaving(false);
     }
@@ -1214,40 +1303,40 @@ export function useAdminPage(): UseAdminPageReturn {
     setShowAnnouncementModal(true);
   }, []);
 
-  const handleAnnouncementSubmit = useCallback(async () => {
-    if (!announcementForm.title.trim() || !announcementForm.content.trim()) {
-      alert('标题和内容不能为空');
+  const handleAnnouncementSubmit = useCallback(async (formData?: AnnouncementFormData) => {
+    const data = formData || announcementForm;
+    if (!data.title.trim() || !data.content.trim()) {
+      toast.error('标题和内容不能为空');
       return;
     }
     setAnnouncementSaving(true);
     try {
-      if (announcementForm.id) {
-        await adminFetch(`${API_BASE}/announcements/${announcementForm.id}`, {
+      if (data.id) {
+        await adminFetch(`${API_BASE}/announcements/${data.id}`, {
           method: 'PATCH',
-          body: JSON.stringify(announcementForm),
+          body: JSON.stringify(data),
         });
       } else {
         await adminFetch(`${API_BASE}/announcements`, {
           method: 'POST',
-          body: JSON.stringify(announcementForm),
+          body: JSON.stringify(data),
         });
       }
       setShowAnnouncementModal(false);
       fetchAnnouncements();
     } catch (err) {
-      alert((err as Error).message || '保存失败');
+      toast.error((err as Error).message || '保存失败');
     } finally {
       setAnnouncementSaving(false);
     }
   }, [announcementForm, fetchAnnouncements]);
 
   const handleDeleteAnnouncement = useCallback(async (id: string) => {
-    if (!confirm('确定要删除该公告吗？')) return;
     try {
       await adminFetch(`${API_BASE}/announcements/${id}`, { method: 'DELETE' });
       fetchAnnouncements();
     } catch (err) {
-      alert((err as Error).message || '删除失败');
+      toast.error((err as Error).message || '删除失败');
     }
   }, [fetchAnnouncements]);
 
@@ -1259,7 +1348,7 @@ export function useAdminPage(): UseAdminPageReturn {
       });
       fetchAnnouncements();
     } catch (err) {
-      alert((err as Error).message || '操作失败');
+      toast.error((err as Error).message || '操作失败');
     }
   }, [fetchAnnouncements]);
 
@@ -1271,7 +1360,6 @@ export function useAdminPage(): UseAdminPageReturn {
   }, []);
 
   const handleApproveAppeal = useCallback(async (appealId: string) => {
-    if (!confirm('确定要通过该申诉吗？这将撤销相关处罚。')) return;
     setAppealProcessing(true);
     try {
       await adminFetch(`${API_BASE}/appeals/${appealId}`, {
@@ -1281,7 +1369,7 @@ export function useAdminPage(): UseAdminPageReturn {
       setShowAppealModal(false);
       fetchAppeals();
     } catch (err) {
-      alert((err as Error).message || '操作失败');
+      toast.error((err as Error).message || '操作失败');
     } finally {
       setAppealProcessing(false);
     }
@@ -1297,7 +1385,7 @@ export function useAdminPage(): UseAdminPageReturn {
       setShowAppealModal(false);
       fetchAppeals();
     } catch (err) {
-      alert((err as Error).message || '操作失败');
+      toast.error((err as Error).message || '操作失败');
     } finally {
       setAppealProcessing(false);
     }
@@ -1306,7 +1394,7 @@ export function useAdminPage(): UseAdminPageReturn {
   // ---- 处罚 ----
   const handlePenaltySubmit = useCallback(async () => {
     if (!penaltyForm.userId.trim() || !penaltyForm.reason.trim()) {
-      alert('用户和原因不能为空');
+      toast.error('用户和原因不能为空');
       return;
     }
     setPenaltySaving(true);
@@ -1319,19 +1407,18 @@ export function useAdminPage(): UseAdminPageReturn {
       setPenaltyForm(emptyPenaltyForm);
       fetchPenalties();
     } catch (err) {
-      alert((err as Error).message || '添加处罚失败');
+      toast.error((err as Error).message || '添加处罚失败');
     } finally {
       setPenaltySaving(false);
     }
   }, [penaltyForm, fetchPenalties]);
 
   const handleDeletePenalty = useCallback(async (id: string) => {
-    if (!confirm('确定要删除该处罚记录吗？')) return;
     try {
       await adminFetch(`${API_BASE}/penalties/${id}`, { method: 'DELETE' });
       fetchPenalties();
     } catch (err) {
-      alert((err as Error).message || '删除失败');
+      toast.error((err as Error).message || '删除失败');
     }
   }, [fetchPenalties]);
 
@@ -1359,7 +1446,7 @@ export function useAdminPage(): UseAdminPageReturn {
 
   const handleRemovePenaltySubmit = useCallback(async () => {
     if (!currentPenalty || !removeReason.trim()) {
-      alert('请输入解除原因');
+      toast.error('请输入解除原因');
       return;
     }
     setRemoveSaving(true);
@@ -1372,7 +1459,7 @@ export function useAdminPage(): UseAdminPageReturn {
       handleCloseRemovePenalty();
       fetchPenalties();
     } catch (err) {
-      alert((err as Error).message || '解除处罚失败');
+      toast.error((err as Error).message || '解除处罚失败');
     } finally {
       setRemoveSaving(false);
     }
@@ -1385,10 +1472,10 @@ export function useAdminPage(): UseAdminPageReturn {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, reason: '处罚管理中直接封禁' }),
       });
-      alert('封禁成功');
+      toast.success('封禁成功');
       fetchPenalties();
     } catch (err) {
-      alert((err as Error).message || '封禁失败');
+      toast.error((err as Error).message || '封禁失败');
     }
   }, [fetchPenalties]);
 
@@ -1408,7 +1495,7 @@ export function useAdminPage(): UseAdminPageReturn {
       setShowSecurityModal(false);
       fetchSecurityEvents();
     } catch (err) {
-      alert((err as Error).message || '操作失败');
+      toast.error((err as Error).message || '操作失败');
     } finally {
       setSecurityProcessing(false);
     }
@@ -1417,7 +1504,7 @@ export function useAdminPage(): UseAdminPageReturn {
   // ---- IP 黑名单 ----
   const handleIpSubmit = useCallback(async () => {
     if (!ipForm.ipAddress.trim() || !ipForm.reason.trim()) {
-      alert('IP 地址和原因不能为空');
+      toast.error('IP 地址和原因不能为空');
       return;
     }
     setIpSaving(true);
@@ -1430,35 +1517,32 @@ export function useAdminPage(): UseAdminPageReturn {
       setIpForm(emptyIpForm);
       fetchIpBlacklist();
     } catch (err) {
-      alert((err as Error).message || '添加失败');
+      toast.error((err as Error).message || '添加失败');
     } finally {
       setIpSaving(false);
     }
   }, [ipForm, fetchIpBlacklist]);
 
   const handleDeleteIp = useCallback(async (id: string) => {
-    if (!confirm('确定要移除该 IP 吗？')) return;
     try {
       await adminFetch(`${API_BASE}/ip-blacklist/${id}`, { method: 'DELETE' });
       fetchIpBlacklist();
     } catch (err) {
-      alert((err as Error).message || '删除失败');
+      toast.error((err as Error).message || '删除失败');
     }
   }, [fetchIpBlacklist]);
 
   // ---- 讨论管理 ----
   const handleDeleteDiscussion = useCallback(async (id: string) => {
-    if (!confirm('确定要删除该讨论吗？')) return;
     try {
       await adminFetch(`${API_BASE}/discussions/${id}`, { method: 'DELETE' });
       fetchDiscussions();
     } catch (err) {
-      alert((err as Error).message || '删除失败');
+      toast.error((err as Error).message || '删除失败');
     }
   }, [fetchDiscussions]);
 
   const handleRestoreDiscussion = useCallback(async (id: string) => {
-    if (!confirm('确定要恢复该讨论吗？')) return;
     try {
       await adminFetch(`${API_BASE}/discussions/${id}`, {
         method: 'PATCH',
@@ -1467,7 +1551,7 @@ export function useAdminPage(): UseAdminPageReturn {
       });
       fetchDiscussions();
     } catch (err) {
-      alert((err as Error).message || '恢复失败');
+      toast.error((err as Error).message || '恢复失败');
     }
   }, [fetchDiscussions]);
 
@@ -1477,7 +1561,7 @@ export function useAdminPage(): UseAdminPageReturn {
     const content = overrideData?.content || sendContent;
     const type = overrideData?.type || sendType;
     if (!title?.trim() || !content?.trim()) {
-      alert('标题和内容不能为空');
+      toast.error('标题和内容不能为空');
       return;
     }
     setSending(true);
@@ -1493,16 +1577,25 @@ export function useAdminPage(): UseAdminPageReturn {
           linkUrl: sendLinkUrl || undefined,
         }),
       });
-      alert('通知发送成功');
+      toast.success('通知发送成功');
       setSendTitle('');
       setSendContent('');
       setSendLinkUrl('');
     } catch (err) {
-      alert((err as Error).message || '发送失败');
+      toast.error((err as Error).message || '发送失败');
     } finally {
       setSending(false);
     }
   }, [sendTitle, sendContent, sendType, sendLinkUrl]);
+
+  const handleDeleteNotification = useCallback(async (id: string) => {
+    try {
+      await adminFetch(`${API_BASE}/notifications/${id}`, { method: 'DELETE' });
+      fetchNotifications();
+    } catch (err) {
+      toast.error((err as Error).message || '删除失败');
+    }
+  }, [fetchNotifications]);
 
   // ---- 封禁管理 ----
   const handleOpenBanModal = useCallback(() => {
@@ -1517,7 +1610,7 @@ export function useAdminPage(): UseAdminPageReturn {
 
   const handleBanSubmit = useCallback(async () => {
     if (!banForm.userId.trim() || !banForm.reason.trim()) {
-      alert('用户 ID 和原因不能为空');
+      toast.error('用户 ID 和原因不能为空');
       return;
     }
     setBanSaving(true);
@@ -1530,7 +1623,7 @@ export function useAdminPage(): UseAdminPageReturn {
       handleCloseBanModal();
       fetchBans();
     } catch (err) {
-      alert((err as Error).message || '封禁失败');
+      toast.error((err as Error).message || '封禁失败');
     } finally {
       setBanSaving(false);
     }
@@ -1550,7 +1643,7 @@ export function useAdminPage(): UseAdminPageReturn {
 
   const handleUnbanSubmit = useCallback(async () => {
     if (!unbanBanRecord || !unbanReason.trim()) {
-      alert('解除原因不能为空');
+      toast.error('解除原因不能为空');
       return;
     }
     setUnbanSaving(true);
@@ -1563,7 +1656,7 @@ export function useAdminPage(): UseAdminPageReturn {
       handleCloseUnbanModal();
       fetchBans();
     } catch (err) {
-      alert((err as Error).message || '解除封禁失败');
+      toast.error((err as Error).message || '解除封禁失败');
     } finally {
       setUnbanSaving(false);
     }
@@ -1587,7 +1680,7 @@ export function useAdminPage(): UseAdminPageReturn {
       handleCloseDeleteBanModal();
       fetchBans();
     } catch (err) {
-      alert((err as Error).message || '删除失败');
+      toast.error((err as Error).message || '删除失败');
     } finally {
       setDeleteBanSaving(false);
     }
@@ -1613,9 +1706,9 @@ export function useAdminPage(): UseAdminPageReturn {
       });
       handleCloseBackupModal();
       fetchBackupFiles();
-      alert('备份任务已启动');
+      toast.success('备份任务已启动');
     } catch (err) {
-      alert((err as Error).message || '备份失败');
+      toast.error((err as Error).message || '备份失败');
     } finally {
       setBackupCreating(false);
     }
@@ -1639,7 +1732,7 @@ export function useAdminPage(): UseAdminPageReturn {
       handleCloseDeleteBackupModal();
       fetchBackupFiles();
     } catch (err) {
-      alert((err as Error).message || '删除失败');
+      toast.error((err as Error).message || '删除失败');
     } finally {
       setDeleteBackupSaving(false);
     }
@@ -1706,6 +1799,9 @@ export function useAdminPage(): UseAdminPageReturn {
     fetchReportDetail,
     fetchReportStats,
 
+    // 用户详情获取
+    fetchUserDetail,
+
     // 审计日志
     auditLogs, setAuditLogs,
     auditLogsTotal, setAuditLogsTotal,
@@ -1717,6 +1813,7 @@ export function useAdminPage(): UseAdminPageReturn {
     announcementsTotal, setAnnouncementsTotal,
     announcementsPage, setAnnouncementsPage,
     announcementsLoading, setAnnouncementsLoading,
+    announcementStats,
     showAnnouncementModal, setShowAnnouncementModal,
     announcementForm, setAnnouncementForm,
     announcementSaving, setAnnouncementSaving,
@@ -1795,6 +1892,10 @@ export function useAdminPage(): UseAdminPageReturn {
     selectedDiscussionDetail, setSelectedDiscussionDetail,
 
     // 通知管理
+    notifications, setNotifications,
+    notificationsTotal, setNotificationsTotal,
+    notificationsPage, setNotificationsPage,
+    notificationsLoading, setNotificationsLoading,
     sendTitle, setSendTitle,
     sendContent, setSendContent,
     sendType, setSendType,
@@ -1855,6 +1956,7 @@ export function useAdminPage(): UseAdminPageReturn {
     fetchBans,
     fetchActivityLogs,
     fetchBackupFiles,
+    fetchNotifications,
 
     // 操作处理函数
     handleDeleteUser,
@@ -1892,6 +1994,7 @@ export function useAdminPage(): UseAdminPageReturn {
     handleDeleteDiscussion,
     handleRestoreDiscussion,
     handleSendNotification,
+    handleDeleteNotification,
     handleOpenBanModal,
     handleCloseBanModal,
     handleBanSubmit,

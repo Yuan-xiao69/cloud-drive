@@ -104,13 +104,10 @@ async function getEmailConfig(): Promise<EmailProviderConfig | null> {
 
 // 保存邮件配置到数据库（自动加密敏感字段）
 export async function saveEmailConfig(config: EmailProviderConfig): Promise<void> {
-  // 检查是否已配置加密密钥
   if (!isEncryptionConfigured()) {
-    console.warn('⚠️ 警告: 未配置 ENCRYPTION_KEY，敏感信息将以明文存储！');
-    console.warn('⚠️ 请在 .env 中添加 ENCRYPTION_KEY 环境变量');
+    throw new Error('ENCRYPTION_KEY 环境变量未设置，无法安全保存邮件配置。请在 .env 中添加 ENCRYPTION_KEY');
   }
-  
-  // 加密敏感字段
+
   const configToSave = encryptSensitiveFields(config);
   
   await prisma.systemConfig.upsert({
@@ -217,9 +214,13 @@ async function sendViaSendGrid(config: EmailProviderConfig, to: string, code: st
 // Mailgun API 发送
 async function sendViaMailgun(config: EmailProviderConfig, to: string, code: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const domain = config.user?.split('@')[1]; // Mailgun 使用域名
+    const domain = config.user?.split('@')?.[1]; // Mailgun 使用域名
     const apiKey = config.apiKey;
-    
+
+    if (!domain) {
+      return { success: false, error: 'Mailgun 配置缺少有效的 user 字段' };
+    }
+
     const response = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
       method: 'POST',
       headers: {
@@ -363,11 +364,68 @@ export async function sendVerificationCode(to: string, code: string): Promise<{ 
   }
 }
 
+// 速率限制：每收件人每分钟最多 10 封
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const SEND_RATE_LIMIT = 10;
+const CLEANUP_INTERVAL = 5 * 60 * 1000; // 每5分钟清理一次过期条目
+let lastCleanup = Date.now();
+
+function checkRateLimit(to: string): boolean {
+  const now = Date.now();
+
+  // 定期清理过期条目，防止内存泄漏
+  if (now - lastCleanup > CLEANUP_INTERVAL) {
+    for (const [key, entry] of rateLimitMap) {
+      if (now > entry.resetAt) rateLimitMap.delete(key);
+    }
+    lastCleanup = now;
+  }
+
+  const entry = rateLimitMap.get(to);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(to, { count: 1, resetAt: now + 60000 });
+    return true;
+  }
+  if (entry.count >= SEND_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
+// 死信队列：失败超过 3 次的任务记录到 Redis
+async function moveToDeadLetter(job: { to: string; code: string; attempts?: number; lastError?: string }): Promise<void> {
+  try {
+    const { getRedisClient } = await import('./redis-client');
+    const redis = await getRedisClient();
+    if (!redis) return;
+    const key = 'email_dead_letter';
+    const entry = JSON.stringify({
+      to: job.to,
+      code: job.code,
+      attempts: job.attempts || 3,
+      lastError: job.lastError || '未知',
+      timestamp: new Date().toISOString(),
+    });
+    // RPUSH 不支持，用 set 追加
+    const existing = await redis.get(key);
+    const entries = existing ? JSON.parse(existing) : [];
+    entries.push(JSON.parse(entry));
+    await redis.set(key, JSON.stringify(entries.slice(-100)), 'EX', 86400 * 7); // 保留最近100条，7天过期
+    console.warn(`📮 邮件移入死信队列: ${job.to}`);
+  } catch {
+    console.warn('死信队列写入失败');
+  }
+}
+
 /**
  * 通过队列发送邮件（异步，非阻塞）
  * 如果 Redis 不可用，自动降级为同步发送
  */
 export async function queueEmail(to: string, code: string): Promise<{ queued: boolean; jobId?: string }> {
+  if (!checkRateLimit(to)) {
+    console.warn(`⚠️ 邮件频率限制: ${to} 超过 ${SEND_RATE_LIMIT}/分钟`);
+    return { queued: false };
+  }
+
   try {
     const { enqueueEmailJob } = await import('./redis-queue');
     const jobId = await enqueueEmailJob({
@@ -375,18 +433,19 @@ export async function queueEmail(to: string, code: string): Promise<{ queued: bo
       code,
       type: 'verification',
     });
-    
+
     console.log(`📬 邮件已加入队列: ${jobId}`);
     return { queued: true, jobId };
   } catch (error) {
     // Redis 不可用，降级为同步发送
     console.warn('⚠️ Redis 队列不可用，降级为同步发送');
     const result = await sendVerificationCode(to, code);
-    
+
     if (!result.success) {
       console.error('❌ 邮件发送失败:', result.error);
+      await moveToDeadLetter({ to, code, lastError: result.error });
     }
-    
+
     return { queued: false };
   }
 }
@@ -436,34 +495,104 @@ async function sendReportNotification(
   config: EmailProviderConfig,
   params: ReportNotificationParams
 ): Promise<{ success: boolean; error?: string }> {
-  const { type, recipientEmail, recipientName, reportReason, handleNote, penaltyType, handleTime } = params;
-  
+  const { type, recipientEmail } = params;
+
   const subject = getReportSubject(type);
   const html = generateReportEmailHTML(params);
+  const text = generateReportEmailText(params);
 
-  try {
-    const transporter = nodemailer.createTransport({
-      host: config.host || 'smtp.qq.com',
-      port: config.port || 465,
-      secure: config.secure ?? true,
-      auth: {
-        user: config.user,
-        pass: config.pass,
-      },
-    });
+  switch (config.type) {
+    case 'qq':
+    case 'aliyun':
+    case 'smtp': {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: config.host || (config.type === 'qq' ? 'smtp.qq.com' : config.type === 'aliyun' ? 'smtp.aliyundm.aliyun.com' : undefined),
+          port: config.port || (config.type === 'aliyun' ? 465 : 587),
+          secure: config.secure ?? (config.type !== 'smtp'),
+          auth: {
+            user: config.user,
+            pass: config.pass,
+          },
+        });
 
-    await transporter.sendMail({
-      from: `"${config.from || '代码平台'}" <${config.user}>`,
-      to: recipientEmail,
-      subject,
-      html,
-      text: generateReportEmailText(params),
-    });
+        await transporter.sendMail({
+          from: `"${config.from || '代码平台'}" <${config.user}>`,
+          to: recipientEmail,
+          subject,
+          html,
+          text,
+        });
 
-    return { success: true };
-  } catch (error) {
-    console.error('举报通知邮件发送失败:', error);
-    return { success: false, error: String(error) };
+        return { success: true };
+      } catch (error) {
+        console.error('举报通知邮件发送失败:', error);
+        return { success: false, error: String(error) };
+      }
+    }
+    case 'sendgrid': {
+      try {
+        const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            personalizations: [{ to: [{ email: recipientEmail }] }],
+            from: { email: config.user },
+            subject,
+            content: [
+              { type: 'text/plain', value: text },
+              { type: 'text/html', value: html },
+            ],
+          }),
+        });
+
+        if (response.ok) {
+          return { success: true };
+        } else {
+          const error = await response.text();
+          return { success: false, error };
+        }
+      } catch (error) {
+        console.error('SendGrid报告通知发送失败:', error);
+        return { success: false, error: String(error) };
+      }
+    }
+    case 'mailgun': {
+      try {
+        const domain = config.user?.split('@')?.[1];
+        if (!domain) {
+          return { success: false, error: 'Mailgun 配置缺少有效的 user 字段' };
+        }
+        const response = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${Buffer.from(`api:${config.apiKey}`).toString('base64')}`,
+          },
+          body: new URLSearchParams({
+            from: config.from || `代码平台 <mailgun@${domain}>`,
+            to: recipientEmail,
+            subject,
+            text,
+            html,
+          }),
+        });
+
+        if (response.ok) {
+          return { success: true };
+        } else {
+          const error = await response.text();
+          return { success: false, error };
+        }
+      } catch (error) {
+        console.error('Mailgun报告通知发送失败:', error);
+        return { success: false, error: String(error) };
+      }
+    }
+    default:
+      return { success: false, error: '未知的邮件服务商' };
   }
 }
 

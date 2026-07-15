@@ -4,23 +4,24 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/users/batch-delete - 批量删除用户
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
+import { recordAuditLog } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // POST /api/v1/admin/users/batch-delete - 批量删除用户
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    ids: z.array(z.string()).min(1),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { ids } = await req.json();
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return errors.badRequest('请选择要删除的用户');
-    }
+    const { ids } = body;
 
     // 检查是否包含超级管理员
     const superAdmin = await prisma.user.findFirst({
@@ -31,14 +32,13 @@ export async function POST(req: NextRequest): Promise<Response> {
       return errors.forbidden('禁止删除超级管理员账号');
     }
 
-    // 执行删除
     const deleteResult = await prisma.user.deleteMany({
       where: { id: { in: ids } },
     });
 
-    // 记录审计日志
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'batch_delete_users',
       targetType: 'user',
       targetId: ids.join(','),
@@ -48,8 +48,5 @@ export async function POST(req: NextRequest): Promise<Response> {
     return success({
       count: deleteResult.count,
     }, `成功删除 ${deleteResult.count} 个用户`);
-  } catch (err) {
-    console.error('批量删除用户失败:', err);
-    return handlePrismaError(err);
-  }
-}
+  },
+});

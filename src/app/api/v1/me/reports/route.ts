@@ -4,9 +4,8 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/me/reports - 获取当前用户的举报记录（与 /api/v1/reports 相同，但作为用户中心入口）
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, paginated, handlePrismaError } from '@/lib/api/v1/response';
-import { requireAuth } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { paginated } from '@/lib/api/v1/response';
 import { prisma } from '@/lib/prisma';
 import { parsePagination, buildPaginationMeta } from '@/lib/api/v1/pagination';
 
@@ -18,23 +17,21 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   user: '用户',
   discussion: '讨论',
   issue: 'Issue',
-  pullrequest: 'Pull Request',
+  pullrequest: '合并请求',
   comment: '评论',
   repository: '仓库',
 };
 
 // GET /api/v1/me/reports - 获取当前用户的举报记录
-export async function GET(req: NextRequest) {
-  try {
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
     const { searchParams } = new URL(req.url);
     const { page, size, skip } = parsePagination(searchParams);
     const status = searchParams.get('status') || undefined;
 
     // 构建查询条件
-    const where: Record<string, unknown> = { reporterId: auth.userId };
+    const where: Record<string, unknown> = { reporterId: user!.id };
     if (status && VALID_STATUSES.includes(status)) {
       where.status = status;
     }
@@ -68,7 +65,5 @@ export async function GET(req: NextRequest) {
     }));
 
     return paginated(formattedItems, buildPaginationMeta(total, page, size));
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

@@ -208,25 +208,25 @@ const ROUTE_CONFIGS: RouteConfig[] = [
     ],
   },
   
-  // Pull Requests 列表
+  // 合并请求列表
   {
     mode: 'pattern',
     path: '/:username/:repoName/pulls',
     generateBreadcrumbs: (params) => [
       { label: params.username, href: `/${params.username}` },
       { label: params.repoName, href: `/${params.username}/${params.repoName}` },
-      { label: 'Pull Requests' },
+      { label: '合并请求' },
     ],
   },
   
-  // Pull Request 详情
+  // 合并请求详情
   {
     mode: 'pattern',
     path: '/:username/:repoName/pulls/:prId',
     generateBreadcrumbs: (params) => [
       { label: params.username, href: `/${params.username}` },
       { label: params.repoName, href: `/${params.username}/${params.repoName}` },
-      { label: 'Pull Requests', href: `/${params.username}/${params.repoName}/pulls` },
+      { label: '合并请求', href: `/${params.username}/${params.repoName}/pulls` },
       { label: `#${params.prId}` },
     ],
   },

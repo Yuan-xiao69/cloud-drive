@@ -35,8 +35,8 @@ function sanitizeHeader(value: string): string {
 // 响应头生成
 // ============================================================
 
-function getResponseHeaders(requestId?: string): Record<string, string> {
-  const safeRequestId = sanitizeHeader(requestId || uuidv4());
+function getResponseHeaders(requestId: string): Record<string, string> {
+  const safeRequestId = sanitizeHeader(requestId);
   return {
     [API_VERSION_HEADER]: API_VERSION,
     [REQUEST_ID_HEADER]: safeRequestId,
@@ -46,11 +46,11 @@ function getResponseHeaders(requestId?: string): Record<string, string> {
   };
 }
 
-function getMeta(requestId?: string) {
+function getMeta(requestId: string) {
   return {
     version: API_VERSION,
     timestamp: new Date().toISOString(),
-    requestId: requestId || uuidv4(),
+    requestId,
   };
 }
 
@@ -67,16 +67,17 @@ export function success<T>(
   status = 200,
   requestId?: string
 ): NextResponse {
+  const id = requestId || uuidv4();
   return NextResponse.json(
     {
       code: status,
       message,
       data,
-      meta: getMeta(requestId),
+      meta: getMeta(id),
     },
     {
       status,
-      headers: getResponseHeaders(requestId),
+      headers: getResponseHeaders(id),
     }
   );
 }
@@ -96,9 +97,10 @@ export function created<T>(
  * 无内容成功响应 (204)
  */
 export function noContent(requestId?: string): NextResponse {
+  const id = requestId || uuidv4();
   return new NextResponse(null, {
     status: 204,
-    headers: getResponseHeaders(requestId),
+    headers: getResponseHeaders(id),
   });
 }
 
@@ -130,6 +132,7 @@ export function paginated<T>(
   message = 'success',
   requestId?: string
 ): NextResponse {
+  const id = requestId || uuidv4();
   return NextResponse.json(
     {
       code: 200,
@@ -138,9 +141,9 @@ export function paginated<T>(
         items,
         pagination,
       },
-      meta: getMeta(requestId),
+      meta: getMeta(id),
     },
-    { headers: getResponseHeaders(requestId) }
+    { headers: getResponseHeaders(id) }
   );
 }
 
@@ -157,7 +160,7 @@ export interface ErrorResponseOptions {
 /**
  * 字符串形式的 ErrorCode 别名（兼容旧代码）
  */
-export type ErrorCodeString = 
+export type ErrorCodeString =
   | 'UNKNOWN_ERROR' | 'INVALID_PARAMS' | 'VALIDATION_ERROR' | 'INTERNAL_ERROR' | 'SERVICE_UNAVAILABLE'
   | 'UNAUTHORIZED' | 'TOKEN_INVALID' | 'TOKEN_EXPIRED' | 'TOKEN_MISSING' | 'INVALID_CREDENTIALS' | 'ACCOUNT_LOCKED' | 'ACCOUNT_DISABLED' | 'MFA_REQUIRED' | 'MFA_INVALID'
   | 'FORBIDDEN' | 'PERMISSION_DENIED' | 'USER_BANNED' | 'REPO_RESTRICTED' | 'ACTION_BLOCKED'
@@ -261,17 +264,18 @@ export function error(
   const resolvedCode = resolveErrorCode(code);
   const { message, details, requestId } = options;
   const httpStatus = HttpStatusMap[resolvedCode] || 500;
+  const id = requestId || uuidv4();
 
   return NextResponse.json(
     {
       code: resolvedCode,
       message: message || ErrorMessages[resolvedCode] || '未知错误',
       errors: details,
-      meta: getMeta(requestId),
+      meta: getMeta(id),
     },
     {
       status: httpStatus,
-      headers: getResponseHeaders(requestId),
+      headers: getResponseHeaders(id),
     }
   );
 }
@@ -412,13 +416,50 @@ export const errors = {
 // ============================================================
 
 /**
+ * ErrorContext - 错误上下文
+ */
+export interface ErrorContext {
+  /** 请求追踪 ID（UUID 格式），用于链路追踪 */
+  requestId?: string;
+  /** 操作描述，仅用于日志记录，不返回给客户端 */
+  operation?: string;
+}
+
+/**
  * 处理 Prisma 错误，转换为统一错误响应
+ *
+ * @param error   - 捕获的错误对象
+ * @param context - 错误上下文。可以是 requestId 字符串（向后兼容），
+ *                  也可以是包含 requestId 和/或 operation 的 ErrorContext 对象。
+ *                  operation 仅用于日志记录，不会暴露给客户端。
+ *
+ * 用法示例:
+ *   handlePrismaError(err)                              // 无上下文
+ *   handlePrismaError(err, requestId)                   // 旧用法，仍然支持
+ *   handlePrismaError(err, { operation: '创建仓库' })      // 新用法，记录操作上下文
+ *   handlePrismaError(err, { requestId, operation: '更新用户' })  // 完整用法
  */
 export function handlePrismaError(
   error: unknown,
-  requestId?: string
+  context?: string | ErrorContext
 ): NextResponse {
-  console.error('Prisma Error:', error);
+  // 规范化 context
+  let requestId: string | undefined;
+  let operation: string | undefined;
+
+  if (typeof context === 'string') {
+    requestId = context;
+  } else if (context) {
+    requestId = context.requestId;
+    operation = context.operation;
+  }
+
+  // 记录操作上下文（不暴露给客户端）
+  if (operation) {
+    console.error(`Prisma Error during ${operation}:`, error);
+  } else {
+    console.error('Prisma Error:', error);
+  }
 
   if (error instanceof Error) {
     // 唯一约束冲突

@@ -1,87 +1,47 @@
 'use client';
 
 import React from 'react';
+import clsx from 'clsx';
 import type { AdminTab } from './AdminTypes';
-import {
-  DashboardIcon,
-  UsersIcon,
-  RepoIcon,
-  DiscussionIcon,
-  FlagIcon,
-  HistoryIcon,
-  PenaltyIcon,
-  AppealIcon,
-  AnnouncementIcon,
-  ShieldIcon,
-  IpIcon,
-  DatabaseIcon,
-  MailIcon,
-  BellIcon,
-  BackupIcon,
-  SettingsIcon,
-  MonitorIcon,
-  BanIcon,
-  ActivityIcon,
-} from './AdminIcons';
+import { DashboardIcon, UsersIcon, RepoIcon, DiscussionIcon, FlagIcon, HistoryIcon, AnnouncementIcon, ShieldIcon, MailIcon, BellIcon, BackupIcon, SettingsIcon, MonitorIcon, BanIcon } from './AdminIcons';
 
-interface TabDef {
-  key: AdminTab;
-  label: string;
-  icon: React.FC;
-  roles?: string[];
-}
+export const ADMIN_ROLES = { SUPER_ADMIN: 'super_admin', ADMIN: 'admin', USER: 'user' } as const;
+
+interface TabDef { key: AdminTab; label: string; icon: React.FC; roles?: string[] }
 
 const TABS: TabDef[] = [
   { key: 'dashboard', label: '仪表盘', icon: DashboardIcon },
   { key: 'users', label: '用户管理', icon: UsersIcon },
   { key: 'repos', label: '仓库管理', icon: RepoIcon },
-  { key: 'discussions', label: '讨论管理', icon: DiscussionIcon, roles: ['super_admin'] },
+  { key: 'discussions', label: '讨论管理', icon: DiscussionIcon, roles: [ADMIN_ROLES.SUPER_ADMIN] },
   { key: 'reports', label: '举报管理', icon: FlagIcon },
-  { key: 'penalties', label: '处罚管理', icon: PenaltyIcon },
-  { key: 'appeals', label: '申诉管理', icon: AppealIcon },
-  { key: 'announcements', label: '公告管理', icon: AnnouncementIcon, roles: ['super_admin'] },
-  { key: 'security', label: '安全事件', icon: ShieldIcon },
-  { key: 'ipblacklist', label: 'IP 黑名单', icon: IpIcon },
-  { key: 'audit', label: '审计日志', icon: HistoryIcon },
-  { key: 'bans', label: '封禁管理', icon: BanIcon },
-  { key: 'activity-logs', label: '活动日志', icon: ActivityIcon },
-  { key: 'backup', label: '备份管理', icon: BackupIcon, roles: ['super_admin'] },
-  { key: 'monitor', label: '系统监控', icon: MonitorIcon, roles: ['super_admin'] },
-  { key: 'settings', label: '系统设置', icon: SettingsIcon, roles: ['super_admin'] },
-  { key: 'email', label: '邮件配置', icon: MailIcon, roles: ['super_admin'] },
-  { key: 'database', label: '数据库', icon: DatabaseIcon, roles: ['super_admin'] },
-  { key: 'notifications', label: '通知管理', icon: BellIcon, roles: ['super_admin'] },
+  { key: 'discipline', label: '用户处置', icon: BanIcon },
+  { key: 'announcements', label: '公告管理', icon: AnnouncementIcon, roles: [ADMIN_ROLES.SUPER_ADMIN] },
+  { key: 'security-center', label: '安全中心', icon: ShieldIcon },
+  { key: 'logs', label: '操作日志', icon: HistoryIcon },
+  { key: 'backup', label: '备份管理', icon: BackupIcon, roles: [ADMIN_ROLES.SUPER_ADMIN] },
+  { key: 'monitor', label: '系统监控', icon: MonitorIcon, roles: [ADMIN_ROLES.SUPER_ADMIN] },
+  { key: 'settings', label: '系统设置', icon: SettingsIcon, roles: [ADMIN_ROLES.SUPER_ADMIN] },
+  { key: 'email', label: '邮件配置', icon: MailIcon, roles: [ADMIN_ROLES.SUPER_ADMIN] },
+  { key: 'notifications', label: '通知管理', icon: BellIcon, roles: [ADMIN_ROLES.SUPER_ADMIN] },
 ];
 
-interface AdminNavProps {
-  activeTab: AdminTab;
-  onTabChange: (tab: AdminTab) => void;
-  userRole: string;
-}
+interface AdminNavProps { activeTab: AdminTab; onTabChange: (tab: AdminTab) => void; userRole: string }
 
-function canAccess(tab: TabDef, userRole: string): boolean {
-  if (!tab.roles || tab.roles.length === 0) return true;
-  return tab.roles.includes(userRole);
-}
+function canAccess(tab: TabDef, userRole: string): boolean { return !tab.roles || tab.roles.length === 0 || tab.roles.includes(userRole); }
 
 export default function AdminNav({ activeTab, onTabChange, userRole }: AdminNavProps) {
-  const visibleTabs = TABS.filter((tab) => canAccess(tab, userRole));
-
   return (
-    <nav className="admin-nav">
-      <h2 className="nav-title">管理面板</h2>
-
-      <div className="nav-list">
-        {visibleTabs.map((tab) => {
+    <nav className="w-60 min-w-60 border-r border-[var(--ds-border-default)] bg-[var(--ds-surface-subtle)] overflow-y-auto p-4">
+      <h2 className="text-sm font-semibold text-[var(--ds-text-secondary)] uppercase px-3 mb-2">管理面板</h2>
+      <div className="flex flex-col gap-0.5">
+        {TABS.filter(t => canAccess(t, userRole)).map(tab => {
           const Icon = tab.icon;
           return (
-            <button
-              key={tab.key}
-              className={`nav-item ${activeTab === tab.key ? 'active' : ''}`}
-              onClick={() => onTabChange(tab.key)}
-            >
-              <Icon />
-              <span>{tab.label}</span>
+            <button key={tab.key}
+              className={clsx('flex items-center gap-3 px-3 py-2 w-full text-left text-sm rounded-md transition-colors border-none bg-transparent cursor-pointer', activeTab === tab.key ? 'bg-[var(--ds-surface-inset)] text-[var(--ds-text-primary)] font-medium' : 'text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-inset)]')}
+              onClick={() => onTabChange(tab.key)}>
+              <Icon /><span>{tab.label}</span>
             </button>
           );
         })}
@@ -90,5 +50,4 @@ export default function AdminNav({ activeTab, onTabChange, userRole }: AdminNavP
   );
 }
 
-// 导出 TABS 供其他地方使用
 export { TABS, canAccess };

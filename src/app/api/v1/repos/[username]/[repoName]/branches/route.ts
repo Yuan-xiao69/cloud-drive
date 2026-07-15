@@ -5,118 +5,49 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/repos/[username]/[repoName]/branches - 创建分支
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, error, handlePrismaError, errors } from '@/lib/api/v1';
-import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, created } from '@/lib/api/v1';
+import { RepoService } from '@/services/repo-service';
 
 // GET /api/v1/repos/[username]/[repoName]/branches - 获取分支列表
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string }> }
-): Promise<Response> {
-  try {
-    const { username, repoName } = await params;
+export const GET = defineRoute({
+  auth: 'optional',
+  handler: async ({ user, params }) => {
+    const { username, repoName } = params;
 
-    const repo = await prisma.repository.findFirst({
-      where: {
-        owner: { username },
-        name: repoName,
-        deletedAt: null,
-      },
-      select: { id: true, ownerId: true, visibility: true, defaultBranch: true },
-    });
+    // 轻量解析仓库 ID
+    const repo = await RepoService.resolveRepoId(username, repoName);
 
-    if (!repo) {
-      return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
-    }
+    const result = await RepoService.listBranches(repo.id, user?.id);
 
-    const auth = await getAuthUser(req);
-    if (repo.visibility === 0 && (!auth || auth.userId !== repo.ownerId)) {
-      return error(ErrorCodes.FORBIDDEN, { message: '私有仓库无法访问' });
-    }
+    return success(result);
+  },
+});
 
-    const branches = await prisma.branch.findMany({
-      where: { repoId: repo.id },
-      select: {
-        id: true,
-        name: true,
-        isDefault: true,
-        createdAt: true,
-      },
-      orderBy: { name: 'asc' },
-    });
-
-    return success({
-      branches,
-      defaultBranch: repo.defaultBranch,
-    });
-  } catch (err) {
-    return handlePrismaError(err, '获取分支列表失败');
-  }
-}
+const createBranchSchema = z.object({
+  name: z.string().min(1, '分支名称不能为空'),
+  fromBranch: z.string().optional(),
+});
 
 // POST /api/v1/repos/[username]/[repoName]/branches - 创建分支
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
+export const POST = defineRoute({
+  auth: 'required',
+  validation: createBranchSchema,
+  handler: async ({ user, body, params }) => {
+    const { username, repoName } = params;
+    const { name, fromBranch } = body as z.infer<typeof createBranchSchema>;
 
-    const { username, repoName } = await params;
-    const body = await req.json();
-    const { name, fromBranch } = body;
+    // 轻量解析仓库 ID
+    const repo = await RepoService.resolveRepoId(username, repoName);
 
-    if (!name) {
-      return errors.badRequest('分支名称不能为空');
-    }
-
-    const repo = await prisma.repository.findFirst({
-      where: {
-        owner: { username },
-        name: repoName,
-        deletedAt: null,
-      },
-      select: { id: true, ownerId: true },
+    const branch = await RepoService.createBranch({
+      repoId: repo.id,
+      userId: user!.id,
+      name,
+      fromBranch,
     });
 
-    if (!repo) {
-      return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
-    }
-
-    if (repo.ownerId !== auth.userId) {
-      return error(ErrorCodes.FORBIDDEN, { message: '只有仓库所有者可以创建分支' });
-    }
-
-    // 检查分支名是否已存在
-    const existing = await prisma.branch.findFirst({
-      where: { repoId: repo.id, name },
-    });
-
-    if (existing) {
-      return errors.conflict('分支名已存在');
-    }
-
-    const branch = await prisma.branch.create({
-      data: {
-        repoId: repo.id,
-        name,
-        isDefault: false,
-      },
-    });
-
-    return created({
-      id: branch.id,
-      name: branch.name,
-      isDefault: branch.isDefault,
-      createdAt: branch.createdAt.toISOString(),
-    }, '分支创建成功');
-  } catch (err) {
-    return handlePrismaError(err, '创建分支失败');
-  }
-}
+    return created(branch, '分支创建成功');
+  },
+});

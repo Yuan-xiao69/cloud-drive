@@ -6,24 +6,22 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/me/blocks/:userId - 取消屏蔽用户
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors, paginated } from '@/lib/api/v1/response';
-import { requireAuth } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, error, errors, paginated } from '@/lib/api/v1/response';
 import { prisma } from '@/lib/prisma';
 import { parsePagination, buildPaginationMeta } from '@/lib/api/v1/pagination';
 
 // GET /api/v1/me/blocks - 获取当前用户的屏蔽列表
-export async function GET(req: NextRequest) {
-  try {
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
     const { searchParams } = new URL(req.url);
     const { page, size, skip } = parsePagination(searchParams);
 
     const [items, total] = await Promise.all([
       prisma.userBlock.findMany({
-        where: { blockerId: auth.userId },
+        where: { blockerId: user!.id },
         skip,
         take: size,
         orderBy: { createdAt: 'desc' },
@@ -38,7 +36,7 @@ export async function GET(req: NextRequest) {
           },
         },
       }),
-      prisma.userBlock.count({ where: { blockerId: auth.userId } }),
+      prisma.userBlock.count({ where: { blockerId: user!.id } }),
     ]);
 
     // 格式化输出
@@ -49,29 +47,21 @@ export async function GET(req: NextRequest) {
     }));
 
     return paginated(formattedItems, buildPaginationMeta(total, page, size));
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // POST /api/v1/me/blocks - 屏蔽用户
-export async function POST(req: NextRequest) {
-  try {
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
-    const body = await req.json();
-    const { userId, reason } = body;
-
-    // 参数验证
-    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
-      return error('VALIDATION_ERROR', { message: '无效的用户ID' });
-    }
-
-    const targetUserId = userId.trim();
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    userId: z.string().min(1),
+    reason: z.string().optional(),
+  }),
+  async handler({ user, body }) {
+    const targetUserId = body.userId.trim();
 
     // 不能屏蔽自己
-    if (targetUserId === auth.userId) {
+    if (targetUserId === user!.id) {
       return error('VALIDATION_ERROR', { message: '不能屏蔽自己' });
     }
 
@@ -87,7 +77,7 @@ export async function POST(req: NextRequest) {
     // 检查是否已经屏蔽
     const existingBlock = await prisma.userBlock.findFirst({
       where: {
-        blockerId: auth.userId,
+        blockerId: user!.id,
         blockedId: targetUserId,
       },
     });
@@ -98,7 +88,7 @@ export async function POST(req: NextRequest) {
     // 创建屏蔽记录
     const block = await prisma.userBlock.create({
       data: {
-        blockerId: auth.userId,
+        blockerId: user!.id,
         blockedId: targetUserId,
       },
       include: {
@@ -118,17 +108,13 @@ export async function POST(req: NextRequest) {
       blockedUser: block.blocked,
       createdAt: block.createdAt.toISOString(),
     }, '已成功屏蔽该用户');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // DELETE /api/v1/me/blocks - 取消屏蔽用户（通过 query 参数指定用户ID）
-export async function DELETE(req: NextRequest) {
-  try {
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
 
@@ -141,7 +127,7 @@ export async function DELETE(req: NextRequest) {
     // 查找屏蔽记录
     const block = await prisma.userBlock.findFirst({
       where: {
-        blockerId: auth.userId,
+        blockerId: user!.id,
         blockedId: targetUserId,
       },
     });
@@ -156,7 +142,5 @@ export async function DELETE(req: NextRequest) {
     });
 
     return success({ unblocked: true }, '已取消屏蔽该用户');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

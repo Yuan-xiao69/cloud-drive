@@ -1,0 +1,13 @@
+{
+  "extends": ["next/core-web-vitals", "prettier", "plugin:jsx-a11y/recommended"],
+  "rules": {
+    "react/no-unknown-property": ["error", { "ignore": ["jsx", "global"] }],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "JSXAttribute[name.name='className'][value.value=/rounded-(md|lg|xl|2xl)/]",
+        "message": "请使用 <Card> 组件控制圆角，不要直接写 rounded-* 类名"
+      }
+    ]
+  }
+}

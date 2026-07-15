@@ -5,19 +5,17 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/discussions/[id] - 删除讨论
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
+import { recordAuditLog } from '@/lib/auth';
 
 // GET /api/v1/admin/discussions/[id] - 获取单个讨论
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const { id } = await params;
+export const GET = defineRoute({
+  auth: 'none',
+  async handler({ params }) {
+    const { id } = params;
 
     const discussion = await prisma.discussion.findUnique({
       where: { id, isDeleted: false },
@@ -28,7 +26,7 @@ export async function GET(
     });
 
     if (!discussion) {
-      return error(ErrorCodes.NOT_FOUND, { message: '讨论不存在' });
+      return errors.notFound('讨论');
     }
 
     return success({
@@ -43,30 +41,25 @@ export async function GET(
       createdAt: discussion.createdAt.toISOString(),
       updatedAt: discussion.updatedAt.toISOString(),
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取讨论失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/discussions/[id] - 删除讨论
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     const existing = await prisma.discussion.findUnique({
       where: { id, isDeleted: false },
     });
 
     if (!existing) {
-      return error(ErrorCodes.NOT_FOUND, { message: '讨论不存在' });
+      return errors.notFound('讨论');
     }
 
     await prisma.discussion.update({
@@ -74,8 +67,9 @@ export async function DELETE(
       data: { isDeleted: true },
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'delete',
       targetType: 'discussion',
       targetId: id,
@@ -83,29 +77,21 @@ export async function DELETE(
     });
 
     return success({ id }, '讨论已删除');
-  } catch (err) {
-    return handlePrismaError(err, '删除讨论失败');
-  }
-}
+  },
+});
 
 // PATCH /api/v1/admin/discussions/[id] - 恢复讨论
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    action: z.literal('restore'),
+  }),
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
-    const body = await req.json();
-    const { action } = body;
-
-    if (action !== 'restore') {
-      return errors.badRequest('无效的操作，仅支持 restore');
-    }
+    const { id } = params;
 
     const existing = await prisma.discussion.findUnique({
       where: { id, isDeleted: true },
@@ -120,8 +106,9 @@ export async function PATCH(
       data: { isDeleted: false },
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'restore',
       targetType: 'discussion',
       targetId: id,
@@ -129,7 +116,5 @@ export async function PATCH(
     });
 
     return success({ id }, '讨论已恢复');
-  } catch (err) {
-    return handlePrismaError(err, '恢复讨论失败');
-  }
-}
+  },
+});

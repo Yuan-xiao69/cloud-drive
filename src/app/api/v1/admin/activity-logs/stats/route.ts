@@ -4,21 +4,21 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/activity-logs/stats - 获取日志统计
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
 
 // GET /api/v1/admin/activity-logs/stats - 获取日志统计
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const sp = req.nextUrl.searchParams;
-    const days = parseInt(sp.get('days') || '7', 10);
+    const rawDays = parseInt(sp.get('days') || '7', 10);
+    const days = isNaN(rawDays) || rawDays < 1 ? 7 : Math.min(rawDays, 365);
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
@@ -99,7 +99,5 @@ export async function GET(req: NextRequest): Promise<Response> {
         count: Number(h.count),
       })),
     });
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

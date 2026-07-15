@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { useAuth } from '@/lib/providers';
+import { useSidebarData } from '@/lib/contexts/SidebarDataContext';
+import type { SidebarRepo, SidebarPR } from '@/lib/contexts/SidebarDataContext';
 
 // 图标定义
 const RepoIcon = ({ size = 14 }: { size?: number }) => (
@@ -55,117 +56,42 @@ const ChatIcon = ({ size = 14 }: { size?: number }) => (
   </svg>
 );
 
-interface SidebarRepo {
-  id: string;
-  name: string;
-  description: string | null;
-  language: string | null;
-  visibility: 'public' | 'private';
-  isFork?: boolean;
-  starCount: number;
-  forkCount: number;
-  createdAt: string;
-  updatedAt: string;
-  owner: {
-    id: string;
-    username: string;
-    avatarUrl?: string | null;
-  };
-}
-
-interface SidebarPR {
-  id: string;
-  title: string;
-  status: string;
-  sourceBranch: string;
-  targetBranch: string;
-  createdAt: string;
-  repository: {
-    id: string;
-    name: string;
-    owner: {
-      username: string;
-    };
-  };
-  author: {
-    username: string;
-    avatarUrl?: string | null;
-  };
-}
-
 interface LeftSidebarProps {
   className?: string;
 }
 
 export default function LeftSidebar({ className = '' }: LeftSidebarProps) {
-  const { isAuthenticated } = useAuth();
-  const [myRepos, setMyRepos] = useState<SidebarRepo[]>([]);
-  const [incomingPRs, setIncomingPRs] = useState<SidebarPR[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { isAuthenticated, myRepos, incomingPRs } = useSidebarData();
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setLoading(false);
-      return;
-    }
-
-    async function fetchData() {
-      try {
-        const [reposRes, prsRes] = await Promise.all([
-          fetch('/api/v1/me/repos?limit=8'),
-          fetch('/api/v1/me/pull-requests?status=open&limit=5'),
-        ]);
-        const [reposData, prsData] = await Promise.all([
-          reposRes.json(),
-          prsRes.json(),
-        ]);
-
-        if (reposData.code === 200) {
-          setMyRepos(reposData.data?.items || []);
-        }
-        if (prsData.code === 200) {
-          setIncomingPRs(prsData.data?.items || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch sidebar data:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, [isAuthenticated]);
-
-  // 根据设计文档，左侧边栏始终显示（未登录时显示不同内容）
   return (
-    <aside
+    <nav
       className={clsx(
-        'flex-shrink-0 overflow-y-auto',
+        'sticky top-[var(--ds-header-height)] h-[calc(100vh-var(--ds-header-height))] overflow-y-auto',
         className
       )}
     >
-      <div className="home-sidebar-inner">
+      <div className="px-4 py-6">
         {/* 快捷导航 - 始终显示 */}
-        <section className="home-sidebar-section">
-          <h3 className="home-sidebar-title">快捷导航</h3>
-          <nav className="home-sidebar-nav">
+        <section className="mb-3">
+          <h3 className="text-[11px] font-bold text-[var(--ds-text-tertiary)] uppercase tracking-[0.06em] px-2 mb-2">快捷导航</h3>
+          <nav className="flex flex-col">
             <Link
               href="/"
-              className="home-sidebar-link"
+              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-[var(--ds-radius-sm)] transition-colors text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline"
             >
               <HomeIcon />
               <span>首页</span>
             </Link>
             <Link
               href="/explore"
-              className="home-sidebar-link"
+              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-[var(--ds-radius-sm)] transition-colors text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline"
             >
               <CompassIcon />
               <span>探索</span>
             </Link>
             <Link
               href="/discussions"
-              className="home-sidebar-link"
+              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-[var(--ds-radius-sm)] transition-colors text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline"
             >
               <ChatIcon />
               <span>讨论</span>
@@ -174,38 +100,36 @@ export default function LeftSidebar({ className = '' }: LeftSidebarProps) {
         </section>
 
         {/* 分隔线 */}
-        <div className="home-sidebar-divider" />
+        <div className="border-t border-[var(--ds-border-muted)] my-4" />
 
         {/* 快捷操作 */}
-        <section className="home-sidebar-section">
-          <h3 className="home-sidebar-title">快捷操作</h3>
-          <nav className="home-sidebar-nav">
+        <section className="mb-3">
+          <h3 className="text-[11px] font-bold text-[var(--ds-text-tertiary)] uppercase tracking-[0.06em] px-2 mb-2">快捷操作</h3>
+          <nav className="flex flex-col">
             {isAuthenticated ? (
               <>
                 <Link
                   href="/new"
-                  className="home-sidebar-link"
+                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-[var(--ds-radius-sm)] transition-colors text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline"
                 >
                   <PlusIcon />
                   <span>新建仓库</span>
                 </Link>
                 <Link
                   href="/discussions/new"
-                  className="home-sidebar-link"
+                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-[var(--ds-radius-sm)] transition-colors text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline"
                 >
                   <ChatIcon />
                   <span>创建讨论</span>
                 </Link>
               </>
             ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="home-sidebar-link"
-                >
-                  <span>登录后使用更多功能</span>
-                </Link>
-              </>
+              <Link
+                href="/login"
+                className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-[var(--ds-radius-sm)] transition-colors text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline"
+              >
+                <span>登录后使用更多功能</span>
+              </Link>
             )}
           </nav>
         </section>
@@ -213,47 +137,26 @@ export default function LeftSidebar({ className = '' }: LeftSidebarProps) {
         {/* 我的仓库 - 登录后显示 */}
         {isAuthenticated && (
           <>
-            {/* 分隔线 */}
-            <div className="home-sidebar-divider" />
-
-            {/* 我的仓库 */}
-            <section className="home-sidebar-section">
-              <h3 className="home-sidebar-title">我的仓库</h3>
-              {loading ? (
-                <div className="home-sidebar-skeleton">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="home-sidebar-skeleton-item" />
-                  ))}
-                </div>
-              ) : myRepos.length > 0 ? (
-                <ul className="home-sidebar-list">
+            <div className="border-t border-[var(--ds-border-muted)] my-4" />
+            <section className="mb-3">
+              <h3 className="text-[11px] font-bold text-[var(--ds-text-tertiary)] uppercase tracking-[0.06em] px-2 mb-2">我的仓库</h3>
+              {myRepos.length > 0 ? (
+                <ul className="flex flex-col">
                   {myRepos.slice(0, 8).map(repo => (
                     <li key={repo.id}>
                       <Link
                         href={`/${repo.owner.username}/${repo.name}`}
-                        className="home-sidebar-link"
+                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-[var(--ds-radius-sm)] transition-colors text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline"
                       >
                         <RepoIcon />
-                        <span className="home-sidebar-link-text">
-                          {repo.name}
-                        </span>
-                        {repo.visibility === 'private' && (
-                          <LockIcon />
-                        )}
+                        <span className="flex-1">{repo.name}</span>
+                        {repo.visibility === 'private' && <LockIcon />}
                       </Link>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="home-sidebar-empty">暂无仓库</p>
-              )}
-              {myRepos.length > 8 && (
-                <Link
-                  href={`/${'user'}/?tab=repos`}
-                  className="home-sidebar-link-more"
-                >
-                  显示全部 {myRepos.length} 个 →
-                </Link>
+                <p className="text-xs text-[var(--ds-text-secondary)] px-2 py-1">暂无仓库</p>
               )}
             </section>
           </>
@@ -262,53 +165,43 @@ export default function LeftSidebar({ className = '' }: LeftSidebarProps) {
         {/* 待处理 PR - 登录后显示 */}
         {isAuthenticated && (
           <>
-            {/* 分隔线 */}
-            <div className="home-sidebar-divider" />
-
-            {/* 待处理 PR */}
-            <section className="home-sidebar-section">
-              <h3 className="home-sidebar-title">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div className="border-t border-[var(--ds-border-muted)] my-4" />
+            <section className="mb-3">
+              <h3 className="text-[11px] font-bold text-[var(--ds-text-tertiary)] uppercase tracking-[0.06em] px-2 mb-2">
+                <span className="flex items-center gap-1">
                   <GitPullRequestIcon />
                   待处理
                 </span>
                 {incomingPRs.length > 0 && (
-                  <span className="home-sidebar-badge">
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-semibold text-[var(--ds-text-primary)] bg-[var(--ds-surface-subtle)] rounded-full">
                     {incomingPRs.length}
                   </span>
                 )}
               </h3>
-              {loading ? (
-                <div className="home-sidebar-skeleton">
-                  {[1, 2].map(i => (
-                    <div key={i} className="home-sidebar-skeleton-item" style={{ height: 32 }} />
-                  ))}
-                </div>
-              ) : incomingPRs.length > 0 ? (
-                <ul className="home-sidebar-list">
+              {incomingPRs.length > 0 ? (
+                <ul className="flex flex-col">
                   {incomingPRs.slice(0, 5).map(pr => (
                     <li key={pr.id}>
                       <Link
                         href={`/${pr.repository.owner.username}/${pr.repository.name}/pulls/${pr.id}`}
-                        className="home-sidebar-link"
+                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-[var(--ds-radius-sm)] transition-colors text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] no-underline"
                       >
                         <GitPullRequestIcon />
-                        <div className="home-sidebar-pr-info">
-                          <p className="home-sidebar-pr-title">{pr.title}</p>
-                          <p className="home-sidebar-pr-repo">{pr.repository.name}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-[var(--ds-text-primary)] truncate">{pr.title}</p>
+                          <p className="text-xs text-[var(--ds-text-secondary)] truncate">{pr.repository.name}</p>
                         </div>
                       </Link>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="home-sidebar-empty">暂无待处理 PR</p>
+                <p className="text-xs text-[var(--ds-text-secondary)] px-2 py-1">暂无待处理 PR</p>
               )}
             </section>
           </>
         )}
-
       </div>
-    </aside>
+    </nav>
   );
 }

@@ -16,7 +16,8 @@ import {
   AlertTriangleIcon
 } from './AdminIcons';
 import { ConfirmDialog } from './common/AdminCommon';
-import type { ApiResponse } from '@/lib/api-client';
+
+import { Button, Field } from '@/components/design';
 
 interface ConfigItem {
   value: string | number | boolean;
@@ -126,23 +127,24 @@ export default function AdminSystemSettingsEnhanced({
     }
   };
 
-  // 检查是否有变更 - 使用更可靠的对象比较方法
+  // 检查是否有变更 - 使用 SystemConfig 接口中的属性名
   const hasChanges = config && localConfig && (
-    config.userRegistrationEnabled !== localConfig.userRegistrationEnabled ||
-    config.emailVerificationRequired !== localConfig.emailVerificationRequired ||
-    config.defaultRole !== localConfig.defaultRole ||
-    config.maxReposPerUser !== localConfig.maxReposPerUser ||
-    config.maxStoragePerUser !== localConfig.maxStoragePerUser ||
-    config.allowedFileTypes !== localConfig.allowedFileTypes ||
-    config.maxFileSize !== localConfig.maxFileSize ||
-    config.rateLimitEnabled !== localConfig.rateLimitEnabled ||
-    config.rateLimitRequests !== localConfig.rateLimitRequests ||
-    config.rateLimitWindow !== localConfig.rateLimitWindow ||
-    config.autoModerationEnabled !== localConfig.autoModerationEnabled ||
-    config.spamThreshold !== localConfig.spamThreshold ||
-    config.requireApprovalForNewRepos !== localConfig.requireApprovalForNewRepos ||
-    config.defaultRepoVisibility !== localConfig.defaultRepoVisibility ||
-    config.maxCollaboratorsPerRepo !== localConfig.maxCollaboratorsPerRepo
+    config.allowRegistration.value !== localConfig.allowRegistration.value ||
+    config.requireEmailVerification.value !== localConfig.requireEmailVerification.value ||
+    config.defaultUserRole.value !== localConfig.defaultUserRole.value ||
+    config.maxReposPerUser.value !== localConfig.maxReposPerUser.value ||
+    config.maxStoragePerUser.value !== localConfig.maxStoragePerUser.value ||
+    config.allowedFileTypes.value !== localConfig.allowedFileTypes.value ||
+    config.maxFileSize.value !== localConfig.maxFileSize.value ||
+    config.maxImageSize.value !== localConfig.maxImageSize.value ||
+    config.maxRepoSize.value !== localConfig.maxRepoSize.value ||
+    config.loginAttemptsLimit.value !== localConfig.loginAttemptsLimit.value ||
+    config.loginLockoutDuration.value !== localConfig.loginLockoutDuration.value ||
+    config.sessionTimeout.value !== localConfig.sessionTimeout.value ||
+    config.requireMFA.value !== localConfig.requireMFA.value ||
+    config.autoModeration.value !== localConfig.autoModeration.value ||
+    config.allowPublicRepos.value !== localConfig.allowPublicRepos.value ||
+    config.requireRepoApproval.value !== localConfig.requireRepoApproval.value
   );
 
   // 配置分组
@@ -203,7 +205,7 @@ export default function AdminSystemSettingsEnhanced({
   if (loading) {
     return (
       <div className="config-loading">
-        <div className="loading-spinner" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] mb-3" />
         <p>加载系统配置...</p>
         <style jsx>{`
           .config-loading {
@@ -212,7 +214,7 @@ export default function AdminSystemSettingsEnhanced({
             align-items: center;
             justify-content: center;
             padding: 80px 20px;
-            color: var(--color-fg-muted);
+            color: var(--ds-text-secondary);
           }
           .config-loading p {
             margin-top: 16px;
@@ -228,10 +230,10 @@ export default function AdminSystemSettingsEnhanced({
       <div className="config-error">
         <AlertTriangleIcon size={48} />
         <p>{error || '加载配置失败'}</p>
-        <button onClick={onRefresh} className="retry-btn">
+        <Button onClick={onRefresh} className="retry-btn">
           <RefreshIcon size={16} />
           重试
-        </button>
+        </Button>
         <style jsx>{`
           .config-error {
             display: flex;
@@ -239,7 +241,7 @@ export default function AdminSystemSettingsEnhanced({
             align-items: center;
             justify-content: center;
             padding: 80px 20px;
-            color: var(--color-fg-muted);
+            color: var(--ds-text-secondary);
           }
           .config-error p {
             margin: 16px 0;
@@ -249,7 +251,7 @@ export default function AdminSystemSettingsEnhanced({
             align-items: center;
             gap: 6px;
             padding: 8px 16px;
-            background: var(--color-btn-primary-bg);
+            background: var(--ds-accent-default);
             color: white;
             border: none;
             border-radius: 6px;
@@ -257,7 +259,7 @@ export default function AdminSystemSettingsEnhanced({
             font-size: 14px;
           }
           .retry-btn:hover {
-            background: var(--color-btn-primary-hover-bg);
+            background: var(--ds-accent-hover);
           }
         `}</style>
       </div>
@@ -275,7 +277,7 @@ export default function AdminSystemSettingsEnhanced({
           </h1>
           <p className="header-subtitle">配置平台全局参数</p>
         </div>
-        <div className="header-actions">
+        <div className="flex items-center gap-3">
           {saveSuccess && (
             <span className="save-success">
               <CheckIcon size={16} />
@@ -285,31 +287,17 @@ export default function AdminSystemSettingsEnhanced({
           {hasChanges && (
             <span className="unsaved-hint">有未保存的更改</span>
           )}
-          <button
+          <Button
             onClick={onRefresh}
-            className="btn-icon"
+            className="inline-flex items-center justify-center w-8 h-8 p-0 bg-transparent border border-[var(--ds-border-default)] text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-subtle)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
             disabled={saving}
             title="刷新"
           >
             <RefreshIcon size={16} />
-          </button>
-          <button
-            onClick={handleSave}
-            className="btn-primary"
-            disabled={saving || !hasChanges}
-          >
-            {saving ? (
-              <>
-                <div className="loading-spinner" style={{ width: 14, height: 14 }} />
-                保存中...
-              </>
-            ) : (
-              <>
-                <CheckIcon size={16} />
-                保存更改
-              </>
-            )}
-          </button>
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !hasChanges} loading={saving} icon={!saving ? <CheckIcon size={16} /> : undefined}>
+            保存更改
+          </Button>
         </div>
       </div>
 
@@ -326,14 +314,14 @@ export default function AdminSystemSettingsEnhanced({
         {/* 侧边导航 */}
         <div className="settings-sidebar">
           {configSections.map((section) => (
-            <button
+            <Button
               key={section.id}
               className={`sidebar-item ${activeSection === section.id ? 'active' : ''}`}
               onClick={() => setActiveSection(section.id)}
             >
               {section.icon}
               {section.title}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -344,7 +332,7 @@ export default function AdminSystemSettingsEnhanced({
               key={section.id}
               className={`config-section ${activeSection === section.id ? 'active' : 'hidden'}`}
             >
-              <h2 className="section-title">
+              <h2 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">
                 {section.icon}
                 {section.title}
               </h2>
@@ -356,15 +344,16 @@ export default function AdminSystemSettingsEnhanced({
                   return (
                     <div key={item.key} className="config-item">
                       <div className="item-header">
-                        <label className="item-label">{item.label}</label>
+                        <label htmlFor={`setting-${item.key}`} className="item-label">{item.label}</label>
                         {configItem.description && (
                           <span className="item-description">{configItem.description}</span>
                         )}
                       </div>
                       <div className="item-control">
                         {item.type === 'switch' && (
-                          <label className="switch">
+                          <label className="switch" aria-label={item.label}>
                             <input
+                              id={`setting-${item.key}`}
                               type="checkbox"
                               checked={configItem.value === true || configItem.value === 'true'}
                               onChange={(e) => handleChange(item.key as keyof SystemConfig, e.target.checked)}
@@ -374,6 +363,7 @@ export default function AdminSystemSettingsEnhanced({
                         )}
                         {item.type === 'number' && (
                           <input
+                            id={`setting-${item.key}`}
                             type="number"
                             className="input-number"
                             value={configItem.value as number}
@@ -384,6 +374,7 @@ export default function AdminSystemSettingsEnhanced({
                         {item.type === 'text' && (
                           item.multiline ? (
                             <textarea
+                              id={`setting-${item.key}`}
                               className="input-textarea"
                               value={configItem.value as string}
                               onChange={(e) => handleChange(item.key as keyof SystemConfig, e.target.value)}
@@ -392,6 +383,7 @@ export default function AdminSystemSettingsEnhanced({
                             />
                           ) : (
                             <input
+                              id={`setting-${item.key}`}
                               type="text"
                               className="input-text"
                               value={configItem.value as string}
@@ -401,6 +393,7 @@ export default function AdminSystemSettingsEnhanced({
                         )}
                         {item.type === 'select' && (
                           <select
+                            id={`setting-${item.key}`}
                             className="input-select"
                             value={configItem.value as string}
                             onChange={(e) => handleChange(item.key as keyof SystemConfig, e.target.value)}
@@ -448,7 +441,7 @@ export default function AdminSystemSettingsEnhanced({
           align-items: flex-start;
           margin-bottom: 24px;
           padding-bottom: 16px;
-          border-bottom: 1px solid var(--color-border);
+          border-bottom: 1px solid var(--ds-border-default);
         }
 
         .header-left h1 {
@@ -462,7 +455,7 @@ export default function AdminSystemSettingsEnhanced({
 
         .header-subtitle {
           margin: 4px 0 0 26px;
-          color: var(--color-fg-muted);
+          color: var(--ds-text-secondary);
           font-size: 13px;
         }
 
@@ -476,15 +469,15 @@ export default function AdminSystemSettingsEnhanced({
           display: flex;
           align-items: center;
           gap: 6px;
-          color: var(--color-success-fg);
+          color: var(--ds-success-default);
           font-size: 13px;
           padding: 4px 12px;
-          background: var(--color-success-bg);
+          background: var(--ds-success-subtle);
           border-radius: 6px;
         }
 
         .unsaved-hint {
-          color: var(--color-warning-fg);
+          color: var(--ds-warning-default);
           font-size: 13px;
         }
 
@@ -496,14 +489,14 @@ export default function AdminSystemSettingsEnhanced({
           height: 32px;
           padding: 0;
           background: transparent;
-          border: 1px solid var(--color-border);
+          border: 1px solid var(--ds-border-default);
           border-radius: 6px;
-          color: var(--color-fg);
+          color: var(--ds-text-primary);
           cursor: pointer;
         }
 
         .btn-icon:hover:not(:disabled) {
-          background: var(--color-bg-secondary);
+          background: var(--ds-surface-subtle);
         }
 
         .btn-icon:disabled {
@@ -516,7 +509,7 @@ export default function AdminSystemSettingsEnhanced({
           align-items: center;
           gap: 6px;
           padding: 8px 16px;
-          background: var(--color-btn-primary-bg);
+          background: var(--ds-accent-default);
           color: white;
           border: none;
           border-radius: 6px;
@@ -526,7 +519,7 @@ export default function AdminSystemSettingsEnhanced({
         }
 
         .btn-primary:hover:not(:disabled) {
-          background: var(--color-btn-primary-hover-bg);
+          background: var(--ds-accent-hover);
         }
 
         .btn-primary:disabled {
@@ -540,9 +533,9 @@ export default function AdminSystemSettingsEnhanced({
           gap: 8px;
           padding: 12px 16px;
           margin-bottom: 16px;
-          background: var(--color-danger-bg);
-          color: var(--color-danger-fg);
-          border: 1px solid var(--color-danger-border);
+          background: var(--ds-danger-subtle);
+          color: var(--ds-danger-default);
+          border: 1px solid var(--ds-danger-default);
           border-radius: 6px;
           font-size: 14px;
         }
@@ -566,7 +559,7 @@ export default function AdminSystemSettingsEnhanced({
           background: transparent;
           border: none;
           border-radius: 6px;
-          color: var(--color-fg);
+          color: var(--ds-text-primary);
           font-size: 14px;
           text-align: left;
           cursor: pointer;
@@ -574,11 +567,11 @@ export default function AdminSystemSettingsEnhanced({
         }
 
         .sidebar-item:hover {
-          background: var(--color-bg-secondary);
+          background: var(--ds-surface-subtle);
         }
 
         .sidebar-item.active {
-          background: var(--color-btn-primary-bg);
+          background: var(--ds-accent-default);
           color: white;
         }
 
@@ -588,8 +581,8 @@ export default function AdminSystemSettingsEnhanced({
         }
 
         .config-section {
-          background: var(--color-bg-secondary);
-          border: 1px solid var(--color-border);
+          background: var(--ds-surface-subtle);
+          border: 1px solid var(--ds-border-default);
           border-radius: 6px;
           padding: 20px;
         }
@@ -606,7 +599,7 @@ export default function AdminSystemSettingsEnhanced({
           font-weight: 600;
           margin: 0 0 20px 0;
           padding-bottom: 12px;
-          border-bottom: 1px solid var(--color-border);
+          border-bottom: 1px solid var(--ds-border-default);
         }
 
         .config-items {
@@ -620,7 +613,7 @@ export default function AdminSystemSettingsEnhanced({
           justify-content: space-between;
           align-items: flex-start;
           padding: 12px 0;
-          border-bottom: 1px solid var(--color-border-subtle);
+          border-bottom: 1px solid var(--ds-border-muted);
         }
 
         .config-item:last-child {
@@ -637,14 +630,14 @@ export default function AdminSystemSettingsEnhanced({
           display: block;
           font-size: 14px;
           font-weight: 500;
-          color: var(--color-fg);
+          color: var(--ds-text-primary);
         }
 
         .item-description {
           display: block;
           margin-top: 4px;
           font-size: 12px;
-          color: var(--color-fg-muted);
+          color: var(--ds-text-secondary);
         }
 
         .item-control {
@@ -673,7 +666,7 @@ export default function AdminSystemSettingsEnhanced({
           left: 0;
           right: 0;
           bottom: 0;
-          background-color: var(--color-border);
+          background-color: var(--ds-border-default);
           border-radius: 24px;
           transition: 0.2s;
         }
@@ -691,7 +684,7 @@ export default function AdminSystemSettingsEnhanced({
         }
 
         input:checked + .slider {
-          background-color: var(--color-success-fg);
+          background-color: var(--ds-success-default);
         }
 
         input:checked + .slider:before {
@@ -704,11 +697,11 @@ export default function AdminSystemSettingsEnhanced({
         .input-textarea,
         .input-select {
           padding: 8px 12px;
-          background: var(--color-bg);
-          border: 1px solid var(--color-border);
+          background: var(--ds-surface-default);
+          border: 1px solid var(--ds-border-default);
           border-radius: 6px;
           font-size: 14px;
-          color: var(--color-fg);
+          color: var(--ds-text-primary);
           min-width: 180px;
         }
 
@@ -729,8 +722,8 @@ export default function AdminSystemSettingsEnhanced({
         .input-textarea:focus,
         .input-select:focus {
           outline: none;
-          border-color: var(--color-btn-primary-bg);
-          box-shadow: 0 0 0 3px rgba(88, 96, 216, 0.1);
+          border-color: var(--ds-accent-default);
+          box-shadow: 0 0 0 3px var(--ds-accent-subtle);
         }
 
         @media (max-width: 768px) {

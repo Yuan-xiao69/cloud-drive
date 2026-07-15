@@ -3,8 +3,9 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { Button, Card  , Field } from '@/components/design';
 import {
   SearchIcon,
   FilterIcon,
@@ -21,7 +22,9 @@ import {
 } from './AdminIcons';
 import { SidePanel, AdvancedFilter, BatchActionBar, ConfirmDialog } from './common/AdminCommon';
 import { PieChart, BarChart } from './charts/AdminCharts';
-import type { Penalty, PenaltyTemplate, ContextMenuData } from './AdminTypes';
+import { AdminContextMenu } from './AdminContextMenu';
+import type { Penalty, PenaltyTemplate, ContextMenuData, ContextMenuSection } from './AdminTypes';
+import { formatDate } from '@/lib/utils';
 
 interface PenaltyFilters {
   search?: string;
@@ -31,7 +34,7 @@ interface PenaltyFilters {
   dateTo?: string;
 }
 
-interface AdminPenaltiesEnhancedProps {
+export interface AdminPenaltiesEnhancedProps {
   // 数据
   penalties: Penalty[];
   penaltiesTotal: number;
@@ -154,19 +157,6 @@ export default function AdminPenaltiesEnhanced({
     onContextMenu(e, penalty.id);
   };
 
-  // 关闭右键菜单
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.context-menu')) return;
-      onCloseContextMenu();
-    };
-    if (contextMenu) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [contextMenu, onCloseContextMenu]);
-
   // 筛选器配置
   const filterFields = [
     {
@@ -200,32 +190,36 @@ export default function AdminPenaltiesEnhanced({
   ];
 
   return (
-    <div className="tab-content">
+    <div className="p-4">
       {/* 页面标题和操作栏 */}
-      <div className="page-header">
-        <div className="page-title-section">
-          <h1 className="page-title">处罚管理</h1>
-          <button
-            className="btn btn-secondary btn-sm"
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">处罚管理</h1>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setShowTemplates(!showTemplates)}
           >
             <TemplateIcon /> 处罚模板
-          </button>
+          </Button>
         </div>
-        <div className="header-actions">
-          <button
-            className={`btn btn-secondary btn-sm ${showAdvancedFilter ? 'active' : ''}`}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            className={showAdvancedFilter ? 'ring-2 ring-[var(--ds-accent-default)]' : ''}
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
           >
             <FilterIcon /> 筛选
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onRefresh}
           >
             刷新
-          </button>
-          <div className="search-box">
+          </Button>
+          <div className="relative">
             <SearchIcon />
             <input
               type="search"
@@ -239,12 +233,12 @@ export default function AdminPenaltiesEnhanced({
 
       {/* 处罚模板面板 */}
       {showTemplates && (
-        <div className="templates-panel">
+        <Card>
           <div className="templates-header">
             <h3>处罚模板</h3>
-            <button className="btn btn-primary btn-sm" onClick={onCreateTemplate}>
+            <Button variant="primary" size="sm" onClick={onCreateTemplate}>
               <PlusIcon /> 新建模板
-            </button>
+            </Button>
           </div>
           <div className="templates-list">
             {penaltyTemplates.length > 0 ? (
@@ -259,20 +253,24 @@ export default function AdminPenaltiesEnhanced({
                     <span>使用 {template.usageCount} 次</span>
                   </div>
                   <div className="template-actions">
-                    <button
-                      className="btn btn-ghost btn-sm"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => onUseTemplate(template.id, '')}
                     >
                       使用
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => onEditTemplate(template.id)}
                     >
                       <EditIcon />
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm danger"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-[var(--ds-danger-default)] hover:bg-[var(--ds-danger-subtle)]"
                       onClick={() => {
                         setConfirmDialog({
                           isOpen: true,
@@ -287,20 +285,20 @@ export default function AdminPenaltiesEnhanced({
                       }}
                     >
                       <TrashIcon />
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
             ) : (
               <div className="templates-empty">
                 <p>暂无处罚模板</p>
-                <button className="btn btn-primary" onClick={onCreateTemplate}>
+                <Button variant="primary" onClick={onCreateTemplate}>
                   创建第一个模板
-                </button>
+                </Button>
               </div>
             )}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* 统计图表 */}
@@ -353,8 +351,7 @@ export default function AdminPenaltiesEnhanced({
           values={filters as Record<string, string | number | Date | null>}
           onChange={(name, value) => {
             const updated = { ...filters, [name]: value };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onFiltersChange(updated as any);
+            onFiltersChange(updated);
           }}
           onApply={() => onPageChange(1)}
           onReset={() => onFiltersChange({} as PenaltyFilters)}
@@ -372,8 +369,8 @@ export default function AdminPenaltiesEnhanced({
       />
 
       {/* 处罚列表 */}
-      <div className="admin-table-container">
-        <table className="admin-table">
+      <Card padding="none" className="overflow-hidden">
+        <table className="w-full text-sm">
           <thead>
             <tr>
               <th style={{ width: '40px' }}>
@@ -465,124 +462,104 @@ export default function AdminPenaltiesEnhanced({
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* 分页 */}
       {penaltiesTotal > penaltiesPageSize && (
-        <div className="pagination">
-          <div className="pagination-info">
+        <div className="flex items-center justify-between py-3">
+          <div className="text-sm text-[var(--ds-text-secondary)]">
             显示 {((penaltiesPage - 1) * penaltiesPageSize) + 1} - {Math.min(penaltiesPage * penaltiesPageSize, penaltiesTotal)} 条，共 {penaltiesTotal} 条
           </div>
-          <div className="pagination-controls">
-            <button
-              className="btn btn-secondary btn-sm"
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={penaltiesPage <= 1 || penaltiesLoading}
               onClick={() => onPageChange(penaltiesPage - 1)}
             >
               上一页
-            </button>
-            <span className="page-info">
+            </Button>
+            <span className="text-sm text-[var(--ds-text-secondary)]">
               第 {penaltiesPage} / {totalPages} 页
             </span>
-            <button
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={penaltiesPage >= totalPages || penaltiesLoading}
               onClick={() => onPageChange(penaltiesPage + 1)}
             >
               下一页
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* 右键上下文菜单 */}
       {contextMenu && contextMenuTarget && (
-        <div
-          className="context-menu enhanced"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="context-menu-header">
-            <span className="context-menu-title">
-              ⚠️ {getPenaltyTypeLabel(contextMenuTarget.type)}: @{contextMenuTarget.userUsername}
-            </span>
-          </div>
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onViewDetail(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <EyeIcon /> 查看详情 <span className="shortcut">Enter</span>
-            </button>
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onEditPenalty(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <EditIcon /> 修改处罚
-            </button>
-          </div>
-
-          <div className="context-menu-divider" />
-
-          <div className="context-menu-section">
-            <div className="context-menu-submenu">
-              <span className="submenu-trigger">
-                <ClockIcon /> 延长处罚 <ChevronDownIcon />
-              </span>
-              <div className="submenu-content">
-                <button onClick={() => { onExtendPenalty(contextMenuTarget.id, '1d'); onCloseContextMenu(); }}>
-                  延长 1 天
-                </button>
-                <button onClick={() => { onExtendPenalty(contextMenuTarget.id, '7d'); onCloseContextMenu(); }}>
-                  延长 7 天
-                </button>
-                <button onClick={() => { onExtendPenalty(contextMenuTarget.id, '30d'); onCloseContextMenu(); }}>
-                  延长 30 天
-                </button>
-              </div>
-            </div>
-
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onReleasePenalty(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <CheckIcon /> 解除处罚
-            </button>
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onRevokePenalty(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <BanIcon /> 撤销处罚
-            </button>
-          </div>
-
-          <div className="context-menu-divider" />
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onAddNote(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              📝 添加备注
-            </button>
-          </div>
-        </div>
+        <AdminContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          sections={[
+            {
+              id: 'view',
+              items: [
+                {
+                  id: 'view-detail',
+                  label: '查看详情',
+                  icon: <EyeIcon />,
+                  shortcut: 'Enter',
+                  onClick: () => { onViewDetail(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+                {
+                  id: 'edit-penalty',
+                  label: '修改处罚',
+                  icon: <EditIcon />,
+                  onClick: () => { onEditPenalty(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+            {
+              id: 'actions',
+              items: [
+                {
+                  id: 'extend-penalty',
+                  label: '延长处罚',
+                  icon: <ClockIcon />,
+                  children: [
+                    { id: 'extend-1d', label: '延长 1 天', onClick: () => { onExtendPenalty(contextMenuTarget!.id, '1d'); onCloseContextMenu(); } },
+                    { id: 'extend-7d', label: '延长 7 天', onClick: () => { onExtendPenalty(contextMenuTarget!.id, '7d'); onCloseContextMenu(); } },
+                    { id: 'extend-30d', label: '延长 30 天', onClick: () => { onExtendPenalty(contextMenuTarget!.id, '30d'); onCloseContextMenu(); } },
+                  ],
+                },
+                {
+                  id: 'release-penalty',
+                  label: '解除处罚',
+                  icon: <CheckIcon />,
+                  onClick: () => { onReleasePenalty(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+                {
+                  id: 'revoke-penalty',
+                  label: '撤销处罚',
+                  icon: <BanIcon />,
+                  danger: true,
+                  onClick: () => { onRevokePenalty(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+            {
+              id: 'notes',
+              items: [
+                {
+                  id: 'add-note',
+                  label: '添加备注',
+                  icon: <EditIcon />,
+                  onClick: () => { onAddNote(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+          ]}
+          onClose={onCloseContextMenu}
+        />
       )}
 
       {/* 确认对话框 */}
@@ -599,34 +576,34 @@ export default function AdminPenaltiesEnhanced({
         />
       )}
     <style jsx>{`
-      .templates-panel { background: var(--color-bg-default); border: 1px solid var(--color-border-default); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+      .templates-panel { background: var(--ds-surface-default); border: 1px solid var(--ds-border-default); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
       .templates-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-      .templates-header h3 { font-size: 16px; font-weight: 600; color: var(--color-fg-default); margin: 0; }
+      .templates-header h3 { font-size: 16px; font-weight: 600; color: var(--ds-text-primary); margin: 0; }
       .templates-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-      .template-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--color-bg-subtle); border: 1px solid var(--color-border-muted); border-radius: 8px; }
+      .template-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--ds-surface-subtle); border: 1px solid var(--ds-border-muted); border-radius: 8px; }
       .template-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-      .template-name { font-weight: 600; color: var(--color-fg-default); font-size: 14px; }
-      .template-type { font-size: 12px; color: var(--color-accent-fg); }
-      .template-duration { font-size: 11px; color: var(--color-fg-muted); }
-      .template-stats { font-size: 11px; color: var(--color-fg-muted); }
+      .template-name { font-weight: 600; color: var(--ds-text-primary); font-size: 14px; }
+      .template-type { font-size: 12px; color: var(--ds-accent-default); }
+      .template-duration { font-size: 11px; color: var(--ds-text-secondary); }
+      .template-stats { font-size: 11px; color: var(--ds-text-secondary); }
       .template-actions { display: flex; gap: 4px; }
-      .templates-empty { text-align: center; padding: 40px 20px; color: var(--color-fg-muted); }
+      .templates-empty { text-align: center; padding: 40px 20px; color: var(--ds-text-secondary); }
       .templates-empty p { margin: 0 0 16px; }
       .penalty-type-badge { display: inline-flex; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-      .penalty-type-badge.mute { background: var(--color-attention-subtle); color: var(--color-attention-fg); }
-      .penalty-type-badge.repo_limit, .penalty-type-badge.storage_limit { background: var(--color-accent-subtle); color: var(--color-accent-fg); }
-      .penalty-type-badge.ban { background: var(--color-danger-subtle); color: var(--color-danger-fg); }
-      .penalty-reason { font-size: 13px; color: var(--color-fg-default); }
+      .penalty-type-badge.mute { background: var(--ds-warning-subtle); color: var(--ds-warning-default); }
+      .penalty-type-badge.repo_limit, .penalty-type-badge.storage_limit { background: var(--ds-accent-subtle); color: var(--ds-accent-default); }
+      .penalty-type-badge.ban { background: var(--ds-danger-subtle); color: var(--ds-danger-default); }
+      .penalty-reason { font-size: 13px; color: var(--ds-text-primary); }
       .appeal-badge { display: inline-flex; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
-      .appeal-badge.pending { background: var(--color-attention-subtle); color: var(--color-attention-fg); }
-      .appeal-badge.processed { background: var(--color-bg-subtle); color: var(--color-fg-muted); }
+      .appeal-badge.pending { background: var(--ds-warning-subtle); color: var(--ds-warning-default); }
+      .appeal-badge.processed { background: var(--ds-surface-subtle); color: var(--ds-text-secondary); }
       .stats-metrics { display: flex; justify-content: space-around; padding: 16px 0; }
       .metric-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-      .metric-value { font-size: 24px; font-weight: 600; color: var(--color-fg-default); }
-      .metric-label { font-size: 12px; color: var(--color-fg-muted); }
-      .status-badge.danger { background: var(--color-danger-subtle); color: var(--color-danger-fg); }
-      .btn.danger { background: var(--color-danger-emphasis); color: white; border: 1px solid var(--color-danger-emphasis); }
-      .btn.danger:hover { background: var(--color-danger-fg); border-color: var(--color-danger-fg); }
+      .metric-value { font-size: 24px; font-weight: 600; color: var(--ds-text-primary); }
+      .metric-label { font-size: 12px; color: var(--ds-text-secondary); }
+      .status-badge.danger { background: var(--ds-danger-subtle); color: var(--ds-danger-default); }
+      .btn.danger { background: var(--ds-danger-default); color: white; border: 1px solid var(--ds-danger-default); }
+      .btn.danger:hover { background: var(--ds-danger-default); border-color: var(--ds-danger-default); }
     `}</style>
     </div>
   );
@@ -664,15 +641,3 @@ function getStatusBadgeClass(status: string): string {
   };
   return classes[status] || 'default';
 }
-
-function formatDate(dateString: string): string {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-}
-
-

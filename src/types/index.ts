@@ -27,6 +27,8 @@ export interface UserSummary {
   name?: string | null;
   avatarUrl?: string | null;
   bio?: string | null;
+  location?: string | null;
+  website?: string | null;
   role?: string;
   isBanned?: boolean;
   isAdmin: boolean;
@@ -50,10 +52,8 @@ export interface RepositorySummary {
   ownerAvatar?: string | null;
   description?: string | null;
   visibility: 'public' | 'private';
-  starCount?: number;
-  forkCount?: number;
-  starsCount: number;
-  forksCount: number;
+  starCount: number;
+  forkCount: number;
   watchersCount: number;
   language?: string | null;
   createdAt: string | Date;
@@ -66,7 +66,7 @@ export interface DiscussionSummary {
   id: string;
   title: string;
   content: string;
-  category: 'question' | 'idea' | 'share' | 'discussion' | 'announcement';
+  category: 'general' | 'question' | 'idea' | 'share' | 'help' | 'announcement' | 'request' | 'team';
   authorId: string;
   authorUsername: string;
   authorName?: string | null;

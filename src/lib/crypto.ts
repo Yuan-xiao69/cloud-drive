@@ -21,7 +21,7 @@ function getEncryptionKey(): Buffer {
   }
   
   // 将密钥转换为 32 字节的 Buffer
-  return crypto.createHash('sha256').update(key).digest();
+  return crypto.scryptSync(key, 'blog-platform-salt', 32);
 }
 
 /**

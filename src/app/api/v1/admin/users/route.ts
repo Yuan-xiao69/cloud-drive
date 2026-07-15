@@ -4,18 +4,17 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/users - 获取用户列表
  */
 
-import { NextRequest } from 'next/server';
-import { success, paginated, handlePrismaError, errors, parsePagination, buildPaginationMeta } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { paginated, errors, parsePagination, buildPaginationMeta } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
 import type { Prisma } from '@prisma/client';
 
 // GET /api/v1/admin/users - 获取用户列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const sp = req.nextUrl.searchParams;
@@ -74,7 +73,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     }
 
     // 普通管理员无法看到系统内置账号，只有超级管理员可以
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       where.isSystem = false;
     }
 
@@ -121,7 +120,5 @@ export async function GET(req: NextRequest): Promise<Response> {
     const pagination = buildPaginationMeta(total, page, size);
 
     return paginated(items, pagination);
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

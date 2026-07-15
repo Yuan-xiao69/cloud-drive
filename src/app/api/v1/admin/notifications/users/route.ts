@@ -4,17 +4,16 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/notifications/users - 获取用户列表（管理员发送通知时使用）
  */
 
-import { NextRequest } from 'next/server';
-import { success, paginated, handlePrismaError, errors, buildPaginationMeta } from '@/lib/api/v1';
-import { requireAdmin, isAuthError } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/v1/admin/notifications/users - 获取用户列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const adminResult = await requireAdmin(req);
-    if (isAuthError(adminResult)) {
-      return adminResult.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const { searchParams } = new URL(req.url);
@@ -63,7 +62,5 @@ export async function GET(req: NextRequest): Promise<Response> {
         totalPages: Math.ceil(total / limit)
       }
     });
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

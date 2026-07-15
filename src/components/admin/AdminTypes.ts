@@ -1,10 +1,11 @@
 // Admin page types - shared across admin components
 import type React from 'react';
 
-export type AdminTab = 'dashboard' | 'users' | 'repos' | 'discussions' | 'reports' | 'audit' | 'email' | 'database' | 'notifications' | 'penalties' | 'appeals' | 'announcements' | 'security' | 'ipblacklist' | 'bans' | 'activity-logs' | 'backup' | 'monitor' | 'settings';
+export type AdminTab = 'dashboard' | 'users' | 'repos' | 'discussions' | 'reports' | 'email' | 'notifications' | 'announcements' | 'backup' | 'monitor' | 'settings' | 'discipline' | 'security-center' | 'logs';
 
 export interface UserSummary {
   id: string;
+  uid?: string | null;
   username: string;
   email: string;
   role: string;
@@ -156,6 +157,14 @@ export interface Announcement {
   isPinned: boolean;
   createdAt: string;
   updatedAt: string;
+  publishedAt?: string | null;
+  expiresAt?: string | null;
+  createdBy?: string;
+  creator?: {
+    id: string;
+    username: string;
+    avatarUrl: string | null;
+  } | null;
 }
 
 export interface SecurityEvent {

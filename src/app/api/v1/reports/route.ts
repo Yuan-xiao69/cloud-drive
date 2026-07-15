@@ -5,12 +5,11 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/reports - 获取当前用户的举报记录
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, created, paginated, handlePrismaError } from '@/lib/api/v1/response';
-import { requireAuth } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, error, created, paginated } from '@/lib/api/v1/response';
 import { prisma } from '@/lib/prisma';
 import { sanitizeText } from '@/lib/security';
-import { checkRateLimit } from '@/lib/rate-limit';
 import { parsePagination, buildPaginationMeta } from '@/lib/api/v1/pagination';
 
 /** 合法的举报目标类型 */
@@ -23,30 +22,23 @@ const VALID_REASONS = [
 ];
 
 // POST /api/v1/reports - 提交举报
-export async function POST(req: NextRequest) {
-  try {
-    // 鉴权
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
-    // 速率限制
-    const rateLimit = await checkRateLimit(req, 'api');
-    if (!rateLimit.allowed) {
-      return error('RATE_LIMITED', { message: '操作过于频繁，请稍后再试' });
-    }
-
-    // 解析请求体
-    const body = await req.json();
+export const POST = defineRoute({
+  auth: 'required',
+  rateLimit: 'default',
+  validation: z.object({
+    targetType: z.string(),
+    targetId: z.string().min(1),
+    reason: z.string(),
+    description: z.string().optional(),
+  }),
+  async handler({ user, body }) {
     const { targetType, targetId, reason, description } = body;
 
-    // 参数验证
-    if (!targetType || !VALID_TARGET_TYPES.includes(targetType)) {
+    // 参数验证（业务规则）
+    if (!VALID_TARGET_TYPES.includes(targetType)) {
       return error('VALIDATION_ERROR', { message: '无效的举报类型' });
     }
-    if (!targetId || typeof targetId !== 'string' || targetId.trim().length === 0) {
-      return error('VALIDATION_ERROR', { message: '无效的举报目标' });
-    }
-    if (!reason || !VALID_REASONS.includes(reason)) {
+    if (!VALID_REASONS.includes(reason)) {
       return error('VALIDATION_ERROR', { message: '无效的举报原因' });
     }
 
@@ -68,7 +60,7 @@ export async function POST(req: NextRequest) {
     // 检查是否重复举报（同一用户对同一目标）
     const existingReport = await prisma.report.findFirst({
       where: {
-        reporterId: auth.userId,
+        reporterId: user!.id,
         targetType: cleanTargetType,
         targetId: cleanTargetId,
         status: 'pending',
@@ -81,7 +73,7 @@ export async function POST(req: NextRequest) {
     // 创建举报记录
     const report = await prisma.report.create({
       data: {
-        reporterId: auth.userId,
+        reporterId: user!.id,
         targetType: cleanTargetType,
         targetId: cleanTargetId,
         reason: finalReason,
@@ -97,22 +89,18 @@ export async function POST(req: NextRequest) {
     });
 
     return created({ reportId: report.id }, '举报提交成功');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // GET /api/v1/reports - 获取当前用户的举报记录
-export async function GET(req: NextRequest) {
-  try {
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
     const { searchParams } = new URL(req.url);
     const { page, size, skip } = parsePagination(searchParams);
     const status = searchParams.get('status') || undefined;
 
-    const where: Record<string, unknown> = { reporterId: auth.userId };
+    const where: Record<string, unknown> = { reporterId: user!.id };
     if (status && ['pending', 'resolved', 'dismissed'].includes(status)) {
       where.status = status;
     }
@@ -138,10 +126,8 @@ export async function GET(req: NextRequest) {
     ]);
 
     return paginated(items, buildPaginationMeta(total, page, size));
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 /**
  * 检查举报目标是否存在

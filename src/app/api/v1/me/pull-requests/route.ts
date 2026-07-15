@@ -3,27 +3,19 @@ export const dynamic = 'force-dynamic';
 /**
  * v1 获取当前用户待处理 PR 列表 API
  * GET /api/v1/me/pull-requests
- * 
+ *
  * 返回当前用户作为仓库所有者收到的、需要审核的 PR
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
 import { parsePagination, buildPaginationMeta } from '@/lib/api/v1/pagination';
 
 // GET /api/v1/me/pull-requests - 获取当前用户待处理的 PR 列表
-export async function GET(
-  req: NextRequest
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
     const { searchParams } = new URL(req.url);
     const pagination = parsePagination(searchParams);
     const status = searchParams.get('status') || 'open'; // 默认只返回 open 状态
@@ -31,7 +23,7 @@ export async function GET(
     // 获取当前用户拥有的仓库 ID 列表
     const ownedRepos = await prisma.repository.findMany({
       where: {
-        ownerId: auth.userId,
+        ownerId: user!.id,
         deletedAt: null,
       },
       select: { id: true },
@@ -119,7 +111,5 @@ export async function GET(
       })),
       pagination: buildPaginationMeta(total, pagination.page, pagination.size),
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取 PR 列表失败');
-  }
-}
+  },
+});

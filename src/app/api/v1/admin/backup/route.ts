@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/backup - 删除备份
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, deleted, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, created, errors } from '@/lib/api/v1';
 import {
   backupDatabase,
   listBackups,
@@ -29,11 +29,11 @@ function formatBytes(bytes: number): string {
 }
 
 // GET /api/v1/admin/backup - 获取备份列表和统计
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const { searchParams } = new URL(req.url);
@@ -64,27 +64,23 @@ export async function GET(req: NextRequest): Promise<Response> {
         totalSizeFormatted: formatBytes(stats.totalSize),
       },
     });
-  } catch (err) {
-    console.error('[Backup] GET Error:', err);
-    const message = err instanceof Error ? err.message : '服务器错误';
-    return errors.internal(message);
-  }
-}
+  },
+});
 
 // POST /api/v1/admin/backup - 创建备份
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    tables: z.array(z.string()).optional(),
+    compress: z.boolean().optional().default(true),
+    retainDays: z.number().optional().default(30),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json().catch(() => ({}));
-    const { tables, compress = true, retainDays = 30 } = body as {
-      tables?: string[];
-      compress?: boolean;
-      retainDays?: number;
-    };
+    const { tables, compress = true, retainDays = 30 } = body;
 
     const config: BackupConfig = {
       backupDir: BACKUP_DIR,
@@ -106,19 +102,15 @@ export async function POST(req: NextRequest): Promise<Response> {
       tablesCount: result.tablesCount,
       timestamp: result.timestamp,
     }, '备份创建成功');
-  } catch (err) {
-    console.error('[Backup] POST Error:', err);
-    const message = err instanceof Error ? err.message : '服务器错误';
-    return errors.internal(message);
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/backup - 删除备份
-export async function DELETE(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const { searchParams } = new URL(req.url);
@@ -128,7 +120,6 @@ export async function DELETE(req: NextRequest): Promise<Response> {
       return errors.badRequest('缺少备份文件路径');
     }
 
-    // 安全检查：确保路径在备份目录内
     const resolvedPath = path.resolve(filePath);
     const resolvedBackupDir = path.resolve(BACKUP_DIR);
 
@@ -143,9 +134,5 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     }
 
     return success({ deleted: true }, '备份已删除');
-  } catch (err) {
-    console.error('[Backup] DELETE Error:', err);
-    const message = err instanceof Error ? err.message : '服务器错误';
-    return errors.internal(message);
-  }
-}
+  },
+});

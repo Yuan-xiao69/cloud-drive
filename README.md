@@ -1,6 +1,6 @@
-# GitHub Platform
+# Cloud Drive
 
-**类 GitHub 的仓库式知识托管与交流平台**
+**类 GitHub 的仓库式知识托管与交流平台 — 你的云端文件仓库**
 
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
@@ -24,7 +24,7 @@
 | **管理后台** | 用户/仓库/讨论/举报/审计/处罚/申诉/系统公告 | ✅ 完成 |
 | **主题切换** | 亮/暗模式自动跟随系统 | ✅ 完成 |
 | **通知系统** | SSE 实时推送/通知列表/批量操作/12项设置 | ✅ 完成 |
-| **分享链接** | 生成分享链接/密码保护/过期时间 | ✅ 完成 |
+| **分享链接** | 生成分享链接/过期时间/最大浏览次数 | ✅ 完成 |
 | **分片上传** | 断点续传/粘贴上传/全局拖拽/队列管理 | ✅ 完成 |
 | **文件预览** | 代码高亮/Markdown渲染/行号跳转/折叠/分页 | ✅ 完成 |
 | **快捷键导航** | G+I/D/S/P 快捷键 / Backspace 返回 | ✅ 完成 |
@@ -70,7 +70,7 @@
 
 ```bash
 git clone <repository-url>
-cd my-blog
+cd cloud-drive
 ```
 
 ### 2. 配置环境变量
@@ -164,7 +164,7 @@ npm run dev
 ## 项目结构
 
 ```
-my-blog/
+cloud-drive/
 ├── src/
 │   ├── app/                      # Next.js App Router
 │   │   ├── (auth)/              # 认证页面 (登录/注册)
@@ -176,46 +176,38 @@ my-blog/
 │   │   │   ├── settings/        # 用户设置
 │   │   │   ├── share/           # 分享链接访问
 │   │   │   └── [username]/      # 用户主页/仓库详情
-│   │   └── api/                 # API 路由
-│   │       ├── auth/            # 认证 API
-│   │       ├── users/          # 用户 API
-│   │       ├── repos/          # 仓库 API
-│   │       ├── discussions/    # 讨论 API
-│   │       ├── notifications/  # 通知 API
-│   │       ├── search/         # 搜索 API
-│   │       └── admin/          # 管理 API
+│   │   └── api/                 # API 路由 (v1 统一格式, 137 个 route.ts)
 │   ├── components/              # React 组件
-│   │   ├── ui/                 # UI 基础组件库
-│   │   ├── layout/             # 布局组件
-│   │   └── repo/               # 仓库相关组件
-│   │       ├── FileTree.tsx           # 文件树组件
-│   │       ├── ChunkedUploader.tsx    # 分片上传组件
-│   │       ├── ChunkedUploadModal.tsx # 上传模态框
-│   │       ├── FolderUploader.tsx     # 文件夹上传组件
-│   │       ├── RepoIssuesTab.tsx      # Issues Tab 组件
-│   │       ├── RepoPullsTab.tsx       # Pulls Tab 组件
-│   │       ├── RepoSettingsTab.tsx    # Settings Tab 组件
-│   │       ├── RepoDownloadModal.tsx  # 下载弹窗组件
-│   │       ├── RepoShareModal.tsx     # 分享模态框
-│   │       └── RepoForkRequestModal.tsx # Fork 申请弹窗
+│   │   ├── design/             # 设计系统组件 (Button/Card/Modal/PageLayout 等 11 个)
+│   │   ├── layout/             # 布局组件 (Header/MainLayout/LeftSidebar/BottomNav)
+│   │   ├── admin/              # 管理后台组件
+│   │   ├── repo/               # 仓库相关组件 (FileTree/ChunkedUploader 等)
+│   │   ├── common/             # 通用业务组件
+│   │   ├── settings/           # 用户设置组件
+│   │   ├── discussion/         # 讨论组件
+│   │   └── user/               # 用户资料组件
 │   ├── lib/                     # 工具库
-│   │   ├── auth/               # JWT 认证
-│   │   ├── mock/               # Mock 数据
-│   │   ├── utils/              # 工具函数
-│   │   ├── security.ts         # 安全工具 (XSS/CSRF)
+│   │   ├── auth/               # JWT 认证 (双 Token 模式)
+│   │   ├── api/                # 统一 API 响应 + 客户端
+│   │   ├── framework/          # 声明式路由工厂 (认证/限流/CSRF/验证管道)
+│   │   ├── security.ts         # XSS 防护 (DOMPurify)
 │   │   ├── csrf.ts             # CSRF 防护
-│   │   ├── rate-limit.ts       # 速率限制
-│   │   ├── file-validator.ts   # 文件验证
-│   │   └── context.tsx         # React Context
+│   │   ├── rate-limit.ts       # Redis 令牌桶速率限制
+│   │   ├── file-validator.ts   # 文件上传安全验证
+│   │   └── ...
+│   ├── services/                # 业务服务层 (13 个 service)
 │   └── types/                   # TypeScript 类型
 ├── prisma/
-│   ├── schema.prisma           # 数据库模型
+│   ├── schema.prisma           # 数据模型 (42 个)
 │   └── seed.ts                 # 种子数据
-├── tests/                       # 测试文件
+├── design-samples/              # 设计样本 (12 个 HTML 文件, 全站页面/弹窗)
+├── 文档/                        # 中文文档 (开发规范/部署指南等)
 ├── docs/                        # 方案文档
-├── docker-compose.yml          # 生产部署
-├── docker-compose.dev.yml      # 开发环境
-└── Dockerfile                  # 应用镜像
+├── docker-compose.yml          # 开发基础设施 (DB/Redis/MinIO)
+├── docker-compose.prod.yml     # 生产部署
+├── Dockerfile                  # 生产镜像
+├── 项目报告.md                  # 完整项目报告
+└── README.md
 ```
 
 ---
@@ -253,7 +245,7 @@ http://localhost:3000/api/docs
 
 ## 开发规范
 
-详细规范请查看 [DEVELOPMENT.md](docs/DEVELOPMENT.md)。
+详细规范请查看 [项目报告.md](./项目报告.md) 和 [CLAUDE.md](./CLAUDE.md)。
 
 ### 代码规范
 
@@ -322,11 +314,15 @@ npm run test:coverage
 ## Docker 命令
 
 ```bash
-# 开发环境启动
-docker-compose -f docker-compose.dev.yml up -d
+# 开发环境（基础设施 + 应用在宿主机）
+npm run dev:docker              # 一键启动
 
-# 生产环境启动
-docker-compose up -d
+# 或分步启动
+docker compose up -d            # 仅启动基础设施
+npm run dev                     # 启动应用
+
+# 生产环境
+docker compose -f docker-compose.prod.yml up -d
 
 # 查看日志
 docker-compose logs -f app
@@ -376,7 +372,7 @@ docker-compose up -d
 
 # 使用 PM2 (需要先构建)
 npm run build
-pm2 start npm --name "github-platform" -- start
+pm2 start npm --name "cloud-drive" -- start
 ```
 
 ### 环境变量 (生产)

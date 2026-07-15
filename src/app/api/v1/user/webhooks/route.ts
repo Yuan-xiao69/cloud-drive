@@ -5,22 +5,19 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/user/webhooks - 创建新的 Webhook
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, created, error, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
+import { validateExternalUrl } from '@/lib/url-validator';
 
 // GET /api/v1/user/webhooks
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
     const webhooks = await prisma.webhook.findMany({
-      where: { userId: auth.userId },
+      where: { userId: user!.id },
       orderBy: { createdAt: 'desc' },
       include: {
         repo: {
@@ -30,32 +27,26 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
 
     return success({ webhooks });
-  } catch (err) {
-    return handlePrismaError(err, '获取 Webhook 列表失败');
-  }
-}
+  },
+});
 
 // POST /api/v1/user/webhooks
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const body = await req.json();
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    name: z.string().min(1, '请提供 Webhook 名称'),
+    url: z.string().min(1, '请提供回调 URL'),
+    secret: z.string().optional(),
+    contentType: z.string().optional(),
+    events: z.array(z.string()).min(1, '请选择至少一个触发事件'),
+    repoId: z.string().optional(),
+  }),
+  async handler({ user, body }) {
     const { name, url, secret, contentType, events, repoId } = body;
 
-    if (!name || name.trim().length === 0) {
-      return errors.badRequest('请提供 Webhook 名称');
-    }
-
-    if (!url || !url.startsWith('http')) {
-      return errors.badRequest('请提供有效的回调 URL');
-    }
-
-    if (!events || !Array.isArray(events) || events.length === 0) {
-      return errors.badRequest('请选择至少一个触发事件');
+    const urlCheck = validateExternalUrl(url);
+    if (!urlCheck.safe) {
+      return errors.badRequest(urlCheck.reason!);
     }
 
     // 如果指定了仓库，验证仓库所有权
@@ -63,7 +54,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       const repo = await prisma.repository.findFirst({
         where: {
           id: repoId,
-          ownerId: auth.userId,
+          ownerId: user!.id,
           deletedAt: null,
         },
       });
@@ -75,7 +66,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const webhook = await prisma.webhook.create({
       data: {
-        userId: auth.userId,
+        userId: user!.id,
         repoId: repoId || null,
         name: name.trim(),
         url,
@@ -93,7 +84,5 @@ export async function POST(req: NextRequest): Promise<Response> {
       isActive: webhook.isActive,
       createdAt: webhook.createdAt.toISOString(),
     }, 'Webhook 创建成功');
-  } catch (err) {
-    return handlePrismaError(err, '创建 Webhook 失败');
-  }
-}
+  },
+});

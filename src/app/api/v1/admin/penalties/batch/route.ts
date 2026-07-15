@@ -5,30 +5,30 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/penalties/batch - 批量操作（解除/撤销）
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // POST /api/v1/admin/penalties/batch - 批量操作
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    action: z.enum(['release', 'revoke']),
+    penaltyIds: z.array(z.string()).min(1),
+    reason: z.string().optional(),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
-    const { action, penaltyIds, reason } = body;
-
-    if (!action || !penaltyIds || !Array.isArray(penaltyIds) || penaltyIds.length === 0) {
-      return errors.badRequest('缺少必填参数：action, penaltyIds');
-    }
-
-    // 只有超级管理员可以执行批量操作
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以执行处罚批量操作');
     }
+
+    const { action, penaltyIds, reason } = body;
 
     if (!['release', 'revoke'].includes(action)) {
       return errors.badRequest('无效的操作类型，仅支持：release（解除）、revoke（撤销）');
@@ -66,13 +66,14 @@ export async function POST(req: NextRequest): Promise<Response> {
             data: {
               isActive: false,
               removedAt: now,
-              removedBy: auth.userId,
+              removedBy: user!.id,
               removeReason: reason || '批量解除',
             },
           });
 
+          // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
           await recordAuditLog({
-            adminId: auth.userId,
+            adminId: user!.id,
             userId: penalty.userId,
             actionType: 'batch_release_penalty',
             targetType: 'penalty',
@@ -88,13 +89,14 @@ export async function POST(req: NextRequest): Promise<Response> {
             data: {
               isActive: false,
               removedAt: now,
-              removedBy: auth.userId,
+              removedBy: user!.id,
               removeReason: reason || '批量撤销',
             },
           });
 
+          // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
           await recordAuditLog({
-            adminId: auth.userId,
+            adminId: user!.id,
             userId: penalty.userId,
             actionType: 'batch_revoke_penalty',
             targetType: 'penalty',
@@ -118,7 +120,5 @@ export async function POST(req: NextRequest): Promise<Response> {
       failCount,
       results,
     }, `批量操作完成：成功 ${successCount} 条，失败 ${failCount} 条`);
-  } catch (err) {
-    return handlePrismaError(err, '批量操作失败');
-  }
-}
+  },
+});

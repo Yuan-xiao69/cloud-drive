@@ -191,11 +191,14 @@ export default function FolderUploader({
           </div>
           
           <div
+            role="button"
+            tabIndex={0}
             className={`drop-zone ${isDragging ? 'dragging' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => folderInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); folderInputRef.current?.click(); } }}
           >
             <p className="drop-zone-text">
               选择文件夹或拖拽到此处
@@ -268,8 +271,8 @@ export default function FolderUploader({
       
       <style>{`
         .folder-uploader {
-          background: var(--bg-secondary, #fff);
-          border: 1px solid var(--border-color, #e1e4e8);
+          background: var(--ds-surface-default);
+          border: 1px solid var(--ds-border-default);
           border-radius: 6px;
           padding: 16px;
           max-width: 600px;
@@ -285,7 +288,7 @@ export default function FolderUploader({
         .uploader-title {
           font-size: 16px;
           font-weight: 600;
-          color: var(--text-primary, #24292e);
+          color: var(--ds-text-primary);
         }
         
         .back-btn {
@@ -293,7 +296,7 @@ export default function FolderUploader({
           border: none;
           cursor: pointer;
           font-size: 16px;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           padding: 4px 8px;
           margin-right: 8px;
         }
@@ -303,12 +306,12 @@ export default function FolderUploader({
           border: none;
           cursor: pointer;
           font-size: 20px;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           padding: 4px;
         }
         
         .drop-zone {
-          border: 2px dashed var(--border-color, #e1e4e8);
+          border: 2px dashed var(--ds-border-default);
           border-radius: 6px;
           padding: 32px;
           text-align: center;
@@ -318,18 +321,18 @@ export default function FolderUploader({
         
         .drop-zone:hover,
         .drop-zone.dragging {
-          border-color: var(--accent-color, #0366d6);
-          background: var(--bg-hover, #f6f8fa);
+          border-color: var(--ds-accent-default);
+          background: var(--ds-surface-subtle);
         }
         
         .drop-zone-text {
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           margin-bottom: 8px;
         }
         
         .drop-zone-hint {
           font-size: 12px;
-          color: var(--text-tertiary, #6a737d);
+          color: var(--ds-text-tertiary);
         }
         
         .file-input {
@@ -337,7 +340,7 @@ export default function FolderUploader({
         }
         
         .folder-info {
-          background: var(--bg-secondary, #f6f8fa);
+          background: var(--ds-surface-subtle);
           border-radius: 6px;
           padding: 12px;
           margin-bottom: 12px;
@@ -347,13 +350,13 @@ export default function FolderUploader({
           display: flex;
           gap: 16px;
           font-size: 14px;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
         }
         
         .file-preview {
           max-height: 200px;
           overflow-y: auto;
-          border: 1px solid var(--border-color, #e1e4e8);
+          border: 1px solid var(--ds-border-default);
           border-radius: 6px;
           margin-bottom: 16px;
         }
@@ -363,7 +366,7 @@ export default function FolderUploader({
           align-items: center;
           gap: 8px;
           padding: 8px 12px;
-          border-bottom: 1px solid var(--border-color, #e1e4e8);
+          border-bottom: 1px solid var(--ds-border-default);
         }
         
         .file-preview-item:last-child {
@@ -377,7 +380,7 @@ export default function FolderUploader({
         .file-name {
           flex: 1;
           font-size: 13px;
-          color: var(--text-primary, #24292e);
+          color: var(--ds-text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -385,14 +388,14 @@ export default function FolderUploader({
         
         .file-size {
           font-size: 12px;
-          color: var(--text-tertiary, #6a737d);
+          color: var(--ds-text-tertiary);
         }
         
         .file-preview-more {
           padding: 8px 12px;
           text-align: center;
           font-size: 12px;
-          color: var(--text-tertiary, #6a737d);
+          color: var(--ds-text-tertiary);
         }
         
         .chunked-upload-area {

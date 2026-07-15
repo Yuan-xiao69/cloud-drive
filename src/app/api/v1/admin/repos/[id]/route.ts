@@ -1,24 +1,24 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
+import { recordAuditLog } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { ErrorCodes } from '@/lib/api/v1';
 
 // PATCH /api/v1/admin/repos/[id] - 更新仓库属性
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    visibility: z.number().optional(),
+    isArchived: z.boolean().optional(),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id } = params;
     const { visibility, isArchived } = body;
 
     const repo = await prisma.repository.findUnique({
@@ -27,7 +27,7 @@ export async function PATCH(
     });
 
     if (!repo) {
-      return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
+      return errors.notFound('仓库');
     }
 
     if (repo.deletedAt) {
@@ -52,8 +52,9 @@ export async function PATCH(
       select: { id: true, name: true, visibility: true, isArchived: true },
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'update_repo',
       targetType: 'repository',
       targetId: id,
@@ -64,23 +65,18 @@ export async function PATCH(
     });
 
     return success(updated, '仓库更新成功');
-  } catch (err) {
-    return handlePrismaError(err, '更新仓库失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/repos/[id] - 删除单个仓库（软删除）
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     const repo = await prisma.repository.findUnique({
       where: { id },
@@ -106,9 +102,10 @@ export async function DELETE(
       data: { deletedAt: new Date() },
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
-      userId: auth.userId,
+      adminId: user!.id,
+      userId: user!.id,
       actionType: 'delete',
       targetType: 'repository',
       targetId: id,
@@ -116,7 +113,5 @@ export async function DELETE(
     });
 
     return success({ id }, '仓库已删除');
-  } catch (err) {
-    return handlePrismaError(err, '删除仓库失败');
-  }
-}
+  },
+});

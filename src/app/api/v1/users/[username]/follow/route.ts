@@ -4,61 +4,29 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/users/[username]/follow - 关注/取消关注用户
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
-import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success } from '@/lib/api/v1';
+import { UserService } from '@/services/user-service';
+
+const followSchema = z.object({
+  action: z.enum(['follow', 'unfollow']),
+});
 
 // POST /api/v1/users/[username]/follow - 关注/取消关注
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
+export const POST = defineRoute({
+  auth: 'required',
+  validation: followSchema,
+  async handler({ user, params, body }) {
+    const { username } = params;
+    const { action } = body;
 
-    const { username } = await params;
-
-    // 查找目标用户
-    const targetUser = await prisma.user.findFirst({
-      where: { username, isSystem: false },
-      select: { id: true, username: true },
-    });
-
-    if (!targetUser) {
-      return error(ErrorCodes.NOT_FOUND, { message: '用户不存在' });
-    }
-
-    if (targetUser.id === auth.userId) {
-      return errors.forbidden('不能关注自己');
-    }
-
-    // 检查是否已关注
-    const existing = await prisma.userFollow.findUnique({
-      where: {
-        followerId_followingId: {
-          followerId: auth.userId,
-          followingId: targetUser.id,
-        },
-      },
-    });
-
-    if (existing) {
-      // 取消关注
-      await prisma.userFollow.delete({ where: { id: existing.id } });
-      return success({ following: false }, '已取消关注');
+    if (action === 'follow') {
+      const result = await UserService.follow(user!.id, username);
+      return success(result, '已关注用户');
     } else {
-      // 添加关注
-      await prisma.userFollow.create({
-        data: { followerId: auth.userId, followingId: targetUser.id },
-      });
-      return success({ following: true }, '已关注用户');
+      const result = await UserService.unfollow(user!.id, username);
+      return success(result, '已取消关注');
     }
-  } catch (err) {
-    return handlePrismaError(err, '关注操作失败');
-  }
-}
+  },
+});

@@ -31,7 +31,7 @@ export default function UserProfileTabs({
   return (
     <div
       className={clsx(
-        'bg-[var(--color-bg-default)] border-b border-[var(--color-border-default)]',
+        'bg-[var(--ds-surface-default)] border-b border-[var(--ds-border-default)]',
         className
       )}
     >
@@ -43,18 +43,18 @@ export default function UserProfileTabs({
               onClick={() => onTabChange(tab.key)}
               className={clsx(
                 'relative px-4 py-4 text-sm font-medium transition-colors',
-                'hover:text-[var(--color-fg-default)] hover:bg-[var(--color-bg-inset)]',
+                'hover:text-[var(--ds-text-primary)] hover:bg-[var(--ds-surface-inset)]',
                 'border-b-2 -mb-[1px]',
                 activeTab === tab.key
-                  ? 'text-[var(--color-fg-default)] border-[var(--color-fg-default)]'
-                  : 'text-[var(--color-fg-muted)] border-transparent'
+                  ? 'text-[var(--ds-text-primary)] border-[var(--ds-accent-default)]'
+                  : 'text-[var(--ds-text-secondary)] border-transparent'
               )}
             >
               <span className="flex items-center gap-1.5">
                 {tab.icon && <span className="w-4 h-4">{tab.icon}</span>}
                 {tab.label}
                 {tab.count !== undefined && tab.count > 0 && (
-                  <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-[var(--color-bg-tertiary)] text-[var(--color-fg-muted)]">
+                  <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-[var(--ds-surface-inset)] text-[var(--ds-text-secondary)]">
                     {tab.count > 999 ? '999+' : tab.count}
                   </span>
                 )}

@@ -4,17 +4,16 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/notifications/stats - 获取通知统计数据
  */
 
-import { NextRequest } from 'next/server';
+import { defineRoute } from '@/lib/framework/define-route';
 import { success, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/v1/admin/notifications/stats - 获取通知统计数据
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const adminResult = await requireAdmin(req);
-    if (isAuthError(adminResult)) {
-      return adminResult.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const now = new Date();
@@ -107,8 +106,5 @@ export async function GET(req: NextRequest): Promise<Response> {
         hourly: Object.entries(hourlyStats).map(([hour, count]) => ({ hour: parseInt(hour), count })),
       },
     });
-  } catch (err) {
-    console.error('获取通知统计失败:', err);
-    return errors.internal('获取通知统计失败');
-  }
-}
+  },
+});

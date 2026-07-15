@@ -132,7 +132,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
   [ErrorCodes.FORK_NOT_ALLOWED]: '不允许Fork此仓库',
   [ErrorCodes.MERGE_CONFLICT]: '存在合并冲突',
   [ErrorCodes.ISSUE_CLOSED]: 'Issue已关闭',
-  [ErrorCodes.PR_NOT_MERGEABLE]: 'Pull Request无法合并',
+  [ErrorCodes.PR_NOT_MERGEABLE]: '合并请求无法合并',
   [ErrorCodes.REVIEW_REQUIRED]: '需要审核才能合并',
 
   // 6xxx 资源限制
@@ -263,3 +263,8 @@ export interface ApiError {
   message: string;
   details?: ApiErrorDetail[];
 }
+
+type _EnsureAllErrorCodesInMessages = keyof typeof ErrorMessages extends ErrorCode ? (ErrorCode extends keyof typeof ErrorMessages ? true : never) : never;
+type _EnsureAllErrorCodesInHttpStatus = keyof typeof HttpStatusMap extends ErrorCode ? (ErrorCode extends keyof typeof HttpStatusMap ? true : never) : never;
+const _compileCheck: _EnsureAllErrorCodesInMessages = true;
+const _compileCheck2: _EnsureAllErrorCodesInHttpStatus = true;

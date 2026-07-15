@@ -3,8 +3,9 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { Button, Modal, Input, Card, Field } from '@/components/design';
 import {
   SearchIcon,
   FilterIcon,
@@ -22,7 +23,9 @@ import {
 } from './AdminIcons';
 import { SidePanel, AdvancedFilter, BatchActionBar, ConfirmDialog } from './common/AdminCommon';
 import { PieChart, BarChart } from './charts/AdminCharts';
-import type { ReportSummary, ReportDetail, ReportStats, ContextMenuData } from './AdminTypes';
+import { AdminContextMenu } from './AdminContextMenu';
+import type { ReportSummary, ReportDetail, ReportStats, ContextMenuData, ContextMenuSection } from './AdminTypes';
+import { formatTimeAgo } from '@/lib/utils';
 
 interface ReportFilters {
   search?: string;
@@ -159,19 +162,6 @@ export default function AdminReportsEnhanced({
     onContextMenu(e, report.id);
   };
 
-  // 关闭右键菜单
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.context-menu')) return;
-      onCloseContextMenu();
-    };
-    if (contextMenu) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [contextMenu, onCloseContextMenu]);
-
   // 筛选器配置
   const filterFields = [
     {
@@ -205,37 +195,43 @@ export default function AdminReportsEnhanced({
   ];
 
   return (
-    <div className="tab-content">
+    <div className="space-y-4">
       {/* 页面标题和操作栏 */}
-      <div className="page-header">
-        <div className="page-title-section">
-          <h1 className="page-title">举报管理</h1>
+      <div className="flex justify-between items-start gap-4 flex-wrap mb-2">
+        <div className="flex items-center gap-2">
+          <h1 className="text-[22px] font-semibold text-[var(--ds-text-primary)] m-0">举报管理</h1>
           {reportsTotal > 0 && (
-            <span className="pending-badge">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]">
               {reportsTotal} 个待处理
             </span>
           )}
         </div>
-        <div className="header-actions">
-          <button
-            className={`btn btn-secondary btn-sm ${showAdvancedFilter ? 'active' : ''}`}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button
+            variant="secondary"
+            size="sm"
+            className={showAdvancedFilter ? 'ring-2 ring-[var(--ds-accent-default)]' : ''}
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
           >
             <FilterIcon /> 筛选
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onRefresh}
           >
             刷新
-          </button>
-          <div className="search-box">
-            <SearchIcon />
+          </Button>
+          <div className="relative">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--ds-text-secondary)]">
+              <SearchIcon />
+            </span>
             <input
               type="search"
               placeholder="搜索举报内容..."
               value={filters.search || ''}
               onChange={(e) => onSearchChange(e.target.value)}
+              className="pl-8 pr-3 py-1.5 text-sm border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] outline-none focus:ring-1 focus:ring-[var(--ds-accent-default)] w-52"
             />
           </div>
         </div>
@@ -243,10 +239,10 @@ export default function AdminReportsEnhanced({
 
       {/* 统计图表 */}
       {reportStats && (
-        <div className="stats-charts-row">
-          <div className="stats-chart-card">
-            <h3 className="stats-chart-title">举报类型分布</h3>
-            <div className="stats-chart-body">
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <h3 className="text-xs font-semibold text-[var(--ds-text-secondary)] mb-3">举报类型分布</h3>
+            <div className="flex justify-center items-center min-h-[160px]">
               <PieChart
                 data={reportStats.byType.map(d => ({
                   label: getReportTypeLabel(d.type),
@@ -255,10 +251,10 @@ export default function AdminReportsEnhanced({
                 size={180}
               />
             </div>
-          </div>
-          <div className="stats-chart-card">
-            <h3 className="stats-chart-title">处理状态分布</h3>
-            <div className="stats-chart-body">
+          </Card>
+          <Card>
+            <h3 className="text-xs font-semibold text-[var(--ds-text-secondary)] mb-3">处理状态分布</h3>
+            <div className="flex justify-center items-center min-h-[160px]">
               <PieChart
                 data={reportStats.byStatus.map(d => ({
                   label: getStatusLabel(d.status),
@@ -267,7 +263,7 @@ export default function AdminReportsEnhanced({
                 size={180}
               />
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -278,8 +274,7 @@ export default function AdminReportsEnhanced({
           values={filters as Record<string, string | number | Date | null>}
           onChange={(name, value) => {
             const updated = { ...filters, [name]: value };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onFiltersChange(updated as any);
+            onFiltersChange(updated);
           }}
           onApply={() => onPageChange(1)}
           onReset={() => onFiltersChange({} as ReportFilters)}
@@ -298,13 +293,14 @@ export default function AdminReportsEnhanced({
       />
 
       {/* 举报列表 */}
-      <div className="admin-table-container">
-        <table className="admin-table">
+      <Card padding="none" className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr>
-              <th style={{ width: '40px' }}>
+            <tr className="bg-[var(--ds-surface-subtle)] border-b border-[var(--ds-border-default)] text-left">
+              <th className="px-3 py-2.5 w-10">
                 <input
                   type="checkbox"
+                  className="admin-checkbox cursor-pointer"
                   checked={selectedReports.size === reports.length && reports.length > 0}
                   onChange={(e) => {
                     if (e.target.checked) onSelectAll();
@@ -312,21 +308,29 @@ export default function AdminReportsEnhanced({
                   }}
                 />
               </th>
-              <th>举报类型</th>
-              <th>内容摘要</th>
-              <th>举报人</th>
-              <th>状态</th>
-              <th>时间</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">举报类型</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">内容摘要</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">举报人</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">状态</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">时间</th>
             </tr>
           </thead>
           <tbody>
             {reportsLoading ? (
               <tr>
-                <td colSpan={6} className="text-center">加载中...</td>
+                <td colSpan={6} className="text-center py-12 text-[var(--ds-text-secondary)]">
+                  <div className="inline-block w-5 h-5 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] rounded-full animate-spin mb-2" />
+                  <div className="text-sm">加载中...</div>
+                </td>
               </tr>
             ) : reports.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center">暂无举报数据</td>
+                <td colSpan={6} className="text-center py-12 text-[var(--ds-text-secondary)]">
+                  <div className="flex justify-center mb-3 opacity-40">
+                    <FlagIcon />
+                  </div>
+                  <div className="text-sm">暂无举报数据</div>
+                </td>
               </tr>
             ) : (
               reports.map(report => (
@@ -334,207 +338,193 @@ export default function AdminReportsEnhanced({
                   key={report.id}
                   onContextMenu={(e) => handleContextMenu(e, report)}
                   onDoubleClick={() => onViewDetail(report.id)}
-                  className={selectedReports.has(report.id) ? 'selected' : ''}
+                  className={`border-b border-[var(--ds-border-default)] hover:bg-[var(--ds-surface-subtle)] transition-colors cursor-pointer ${selectedReports.has(report.id) ? 'bg-[var(--ds-accent-default)]/5' : ''}`}
                 >
-                  <td>
+                  <td className="px-3 py-2.5">
                     <input
                       type="checkbox"
+                      className="admin-checkbox cursor-pointer"
                       checked={selectedReports.has(report.id)}
                       onChange={() => onToggleSelect(report.id)}
                     />
                   </td>
-                  <td>
-                    <span className={`report-type-badge ${report.targetType}`}>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                      report.targetType === 'user' ? 'bg-[var(--ds-accent-default)]/10 text-[var(--ds-accent-default)]' :
+                      report.targetType === 'repo' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' :
+                      report.targetType === 'discussion' ? 'bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]' :
+                      'bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]'
+                    }`}>
                       {getReportTypeLabel(report.targetType)}
                     </span>
                   </td>
-                  <td>
-                    <div className="report-reason-cell">
-                      <span className="report-reason">{report.reason}</span>
-                      <span className="report-target-id">#{report.id}</span>
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[13px] text-[var(--ds-text-primary)]">{report.reason}</span>
+                      <span className="text-xs text-[var(--ds-text-secondary)]">#{report.id}</span>
                     </div>
                   </td>
-                  <td>
+                  <td className="px-3 py-2.5">
                     {report.reporterUsername ? (
-                      <Link href={`/${report.reporterUsername}`} className="user-link">
+                      <Link href={`/${report.reporterUsername}`} className="font-medium text-[var(--ds-accent-default)] text-sm hover:underline">
                         @{report.reporterUsername}
                       </Link>
                     ) : (
-                      <span className="text-muted">未知</span>
+                      <span className="text-sm text-[var(--ds-text-secondary)]">未知</span>
                     )}
                   </td>
-                  <td>
-                    <span className={`status-badge ${getStatusBadgeClass(report.status)}`}>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      report.status === 'pending' ? 'bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]' :
+                      report.status === 'processed' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' :
+                      'bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]'
+                    }`}>
                       {getStatusLabel(report.status)}
                     </span>
                   </td>
-                  <td>
-                    <span className="date-cell">{formatTimeAgo(report.createdAt)}</span>
+                  <td className="px-3 py-2.5">
+                    <span className="text-sm text-[var(--ds-text-secondary)]">{formatTimeAgo(report.createdAt)}</span>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* 分页 */}
       {reportsTotal > reportsPageSize && (
-        <div className="pagination">
-          <div className="pagination-info">
+        <div className="flex justify-between items-center pt-2">
+          <div className="text-sm text-[var(--ds-text-secondary)]">
             显示 {((reportsPage - 1) * reportsPageSize) + 1} - {Math.min(reportsPage * reportsPageSize, reportsTotal)} 条，共 {reportsTotal} 条
           </div>
-          <div className="pagination-controls">
-            <button
-              className="btn btn-secondary btn-sm"
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={reportsPage <= 1 || reportsLoading}
               onClick={() => onPageChange(reportsPage - 1)}
             >
               上一页
-            </button>
-            <span className="page-info">
+            </Button>
+            <span className="text-sm text-[var(--ds-text-secondary)] px-2">
               第 {reportsPage} / {totalPages} 页
             </span>
-            <button
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={reportsPage >= totalPages || reportsLoading}
               onClick={() => onPageChange(reportsPage + 1)}
             >
               下一页
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* 右键上下文菜单 */}
       {contextMenu && contextMenuTarget && (
-        <div
-          className="context-menu enhanced"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="context-menu-header">
-            <span className="context-menu-title">🚩 举报 #{contextMenuTarget.id}</span>
-          </div>
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onViewDetail(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <EyeIcon /> 查看详情 <span className="shortcut">Enter</span>
-            </button>
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onViewReporterHistory(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <UserIcon /> 查看被举报用户
-            </button>
-          </div>
-
-          <div className="context-menu-divider" />
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onMarkProcessed(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <CheckIcon /> 标记为已处理
-            </button>
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onIgnoreReport(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <XIcon /> 忽略举报
-            </button>
-          </div>
-
-          <div className="context-menu-divider" />
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onSendWarning(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <SendIcon /> 发送警告
-            </button>
-            <div className="context-menu-submenu">
-              <span className="submenu-trigger">
-                <MuteIcon /> 禁言 <ChevronDownIcon />
-              </span>
-              <div className="submenu-content">
-                <button onClick={() => { onMuteUser(contextMenuTarget.id, '1d'); onCloseContextMenu(); }}>
-                  禁言 1 天
-                </button>
-                <button onClick={() => { onMuteUser(contextMenuTarget.id, '7d'); onCloseContextMenu(); }}>
-                  禁言 7 天
-                </button>
-                <button onClick={() => { onMuteUser(contextMenuTarget.id, '30d'); onCloseContextMenu(); }}>
-                  禁言 30 天
-                </button>
-                <button onClick={() => { onMuteUser(contextMenuTarget.id, 'permanent'); onCloseContextMenu(); }}>
-                  永久禁言
-                </button>
-              </div>
-            </div>
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onBanUser(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <BanIcon /> 封禁账号
-            </button>
-          </div>
-
-          <div className="context-menu-divider" />
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item danger"
-              onClick={() => {
-                setConfirmDialog({
-                  isOpen: true,
-                  title: '删除内容',
-                  message: '确定要删除被举报的内容吗？',
-                  variant: 'danger',
-                  onConfirm: () => {
-                    onDeleteContent(contextMenuTarget.id);
-                    setConfirmDialog(null);
+        <AdminContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          sections={[
+            {
+              id: 'view',
+              items: [
+                {
+                  id: 'view-detail',
+                  label: '查看详情',
+                  icon: <EyeIcon />,
+                  shortcut: 'Enter',
+                  onClick: () => { onViewDetail(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+                {
+                  id: 'view-reporter',
+                  label: '查看被举报用户',
+                  icon: <UserIcon />,
+                  onClick: () => { onViewReporterHistory(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+            {
+              id: 'handle',
+              items: [
+                {
+                  id: 'mark-processed',
+                  label: '标记为已处理',
+                  icon: <CheckIcon />,
+                  onClick: () => { onMarkProcessed(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+                {
+                  id: 'ignore-report',
+                  label: '忽略举报',
+                  icon: <XIcon />,
+                  onClick: () => { onIgnoreReport(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+            {
+              id: 'punish',
+              items: [
+                {
+                  id: 'send-warning',
+                  label: '发送警告',
+                  icon: <SendIcon />,
+                  onClick: () => { onSendWarning(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+                {
+                  id: 'mute-user',
+                  label: '禁言',
+                  icon: <MuteIcon />,
+                  children: [
+                    { id: 'mute-1d', label: '禁言 1 天', onClick: () => { onMuteUser(contextMenuTarget!.id, '1d'); onCloseContextMenu(); } },
+                    { id: 'mute-7d', label: '禁言 7 天', onClick: () => { onMuteUser(contextMenuTarget!.id, '7d'); onCloseContextMenu(); } },
+                    { id: 'mute-30d', label: '禁言 30 天', onClick: () => { onMuteUser(contextMenuTarget!.id, '30d'); onCloseContextMenu(); } },
+                    { id: 'mute-permanent', label: '永久禁言', onClick: () => { onMuteUser(contextMenuTarget!.id, 'permanent'); onCloseContextMenu(); } },
+                  ],
+                },
+                {
+                  id: 'ban-user',
+                  label: '封禁账号',
+                  icon: <BanIcon />,
+                  onClick: () => { onBanUser(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+            {
+              id: 'danger',
+              items: [
+                {
+                  id: 'delete-content',
+                  label: '删除内容',
+                  icon: <TrashIcon />,
+                  shortcut: 'Del',
+                  danger: true,
+                  onClick: () => {
+                    setConfirmDialog({
+                      isOpen: true,
+                      title: '删除内容',
+                      message: '确定要删除被举报的内容吗？',
+                      variant: 'danger',
+                      onConfirm: () => {
+                        onDeleteContent(contextMenuTarget!.id);
+                        setConfirmDialog(null);
+                      },
+                    });
+                    onCloseContextMenu();
                   },
-                });
-                onCloseContextMenu();
-              }}
-            >
-              <TrashIcon /> 删除内容
-            </button>
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onViewRelatedReports(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <FlagIcon /> 查看相关举报
-            </button>
-          </div>
-        </div>
+                },
+                {
+                  id: 'view-related',
+                  label: '查看相关举报',
+                  icon: <FlagIcon />,
+                  onClick: () => { onViewRelatedReports(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+          ]}
+          onClose={onCloseContextMenu}
+        />
       )}
 
       {/* 举报详情侧边栏 */}
@@ -581,35 +571,16 @@ export default function AdminReportsEnhanced({
 
       {/* 举报处理弹窗 */}
       {showReportModal && (
-        <div className="modal-overlay" onClick={onCloseReportModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <h3>{reportAction === 'dismiss' ? '处理举报' : '删除内容'}</h3>
-              <button className="modal-close" onClick={onCloseReportModal}>&times;</button>
-            </div>
-            <div className="modal-body">
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>
-                  处理备注
-                </label>
-                <textarea
-                  className="form-control"
-                  rows={3}
-                  placeholder="请输入处理备注..."
-                  value={reportNote}
-                  onChange={(e) => onReportNoteChange(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border-default)', borderRadius: 6, resize: 'vertical' }}
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={onCloseReportModal} disabled={isHandlingReport}>取消</button>
-              <button className="btn btn-primary" onClick={onReportSubmit} disabled={isHandlingReport || !reportNote.trim()}>
-                {isHandlingReport ? '处理中...' : '确认'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <Modal isOpen onClose={onCloseReportModal} title={reportAction === 'dismiss' ? '处理举报' : '删除内容'} maxWidth="480px" footer={
+          <>
+            <Button variant="secondary" onClick={onCloseReportModal} disabled={isHandlingReport}>取消</Button>
+            <Button variant="primary" onClick={onReportSubmit} disabled={isHandlingReport || !reportNote.trim()} loading={isHandlingReport}>{isHandlingReport ? '处理中...' : '确认'}</Button>
+          </>
+        }>
+          <Field label="处理备注">
+            <Input id="report-note" multiline rows={3} placeholder="请输入处理备注..." value={reportNote} onChange={(e) => onReportNoteChange(e.target.value)} />
+          </Field>
+        </Modal>
       )}
     </div>
   );
@@ -645,12 +616,12 @@ function ReportDetailPanel({
       <SidePanel
         isOpen={true}
         onClose={onClose}
-        title="🚩 举报详情"
+        title="举报详情"
         width={520}
       >
-        <div className="detail-loading">
-          <div className="loading-spinner" />
-          <p>正在加载举报详情...</p>
+        <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
+          <div className="w-10 h-10 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] rounded-full animate-spin mb-4" />
+          <p className="text-sm m-0">正在加载举报详情...</p>
         </div>
       </SidePanel>
     );
@@ -660,94 +631,107 @@ function ReportDetailPanel({
     <SidePanel
       isOpen={true}
       onClose={onClose}
-      title={`🚩 举报详情 #${report.id}`}
+      title={`举报详情 #${report.id}`}
       subtitle={getReportTypeLabel(report.targetType)}
       width={520}
     >
       {/* 基本信息 */}
-      <div className="detail-section">
-        <h3 className="detail-section-title">基本信息</h3>
-        <div className="detail-grid">
-          <div className="detail-item">
-            <span className="detail-label">举报类型</span>
-            <span className="detail-value">
-              <span className={`report-type-badge ${report.targetType}`}>
+      <div className="mb-5">
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">基本信息</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-[var(--ds-text-secondary)]">举报类型</span>
+            <span className="text-sm text-[var(--ds-text-primary)]">
+              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                report.targetType === 'user' ? 'bg-[var(--ds-accent-default)]/10 text-[var(--ds-accent-default)]' :
+                report.targetType === 'repo' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' :
+                report.targetType === 'discussion' ? 'bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]' :
+                'bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]'
+              }`}>
                 {getReportTypeLabel(report.targetType)}
               </span>
             </span>
           </div>
-          <div className="detail-item">
-            <span className="detail-label">状态</span>
-            <span className={`status-badge ${getStatusBadgeClass(report.status)}`}>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-[var(--ds-text-secondary)]">状态</span>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              report.status === 'pending' ? 'bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]' :
+              report.status === 'processed' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' :
+              'bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]'
+            }`}>
               {getStatusLabel(report.status)}
             </span>
           </div>
-          <div className="detail-item">
-            <span className="detail-label">优先级</span>
-            <span className={`priority-badge ${report.priority || ''}`}>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-[var(--ds-text-secondary)]">优先级</span>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              report.priority === 'high' ? 'bg-[color-mix(in_srgb,var(--ds-danger-default)_10%,transparent)] text-[var(--ds-danger-default)]' :
+              report.priority === 'medium' ? 'bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)]' :
+              'bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]'
+            }`}>
               {getPriorityLabel(report.priority || '')}
             </span>
           </div>
-          <div className="detail-item">
-            <span className="detail-label">举报时间</span>
-            <span className="detail-value">{formatTimeAgo(report.createdAt)}</span>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-[var(--ds-text-secondary)]">举报时间</span>
+            <span className="text-sm text-[var(--ds-text-primary)]">{formatTimeAgo(report.createdAt)}</span>
           </div>
         </div>
       </div>
 
       {/* 举报人信息 */}
-      <div className="detail-section">
-        <h3 className="detail-section-title">举报人</h3>
-        <div className="detail-grid">
-          <div className="detail-item">
-            <span className="detail-label">用户名</span>
-            <span className="detail-value">
+      <div className="mb-5">
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">举报人</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-[var(--ds-text-secondary)]">用户名</span>
+            <span className="text-sm text-[var(--ds-text-primary)]">
               {report.reporter?.username ? (
-                <Link href={`/${report.reporter.username}`} className="user-link">
+                <Link href={`/${report.reporter.username}`} className="font-medium text-[var(--ds-accent-default)] hover:underline">
                   @{report.reporter.username}
                 </Link>
               ) : '未知'}
             </span>
           </div>
-          <div className="detail-item">
-            <span className="detail-label">邮箱</span>
-            <span className="detail-value">{report.reporter?.email || '-'}</span>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-[var(--ds-text-secondary)]">邮箱</span>
+            <span className="text-sm text-[var(--ds-text-primary)]">{report.reporter?.email || '-'}</span>
           </div>
         </div>
         {report.reporterStats && (
-          <div className="reporter-stats">
+          <Card variant="subtle" className="flex gap-4 mt-3 text-xs text-[var(--ds-text-secondary)]">
             <span>总举报次数: {report.reporterStats.totalReports}</span>
             <span>有效举报: {report.reporterStats.validReports}</span>
             <span>无效举报: {report.reporterStats.invalidReports}</span>
-          </div>
+          </Card>
         )}
       </div>
 
       {/* 被举报对象 */}
       {report.targetInfo && (
-        <div className="detail-section">
-          <h3 className="detail-section-title">被举报对象</h3>
-          <div className="detail-grid">
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">被举报对象</h3>
+          <div className="grid grid-cols-2 gap-3">
             {report.targetInfo.username && (
-              <div className="detail-item full-width">
-                <span className="detail-label">用户名</span>
-                <span className="detail-value">
-                  <Link href={`/${report.targetInfo.username}`} className="user-link">
+              <div className="flex flex-col gap-1 col-span-2">
+                <span className="text-xs text-[var(--ds-text-secondary)]">用户名</span>
+                <span className="text-sm text-[var(--ds-text-primary)]">
+                  <Link href={`/${report.targetInfo.username}`} className="font-medium text-[var(--ds-accent-default)] hover:underline">
                     @{report.targetInfo.username}
                   </Link>
                 </span>
               </div>
             )}
             {report.targetInfo.title && (
-              <div className="detail-item full-width">
-                <span className="detail-label">标题</span>
-                <span className="detail-value">{report.targetInfo.title}</span>
+              <div className="flex flex-col gap-1 col-span-2">
+                <span className="text-xs text-[var(--ds-text-secondary)]">标题</span>
+                <span className="text-sm text-[var(--ds-text-primary)]">{report.targetInfo.title}</span>
               </div>
             )}
             {report.targetInfo.content && (
-              <div className="detail-item full-width">
-                <span className="detail-label">内容</span>
-                <div className="target-content">{report.targetInfo.content}</div>
+              <div className="flex flex-col gap-1 col-span-2">
+                <span className="text-xs text-[var(--ds-text-secondary)]">内容</span>
+                <Card variant="subtle" className="text-[13px] text-[var(--ds-text-primary)] whitespace-pre-wrap">{report.targetInfo.content}</Card>
               </div>
             )}
           </div>
@@ -755,82 +739,55 @@ function ReportDetailPanel({
       )}
 
       {/* 举报原因 */}
-      <div className="detail-section">
-        <h3 className="detail-section-title">举报原因</h3>
-        <div className="report-reason-box">
-          <p>{report.reason}</p>
+      <div className="mb-5">
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">举报原因</h3>
+        <Card variant="subtle" padding="lg">
+          <p className="m-0 text-sm text-[var(--ds-text-primary)] leading-relaxed">{report.reason}</p>
           {report.description && (
-            <p className="report-description">{report.description}</p>
+            <p className="mt-3 text-[var(--ds-text-secondary)] text-[13px]">{report.description}</p>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* 相关举报 */}
       {report.relatedReports && report.relatedReports.length > 0 && (
-        <div className="detail-section">
-          <h3 className="detail-section-title">相关举报</h3>
-          <div className="related-reports-list">
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">相关举报</h3>
+          <div className="flex flex-col gap-2">
             {report.relatedReports.map((r) => (
-              <div key={r.id} className="related-report-item">
-                <span className="related-report-reason">{r.reason}</span>
-                <span className="related-report-date">{formatTimeAgo(r.createdAt)}</span>
-              </div>
+              <Card key={r.id} variant="subtle" className="flex justify-between items-center">
+                <span className="text-[13px] text-[var(--ds-text-primary)]">{r.reason}</span>
+                <span className="text-[11px] text-[var(--ds-text-secondary)]">{formatTimeAgo(r.createdAt)}</span>
+              </Card>
             ))}
           </div>
         </div>
       )}
 
       {/* 快速操作 */}
-      <div className="detail-section">
-        <h3 className="detail-section-title">快速操作</h3>
-        <div className="quick-actions-grid">
-          <button className="btn btn-secondary" onClick={onMarkProcessed}>
-            ✓ 标记已处理
-          </button>
-          <button className="btn btn-secondary" onClick={onIgnore}>
-            ✗ 忽略举报
-          </button>
-          <button className="btn btn-secondary" onClick={onSendWarning}>
-            📧 发送警告
-          </button>
-          <button className="btn btn-warning" onClick={() => onMute?.('7d')}>
-            🔇 禁言 7 天
-          </button>
-          <button className="btn btn-danger" onClick={onBan}>
-            🔒 封禁账号
-          </button>
-          <button className="btn btn-danger" onClick={onDeleteContent}>
-            🗑️ 删除内容
-          </button>
+      <div className="mb-5">
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">快速操作</h3>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" size="sm" onClick={onMarkProcessed} block>
+            标记已处理
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onIgnore} block>
+            忽略举报
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onSendWarning} block>
+            发送警告
+          </Button>
+          <Button variant="ghost" size="sm" className="bg-[var(--ds-warning-subtle)] text-[var(--ds-warning-default)] border border-[var(--ds-warning-default)] hover:bg-[var(--ds-warning-subtle)] w-full" onClick={() => onMute?.('7d')}>
+            禁言 7 天
+          </Button>
+          <Button variant="ghost" size="sm" className="bg-[color-mix(in_srgb,var(--ds-danger-default)_10%,transparent)] text-[var(--ds-danger-default)] border border-[color-mix(in_srgb,var(--ds-danger-default)_20%,transparent)] hover:bg-[color-mix(in_srgb,var(--ds-danger-default)_20%,transparent)] w-full" onClick={onBan}>
+            封禁账号
+          </Button>
+          <Button variant="ghost" size="sm" className="bg-[color-mix(in_srgb,var(--ds-danger-default)_10%,transparent)] text-[var(--ds-danger-default)] border border-[color-mix(in_srgb,var(--ds-danger-default)_20%,transparent)] hover:bg-[color-mix(in_srgb,var(--ds-danger-default)_20%,transparent)] w-full" onClick={onDeleteContent}>
+            删除内容
+          </Button>
         </div>
       </div>
-      <style jsx>{`
-        .report-type-badge { display: inline-flex; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-        .report-type-badge.user { background: var(--color-accent-subtle); color: var(--color-accent-fg); }
-        .report-type-badge.repo { background: var(--color-success-subtle); color: var(--color-success-fg); }
-        .report-type-badge.discussion { background: var(--color-attention-subtle); color: var(--color-attention-fg); }
-        .report-type-badge.comment { background: var(--color-bg-subtle); color: var(--color-fg-muted); }
-        .priority-badge { display: inline-flex; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-        .priority-badge.high { background: var(--color-danger-subtle); color: var(--color-danger-fg); }
-        .priority-badge.medium { background: var(--color-attention-subtle); color: var(--color-attention-fg); }
-        .priority-badge.low { background: var(--color-bg-subtle); color: var(--color-fg-muted); }
-        .reporter-stats { display: flex; gap: 16px; margin-top: 12px; padding: 10px 12px; background: var(--color-bg-subtle); border-radius: 6px; font-size: 12px; color: var(--color-fg-muted); }
-        .target-content { padding: 12px; background: var(--color-bg-subtle); border-radius: 6px; font-size: 13px; color: var(--color-fg-default); white-space: pre-wrap; }
-        .report-reason-box { padding: 16px; background: var(--color-bg-subtle); border-radius: 8px; }
-        .report-reason-box p { margin: 0; font-size: 14px; color: var(--color-fg-default); line-height: 1.5; }
-        .report-description { margin-top: 12px !important; color: var(--color-fg-muted) !important; font-size: 13px !important; }
-        .related-reports-list { display: flex; flex-direction: column; gap: 8px; }
-        .related-report-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--color-bg-subtle); border-radius: 6px; }
-        .related-report-reason { font-size: 13px; color: var(--color-fg-default); }
-        .related-report-date { font-size: 11px; color: var(--color-fg-muted); }
-        .quick-actions-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-        .btn-warning { background: var(--color-attention-subtle); color: var(--color-attention-fg); border: 1px solid var(--color-attention-fg); }
-        .btn-warning:hover { background: var(--color-attention-emphasis); color: white; }
-        .detail-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; color: var(--color-fg-muted); }
-        .detail-loading .loading-spinner { width: 40px; height: 40px; border: 3px solid var(--color-border-default); border-top-color: var(--color-accent-fg); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
-        .detail-loading p { margin: 0; font-size: 14px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
     </SidePanel>
   );
 }
@@ -855,15 +812,6 @@ function getStatusLabel(status: string): string {
   return labels[status] || status;
 }
 
-function getStatusBadgeClass(status: string): string {
-  const classes: Record<string, string> = {
-    pending: 'warning',
-    processed: 'success',
-    ignored: 'disabled',
-  };
-  return classes[status] || 'default';
-}
-
 function getPriorityLabel(priority: string): string {
   const labels: Record<string, string> = {
     high: '高',
@@ -872,20 +820,4 @@ function getPriorityLabel(priority: string): string {
   };
   return labels[priority] || priority;
 }
-
-function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins} 分钟前`;
-  if (diffHours < 24) return `${diffHours} 小时前`;
-  if (diffDays < 30) return `${diffDays} 天前`;
-  return date.toLocaleDateString('zh-CN');
-}
-
 

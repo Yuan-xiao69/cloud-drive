@@ -1,85 +1,85 @@
 export const dynamic = 'force-dynamic';
 /**
  * v1 讨论详情 API
- * GET /api/v1/discussions/[id] - 获取讨论详情
+ * GET    /api/v1/discussions/[id] - 获取讨论详情
+ * PUT    /api/v1/discussions/[id] - 更新讨论
+ * DELETE /api/v1/discussions/[id] - 删除讨论
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
-import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success } from '@/lib/api/v1';
+import { DiscussionService } from '@/services/discussion-service';
+import { logActivity } from '@/lib/activity-log';
+
+const updateDiscussionSchema = z.object({
+  title: z.string().min(1, '标题不能为空').optional(),
+  content: z.string().min(1, '内容不能为空').optional(),
+  category: z.enum(['general', 'qa', 'share', 'suggestion', 'announce']).optional(),
+  tags: z.array(z.string()).max(10).optional(),
+});
 
 // GET /api/v1/discussions/[id] - 获取讨论详情
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const { id } = await params;
-    const auth = await getAuthUser(req);
+export const GET = defineRoute({
+  auth: 'optional',
+  handler: async ({ user, params }) => {
+    const { id } = params;
 
-    // 查找讨论
-    const discussion = await prisma.discussion.findUnique({
-      where: { id, isDeleted: false },
-      include: {
-        author: {
-          select: { id: true, username: true, avatarUrl: true, bio: true },
-        },
-        _count: {
-          select: {
-            comments: { where: { isDeleted: false } },
-            likes: true,
-          },
-        },
-      },
+    const discussion = await DiscussionService.getById(id, user?.id);
+
+    return success(discussion);
+  },
+});
+
+// PUT /api/v1/discussions/[id] - 更新讨论
+export const PUT = defineRoute({
+  auth: 'required',
+  rateLimit: 'default',
+  validation: updateDiscussionSchema,
+  handler: async ({ req, user, body, params }) => {
+    const { id } = params;
+    const { title, content, category, tags } = body;
+
+    const updated = await DiscussionService.update(id, user!.id, {
+      title,
+      content,
+      category,
+      tags,
     });
 
-    if (!discussion) {
-      return error(ErrorCodes.NOT_FOUND, { message: '讨论不存在' });
-    }
-
-    // 增加浏览计数
-    await prisma.discussion.update({
-      where: { id },
-      data: { viewCount: { increment: 1 } },
+    // 记录活动日志
+    await logActivity({
+      userId: user!.id,
+      action: 'update_discussion',
+      targetType: 'discussion',
+      targetId: id,
+      targetName: updated.title,
+      req,
     });
 
-    // 检查当前用户是否已点赞
-    let isLiked = false;
-    if (auth) {
-      const existingLike = await prisma.discussionLike.findUnique({
-        where: {
-          discussionId_userId: {
-            discussionId: id,
-            userId: auth.userId,
-          },
-        },
-      });
-      isLiked = !!existingLike;
-    }
+    return success(updated, '讨论已更新');
+  },
+});
 
-    return success({
-      id: discussion.id,
-      authorId: discussion.authorId,
-      author: {
-        id: discussion.author.id,
-        username: discussion.author.username,
-        avatarUrl: discussion.author.avatarUrl ?? undefined,
-        bio: discussion.author.bio ?? undefined,
-      },
-      title: discussion.title,
-      content: discussion.content,
-      category: discussion.category,
-      status: discussion.status,
-      viewCount: discussion.viewCount + 1, // 返回更新后的浏览数
-      likeCount: discussion._count.likes,
-      commentsCount: discussion._count.comments,
-      isLiked,
-      createdAt: discussion.createdAt.toISOString(),
-      updatedAt: discussion.updatedAt.toISOString(),
+// DELETE /api/v1/discussions/[id] - 删除讨论
+export const DELETE = defineRoute({
+  auth: 'required',
+  rateLimit: 'default',
+  handler: async ({ req, user, params }) => {
+    const { id } = params;
+
+    await DiscussionService.delete(id, user!.id);
+
+    // 记录活动日志
+    await logActivity({
+      userId: user!.id,
+      action: 'delete_discussion',
+      targetType: 'discussion',
+      targetId: id,
+      targetName: id,
+      req,
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取讨论详情失败');
-  }
-}
+
+    return success({ id }, '讨论已删除');
+  },
+});

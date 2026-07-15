@@ -4,7 +4,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { tokenManager } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
+import { Button, Card, Input, Badge, Field } from '@/components/design';
 
 type EmailProviderType = 'qq' | 'aliyun' | 'sendgrid' | 'mailgun' | 'smtp';
 
@@ -43,35 +44,30 @@ export default function AdminEmailEnhanced() {
   const [testEmail, setTestEmail] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const token = tokenManager.getAccessToken();
-
   // 加载配置
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/v1/admin/email', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setConfig(data.data);
-        if (data.data.type) {
-          setType(data.data.type);
+      const res = await api.get<EmailConfigData>('/api/v1/admin/email');
+      if (res.code === 200) {
+        setConfig(res.data);
+        if (res.data.type) {
+          setType(res.data.type);
         }
-        if (data.data.user) {
-          setUser(data.data.user);
-          setFrom(data.data.user);
+        if (res.data.user) {
+          setUser(res.data.user);
+          setFrom(res.data.user);
         }
       } else {
-        setError(data.message || '加载邮件配置失败');
+        setError(res.message || '加载邮件配置失败');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '网络错误');
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     fetchConfig();
@@ -90,21 +86,13 @@ export default function AdminEmailEnhanced() {
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/v1/admin/email', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ type, user, pass: pass || undefined, from: from || undefined, host: host || undefined, port: parseInt(port) || undefined, secure, apiKey: apiKey || undefined }),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setMessage({ type: 'success', text: data.message || '邮件配置已保存' });
+      const res = await api.put<{ message?: string }>('/api/v1/admin/email', { type, user, pass: pass || undefined, from: from || undefined, host: host || undefined, port: parseInt(port) || undefined, secure, apiKey: apiKey || undefined });
+      if (res.code === 200) {
+        setMessage({ type: 'success', text: res.message || '邮件配置已保存' });
         setPass('');
         fetchConfig();
       } else {
-        setMessage({ type: 'error', text: data.message || '保存失败' });
+        setMessage({ type: 'error', text: res.message || '保存失败' });
       }
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : '网络错误' });
@@ -122,19 +110,11 @@ export default function AdminEmailEnhanced() {
     setTesting(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/v1/admin/email/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ to: testEmail }),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setMessage({ type: 'success', text: data.message || '测试邮件发送成功！请检查收件箱。' });
+      const res = await api.post<{ message?: string }>('/api/v1/admin/email/test', { to: testEmail });
+      if (res.code === 200) {
+        setMessage({ type: 'success', text: res.message || '测试邮件发送成功！请检查收件箱。' });
       } else {
-        setMessage({ type: 'error', text: data.message || '发送失败' });
+        setMessage({ type: 'error', text: res.message || '发送失败' });
       }
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : '网络错误' });
@@ -148,8 +128,8 @@ export default function AdminEmailEnhanced() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center p-20" style={{ color: 'var(--color-fg-muted)' }}>
-        <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--color-border-default)', borderTopColor: 'var(--color-accent-fg)' }} />
+      <div className="flex flex-col items-center justify-center p-20 text-[var(--ds-text-secondary)]">
+        <div className="w-8 h-8 border-2 border-[var(--ds-border-default)] rounded-[var(--ds-radius-full)] animate-spin" style={{ borderTopColor: 'var(--ds-accent-default)' }} />
         <p className="mt-4 text-sm">加载邮件配置...</p>
       </div>
     );
@@ -160,43 +140,42 @@ export default function AdminEmailEnhanced() {
       {/* 头部 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: 'var(--color-fg-default)' }}>
-            <svg className="inline-block mr-2 -mt-0.5" width="20" height="20" viewBox="0 0 16 16" fill="currentColor" style={{ color: 'var(--color-fg-default)' }}>
+          <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">
+            <svg className="inline-block mr-2 -mt-0.5 text-[var(--ds-text-primary)]" width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
               <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0 00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0 00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z"/>
             </svg>
             邮件配置
           </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-fg-muted)' }}>
+          <p className="text-sm mt-1 text-[var(--ds-text-secondary)]">
             配置邮件发送服务，用于验证码、通知等
           </p>
         </div>
         <div className="flex items-center gap-2">
           {config?.configured && (
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'var(--color-success-subtle)', color: 'var(--color-success-fg)' }}>
+            <Badge variant="success" className="gap-1.5 px-3 py-1 text-xs">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 16A8 8 0 108 0a8 8 0 000 16zm3.78-9.72a.75.75 0 00-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 00-1.06 1.06l2 2a.75.75 0 001.06 0l4.5-4.5z"/></svg>
               已配置 · {PROVIDERS.find(p => p.value === config.type)?.label || config.type}
-            </span>
+            </Badge>
           )}
-          <button
+          <Button
+            variant="secondary"
             onClick={fetchConfig}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border transition-colors"
-            style={{ borderColor: 'var(--color-border-default)', background: 'var(--color-canvas-subtle)', color: 'var(--color-fg-default)' }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3a5 5 0 00-5 5v1.5a.25.25 0 01-.5 0V8a5.5 5.5 0 0110.585-2.08l.005.004 2.414 2.414a.25.25 0 01-.353.353l-2.414-2.414-.004-.005A5 5 0 008 3z"/></svg>
             刷新
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* 消息提示 */}
       {message && (
         <div
-          className="flex items-center gap-2 px-4 py-3 rounded-lg border text-sm"
+          className="flex items-center gap-2 px-4 py-3 rounded-[var(--ds-radius-md)] border text-sm"
           style={{
-            background: message.type === 'success' ? 'var(--color-success-subtle)' : 'var(--color-danger-subtle)',
-            borderColor: message.type === 'success' ? 'var(--color-success-fg)' : 'var(--color-danger-fg)',
-            color: message.type === 'success' ? 'var(--color-success-fg)' : 'var(--color-danger-fg)',
+            background: message.type === 'success' ? 'var(--ds-success-subtle)' : 'var(--ds-danger-subtle)',
+            borderColor: message.type === 'success' ? 'var(--ds-success-default)' : 'var(--ds-danger-default)',
+            color: message.type === 'success' ? 'var(--ds-success-default)' : 'var(--ds-danger-default)',
           }}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -213,35 +192,35 @@ export default function AdminEmailEnhanced() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 左侧：服务商选择 */}
         <div className="lg:col-span-1">
-          <div className="rounded-lg border p-4" style={{ background: 'var(--color-canvas-default)', borderColor: 'var(--color-border-default)' }}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-fg-default)' }}>邮件服务商</h3>
+          <Card variant="surface" padding="md">
+            <h3 className="text-sm font-semibold mb-3 text-[var(--ds-text-primary)]">邮件服务商</h3>
             <div className="flex flex-col gap-2">
               {PROVIDERS.map((provider) => (
-                <button
+                <Button
                   key={provider.value}
                   onClick={() => setType(provider.value)}
-                  className="flex flex-col items-start gap-0.5 p-3 rounded-lg border text-left transition-colors"
+                  className="flex flex-col items-start gap-0.5 p-3 border text-left transition-colors"
                   style={{
-                    borderColor: type === provider.value ? 'var(--color-accent-fg)' : 'var(--color-border-default)',
-                    background: type === provider.value ? 'var(--color-accent-subtle)' : 'var(--color-canvas-subtle)',
+                    borderColor: type === provider.value ? 'var(--ds-accent-default)' : 'var(--ds-border-default)',
+                    background: type === provider.value ? 'var(--ds-accent-subtle)' : 'var(--ds-surface-subtle)',
                   }}
                 >
-                  <span className="text-sm font-medium" style={{ color: type === provider.value ? 'var(--color-accent-fg)' : 'var(--color-fg-default)' }}>
+                  <span className="text-sm font-medium" style={{ color: type === provider.value ? 'var(--ds-accent-default)' : 'var(--ds-text-primary)' }}>
                     {provider.label}
                   </span>
-                  <span className="text-xs" style={{ color: 'var(--color-fg-muted)' }}>{provider.desc}</span>
-                </button>
+                  <span className="text-xs text-[var(--ds-text-secondary)]">{provider.desc}</span>
+                </Button>
               ))}
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* 右侧：配置表单 */}
         <div className="lg:col-span-2">
-          <div className="rounded-lg border p-4" style={{ background: 'var(--color-canvas-default)', borderColor: 'var(--color-border-default)' }}>
-            <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-fg-default)' }}>
+          <Card variant="surface" padding="md">
+            <h3 className="text-sm font-semibold mb-4 text-[var(--ds-text-primary)]">
               配置详情
-              <span className="ml-2 text-xs font-normal" style={{ color: 'var(--color-fg-subtle)' }}>
+              <span className="ml-2 text-xs font-normal text-[var(--ds-text-tertiary)]">
                 当前选择：{PROVIDERS.find(p => p.value === type)?.label}
               </span>
             </h3>
@@ -249,22 +228,17 @@ export default function AdminEmailEnhanced() {
             <div className="space-y-4">
               {/* 发件人邮箱 */}
               <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-fg-default)' }}>
+                <label htmlFor="email-from-address" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">
                   发件人邮箱
                 </label>
-                <input
+                <Input
+                  id="email-from-address"
                   type="email"
                   value={user}
                   onChange={(e) => setUser(e.target.value)}
                   placeholder="your@email.com"
-                  className="w-full px-3 py-2 rounded-md border text-sm"
-                  style={{
-                    background: 'var(--color-canvas-subtle)',
-                    borderColor: 'var(--color-border-default)',
-                    color: 'var(--color-fg-default)',
-                  }}
                 />
-                <p className="text-xs mt-1" style={{ color: 'var(--color-fg-subtle)' }}>
+                <p className="text-xs mt-1 text-[var(--ds-text-tertiary)]">
                   {isSMTPType ? 'QQ/阿里邮箱填写完整邮箱地址，如 123456@qq.com' : '发件人邮箱地址'}
                 </p>
               </div>
@@ -274,23 +248,18 @@ export default function AdminEmailEnhanced() {
                 <>
                   {/* 授权码 / 密码 */}
                   <div>
-                    <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-fg-default)' }}>
+                    <label htmlFor="email-password" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">
                       {type === 'qq' ? 'QQ 邮箱授权码' : type === 'aliyun' ? '阿里邮箱密码' : 'SMTP 密码'}
                     </label>
-                    <input
+                    <Input
+                      id="email-password"
                       type="password"
                       value={pass}
                       onChange={(e) => setPass(e.target.value)}
                       placeholder={type === 'qq' ? '请输入 QQ 邮箱授权码（非登录密码）' : '请输入密码'}
-                      className="w-full px-3 py-2 rounded-md border text-sm"
-                      style={{
-                        background: 'var(--color-canvas-subtle)',
-                        borderColor: 'var(--color-border-default)',
-                        color: 'var(--color-fg-default)',
-                      }}
                     />
                     {type === 'qq' && (
-                      <p className="text-xs mt-1" style={{ color: 'var(--color-fg-subtle)' }}>
+                      <p className="text-xs mt-1 text-[var(--ds-text-tertiary)]">
                         获取路径：QQ 邮箱 → 设置 → 账户 → POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务 → 生成授权码
                       </p>
                     )}
@@ -300,41 +269,31 @@ export default function AdminEmailEnhanced() {
                   {type === 'smtp' && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-fg-default)' }}>
+                        <label htmlFor="email-smtp-host" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">
                           SMTP 服务器地址
                         </label>
-                        <input
+                        <Input
+                          id="email-smtp-host"
                           type="text"
                           value={host}
                           onChange={(e) => setHost(e.target.value)}
                           placeholder="smtp.example.com"
-                          className="w-full px-3 py-2 rounded-md border text-sm"
-                          style={{
-                            background: 'var(--color-canvas-subtle)',
-                            borderColor: 'var(--color-border-default)',
-                            color: 'var(--color-fg-default)',
-                          }}
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-fg-default)' }}>
+                          <label htmlFor="email-smtp-port" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">
                             端口
                           </label>
-                          <input
+                          <Input
+                            id="email-smtp-port"
                             type="number"
                             value={port}
                             onChange={(e) => setPort(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md border text-sm"
-                            style={{
-                              background: 'var(--color-canvas-subtle)',
-                              borderColor: 'var(--color-border-default)',
-                              color: 'var(--color-fg-default)',
-                            }}
                           />
                         </div>
                         <div className="flex items-end gap-3 pb-2">
-                          <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--color-fg-default)' }}>
+                          <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--ds-text-primary)]">
                             <input
                               type="checkbox"
                               checked={secure}
@@ -353,103 +312,82 @@ export default function AdminEmailEnhanced() {
               {/* API Key 配置 */}
               {isAPIType && (
                 <div>
-                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-fg-default)' }}>
+                  <label htmlFor="email-api-key" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">
                     API Key
                   </label>
-                  <input
+                  <Input
+                    id="email-api-key"
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder={`请输入 ${type === 'sendgrid' ? 'SendGrid' : 'Mailgun'} API Key`}
-                    className="w-full px-3 py-2 rounded-md border text-sm"
-                    style={{
-                      background: 'var(--color-canvas-subtle)',
-                      borderColor: 'var(--color-border-default)',
-                      color: 'var(--color-fg-default)',
-                    }}
                   />
                 </div>
               )}
 
               {/* 发件人名称（可选） */}
               <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-fg-default)' }}>
-                  发件人名称 <span className="font-normal" style={{ color: 'var(--color-fg-subtle)' }}>(可选)</span>
+                <label htmlFor="email-from-name" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">
+                  发件人名称 <span className="font-normal text-[var(--ds-text-tertiary)]">(可选)</span>
                 </label>
-                <input
+                <Input
+                  id="email-from-name"
                   type="text"
                   value={from}
                   onChange={(e) => setFrom(e.target.value)}
                   placeholder="留空则使用发件人邮箱"
-                  className="w-full px-3 py-2 rounded-md border text-sm"
-                  style={{
-                    background: 'var(--color-canvas-subtle)',
-                    borderColor: 'var(--color-border-default)',
-                    color: 'var(--color-fg-default)',
-                  }}
                 />
               </div>
 
               {/* 分隔线 */}
-              <hr style={{ borderColor: 'var(--color-border-muted)' }} />
+              <hr className="border-[var(--ds-border-muted)]" />
 
               {/* 操作按钮 */}
               <div className="flex items-center gap-3">
-                <button
+                <Button
+                  variant="primary"
                   onClick={handleSave}
                   disabled={saving || !user.trim() || (isSMTPType && !pass.trim() && !config?.configured)}
-                  className="px-4 py-2 rounded-md text-sm font-medium text-white transition-colors disabled:opacity-50"
-                  style={{ background: 'var(--color-accent-fg)' }}
                 >
                   {saving ? '保存中...' : '保存配置'}
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* 测试发送 */}
-          <div className="rounded-lg border p-4 mt-4" style={{ background: 'var(--color-canvas-default)', borderColor: 'var(--color-border-default)' }}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-fg-default)' }}>
-              <svg className="inline-block mr-1.5 -mt-0.5" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style={{ color: 'var(--color-fg-muted)' }}>
+          <Card variant="surface" padding="md" className="mt-4">
+            <h3 className="text-sm font-semibold mb-3 text-[var(--ds-text-primary)]">
+              <svg className="inline-block mr-1.5 -mt-0.5 text-[var(--ds-text-secondary)]" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M9.5 13a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm0-5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm0-5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
               </svg>
               发送测试
             </h3>
-            <p className="text-xs mb-3" style={{ color: 'var(--color-fg-muted)' }}>
+            <p className="text-xs mb-3 text-[var(--ds-text-secondary)]">
               保存配置后，发送一封测试邮件验证配置是否正确
             </p>
             <div className="flex items-center gap-3">
-              <input
+              <Input
                 type="email"
                 value={testEmail}
                 onChange={(e) => setTestEmail(e.target.value)}
                 placeholder="输入接收测试邮件的邮箱地址"
-                className="flex-1 px-3 py-2 rounded-md border text-sm"
-                style={{
-                  background: 'var(--color-canvas-subtle)',
-                  borderColor: 'var(--color-border-default)',
-                  color: 'var(--color-fg-default)',
-                }}
+                className="flex-1"
               />
-              <button
+              <Button
+                variant="secondary"
                 onClick={handleTest}
                 disabled={testing || !testEmail.trim() || !config?.configured}
-                className="px-4 py-2 rounded-md border text-sm font-medium transition-colors disabled:opacity-50"
-                style={{
-                  borderColor: 'var(--color-border-default)',
-                  background: 'var(--color-canvas-subtle)',
-                  color: 'var(--color-fg-default)',
-                }}
               >
                 {testing ? '发送中...' : '发送测试'}
-              </button>
+              </Button>
             </div>
             {!config?.configured && (
-              <p className="text-xs mt-2" style={{ color: 'var(--color-attention-fg)' }}>
+              <p className="text-xs mt-2" style={{ color: 'var(--ds-warning-default)' }}>
                 请先保存邮件配置后再发送测试邮件
               </p>
             )}
-          </div>
+          </Card>
         </div>
       </div>
     </div>

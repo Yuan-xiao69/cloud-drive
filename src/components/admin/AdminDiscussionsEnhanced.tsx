@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
   SearchIcon,
@@ -14,13 +14,14 @@ import {
   PinIcon,
   FolderIcon,
   TrashIcon,
-  ChevronDownIcon,
   LockIcon,
-  UnlockIcon,
   FlagIcon
 } from './AdminIcons';
 import { AdvancedFilter, BatchActionBar, ConfirmDialog, SidePanel } from './common/AdminCommon';
+import { AdminContextMenu } from './AdminContextMenu';
 import type { DiscussionSummary, DiscussionDetail, ContextMenuConfig } from './AdminTypes';
+import { formatDate } from '@/lib/utils';
+import { Button, Card  , Field } from '@/components/design';
 
 interface DiscussionFilters {
   search?: string;
@@ -143,19 +144,6 @@ export default function AdminDiscussionsEnhanced({
     onContextMenu(e, discussion.id);
   };
 
-  // 关闭右键菜单
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.context-menu')) return;
-      onCloseContextMenu();
-    };
-    if (contextMenu) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [contextMenu, onCloseContextMenu]);
-
   // 筛选器配置
   const filterFields = [
     {
@@ -222,30 +210,35 @@ export default function AdminDiscussionsEnhanced({
   };
 
   return (
-    <div className="tab-content">
+    <div className="space-y-4">
       {/* 页面标题和操作栏 */}
-      <div className="page-header">
-        <h1 className="page-title">讨论管理</h1>
-        <div className="header-actions">
-          <button
-            className={`btn btn-secondary btn-sm ${showAdvancedFilter ? 'active' : ''}`}
+      <div className="flex justify-between items-start gap-4 flex-wrap mb-2">
+        <h1 className="text-[22px] font-semibold text-[var(--ds-text-primary)] m-0">讨论管理</h1>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
           >
             <FilterIcon /> 筛选
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onRefresh}
           >
             刷新
-          </button>
-          <div className="search-box">
-            <SearchIcon />
+          </Button>
+          <div className="relative">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--ds-text-secondary)]">
+              <SearchIcon />
+            </span>
             <input
               type="search"
               placeholder="搜索讨论标题..."
               value={filters.search || ''}
               onChange={(e) => onSearchChange(e.target.value)}
+              className="pl-8 pr-3 py-1.5 text-sm border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] outline-none focus:ring-1 focus:ring-[var(--ds-accent-default)] w-52"
             />
           </div>
         </div>
@@ -258,8 +251,7 @@ export default function AdminDiscussionsEnhanced({
           values={filters as Record<string, string | number | Date | null>}
           onChange={(name, value) => {
             const updated = { ...filters, [name]: value };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onFiltersChange(updated as any);
+            onFiltersChange(updated);
           }}
           onApply={() => onPageChange(1)}
           onReset={() => onFiltersChange({} as DiscussionFilters)}
@@ -275,7 +267,7 @@ export default function AdminDiscussionsEnhanced({
           { label: '设为精华', onClick: () => handleBatchAction('featured') },
           { label: '置顶', onClick: () => handleBatchAction('pinned') },
           { label: '移动分类', onClick: () => {
-            const category = prompt('请输入目标分类：');
+            const category = window.prompt('请输入目标分类 (question/share/discussion/bug/suggestion)');
             if (category) handleBatchAction('move', category);
           }},
           { label: '批量删除', variant: 'danger', onClick: () => handleBatchAction('delete') },
@@ -283,13 +275,14 @@ export default function AdminDiscussionsEnhanced({
       />
 
       {/* 讨论列表 */}
-      <div className="admin-table-container">
-        <table className="admin-table">
+      <Card padding="none" className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr>
-              <th style={{ width: '40px' }}>
+            <tr className="bg-[var(--ds-surface-subtle)] border-b border-[var(--ds-border-default)] text-left">
+              <th className="px-3 py-2.5 w-10">
                 <input
                   type="checkbox"
+                  className="admin-checkbox cursor-pointer"
                   checked={selectedDiscussions.size === discussions.length && discussions.length > 0}
                   onChange={(e) => {
                     if (e.target.checked) onSelectAll();
@@ -297,23 +290,31 @@ export default function AdminDiscussionsEnhanced({
                   }}
                 />
               </th>
-              <th>标题</th>
-              <th>作者</th>
-              <th>分类</th>
-              <th>状态</th>
-              <th>👁 浏览</th>
-              <th>💬 评论</th>
-              <th>时间</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">标题</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">作者</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">分类</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">状态</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">浏览</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">评论</th>
+              <th className="px-3 py-2.5 font-medium text-[var(--ds-text-secondary)]">时间</th>
             </tr>
           </thead>
           <tbody>
             {discussionsLoading ? (
               <tr>
-                <td colSpan={8} className="text-center">加载中...</td>
+                <td colSpan={8} className="text-center py-12 text-[var(--ds-text-secondary)]">
+                  <div className="inline-block w-5 h-5 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] rounded-full animate-spin mb-2" />
+                  <div className="text-sm">加载中...</div>
+                </td>
               </tr>
             ) : discussions.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center">暂无讨论数据</td>
+                <td colSpan={8} className="text-center py-12 text-[var(--ds-text-secondary)]">
+                  <div className="flex justify-center mb-3 opacity-40">
+                    <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-5.5a.75.75 0 01-.75-.75v-.878z"/></svg>
+                  </div>
+                  <div className="text-sm">暂无讨论数据</div>
+                </td>
               </tr>
             ) : (
               discussions.map(discussion => (
@@ -321,215 +322,198 @@ export default function AdminDiscussionsEnhanced({
                   key={discussion.id}
                   onContextMenu={(e) => handleContextMenu(e, discussion)}
                   onDoubleClick={() => handleViewDetail(discussion)}
-                  className={selectedDiscussions.has(discussion.id) ? 'selected' : ''}
+                  className={`border-b border-[var(--ds-border-default)] hover:bg-[var(--ds-surface-subtle)] transition-colors cursor-pointer ${selectedDiscussions.has(discussion.id) ? 'bg-[var(--ds-accent-default)]/5' : ''}`}
                 >
-                  <td>
+                  <td className="px-3 py-2.5">
                     <input
                       type="checkbox"
+                      className="admin-checkbox cursor-pointer"
                       checked={selectedDiscussions.has(discussion.id)}
                       onChange={() => onToggleSelect(discussion.id)}
                     />
                   </td>
-                  <td>
-                    <div className="discussion-cell">
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-col gap-1">
                       {discussion.isDeleted ? (
-                        <span className="deleted-indicator">已删除</span>
+                        <span className="text-[var(--ds-danger-default)] italic">已删除</span>
                       ) : (
                         <Link
                           href={`/discussions/${discussion.id}`}
-                          className="discussion-link"
+                          className="font-medium text-[var(--ds-accent-default)] block max-w-[300px] truncate hover:underline"
                         >
                           {discussion.title}
                         </Link>
                       )}
-                      <div className="discussion-badges">
-                        <span className="category-badge">{getCategoryLabel(discussion.category)}</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        <span className="inline-flex px-1.5 py-0.5 rounded-full text-[11px] bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]">{getCategoryLabel(discussion.category)}</span>
                         {discussion.status === 'resolved' && (
-                          <span className="status-indicator resolved">✓ 已解决</span>
+                          <span className="inline-flex px-1.5 py-0.5 rounded-full text-[11px] bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]">已解决</span>
                         )}
                         {discussion.status === 'closed' && (
-                          <span className="status-indicator closed">🔒 已关闭</span>
+                          <span className="inline-flex px-1.5 py-0.5 rounded-full text-[11px] bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]">已关闭</span>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td>
-                    <Link href={`/${discussion.authorUsername}`} className="user-link">
+                  <td className="px-3 py-2.5">
+                    <Link href={`/${discussion.authorUsername}`} className="font-medium text-[var(--ds-accent-default)] text-sm hover:underline">
                       @{discussion.authorUsername}
                     </Link>
                   </td>
-                  <td>
-                    <span className="category-text">{getCategoryLabel(discussion.category)}</span>
+                  <td className="px-3 py-2.5">
+                    <span className="text-[13px] text-[var(--ds-text-secondary)]">{getCategoryLabel(discussion.category)}</span>
                   </td>
-                  <td>
-                    <span className={`status-badge ${getStatusBadgeClass(discussion.status)}`}>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      discussion.status === 'open' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' :
+                      discussion.status === 'resolved' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' :
+                      'bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)]'
+                    }`}>
                       {getStatusLabel(discussion.status)}
                     </span>
                   </td>
-                  <td>
-                    <span className="count-cell">{discussion.viewCount}</span>
+                  <td className="px-3 py-2.5">
+                    <span className="font-medium text-[13px]">{discussion.viewCount}</span>
                   </td>
-                  <td>
-                    <span className="count-cell">{discussion.commentsCount}</span>
+                  <td className="px-3 py-2.5">
+                    <span className="font-medium text-[13px]">{discussion.commentsCount}</span>
                   </td>
-                  <td>
-                    <span className="date-cell">{formatDate(discussion.createdAt)}</span>
+                  <td className="px-3 py-2.5">
+                    <span className="text-sm text-[var(--ds-text-secondary)]">{formatDate(discussion.createdAt)}</span>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* 分页 */}
       {discussionsTotal > discussionsPageSize && (
-        <div className="pagination">
-          <div className="pagination-info">
+        <div className="flex justify-between items-center pt-2">
+          <div className="text-sm text-[var(--ds-text-secondary)]">
             显示 {((discussionsPage - 1) * discussionsPageSize) + 1} - {Math.min(discussionsPage * discussionsPageSize, discussionsTotal)} 条，共 {discussionsTotal} 条
           </div>
-          <div className="pagination-controls">
-            <button
-              className="btn btn-secondary btn-sm"
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={discussionsPage <= 1 || discussionsLoading}
               onClick={() => onPageChange(discussionsPage - 1)}
             >
               上一页
-            </button>
-            <span className="page-info">
+            </Button>
+            <span className="text-sm text-[var(--ds-text-secondary)] px-2">
               第 {discussionsPage} / {totalPages} 页
             </span>
-            <button
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={discussionsPage >= totalPages || discussionsLoading}
               onClick={() => onPageChange(discussionsPage + 1)}
             >
               下一页
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* 右键上下文菜单 */}
       {contextMenu && contextMenuTarget && (
-        <div
-          className="context-menu enhanced"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="context-menu-header">
-            <span className="context-menu-title">💬 {contextMenuTarget.title.slice(0, 30)}...</span>
-          </div>
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onViewDetail(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <EyeIcon /> 查看详情 <span className="shortcut">Enter</span>
-            </button>
-          </div>
-
-          <div className="context-menu-divider" />
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onMarkResolved(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <CheckIcon /> 标记为已解决
-            </button>
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onSetFeatured(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <StarIcon /> 设为精华
-            </button>
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onSetPinned(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <PinIcon /> 置顶
-            </button>
-          </div>
-
-          <div className="context-menu-divider" />
-
-          <div className="context-menu-section">
-            <div className="context-menu-submenu">
-              <span className="submenu-trigger">
-                <FolderIcon /> 移动分类 <ChevronDownIcon />
-              </span>
-              <div className="submenu-content">
-                {categories.map((cat) => (
-                  <button
-                    key={cat.value}
-                    onClick={() => {
-                      onMoveCategory(contextMenuTarget.id, cat.value);
-                      onCloseContextMenu();
-                    }}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onCloseDiscussion(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <LockIcon /> 关闭讨论
-            </button>
-          </div>
-
-          <div className="context-menu-divider" />
-
-          <div className="context-menu-section">
-            <button
-              className="context-menu-item"
-              onClick={() => {
-                onViewReports(contextMenuTarget.id);
-                onCloseContextMenu();
-              }}
-            >
-              <FlagIcon /> 查看举报
-            </button>
-            <button
-              className="context-menu-item danger"
-              onClick={() => {
-                setConfirmDialog({
-                  isOpen: true,
-                  title: '删除讨论',
-                  message: `确定要删除讨论 "${contextMenuTarget.title.slice(0, 20)}..." 吗？此操作不可恢复。`,
-                  variant: 'danger',
-                  onConfirm: () => {
-                    onDeleteDiscussion(contextMenuTarget.id);
-                    setConfirmDialog(null);
+        <AdminContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          sections={[
+            {
+              id: 'view',
+              items: [
+                {
+                  id: 'view-detail',
+                  label: '查看详情',
+                  icon: <EyeIcon />,
+                  shortcut: 'Enter',
+                  onClick: () => { onViewDetail(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+            {
+              id: 'status',
+              items: [
+                {
+                  id: 'mark-resolved',
+                  label: '标记为已解决',
+                  icon: <CheckIcon />,
+                  onClick: () => { onMarkResolved(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+                {
+                  id: 'set-featured',
+                  label: '设为精华',
+                  icon: <StarIcon />,
+                  onClick: () => { onSetFeatured(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+                {
+                  id: 'set-pinned',
+                  label: '置顶',
+                  icon: <PinIcon />,
+                  onClick: () => { onSetPinned(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+            {
+              id: 'move',
+              items: [
+                {
+                  id: 'move-category',
+                  label: '移动分类',
+                  icon: <FolderIcon />,
+                  children: categories.map((cat) => ({
+                    id: `cat-${cat.value}`,
+                    label: cat.label,
+                    onClick: () => { onMoveCategory(contextMenuTarget!.id, cat.value); onCloseContextMenu(); },
+                  })),
+                },
+                {
+                  id: 'close-discussion',
+                  label: '关闭讨论',
+                  icon: <LockIcon />,
+                  onClick: () => { onCloseDiscussion(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+              ],
+            },
+            {
+              id: 'danger',
+              items: [
+                {
+                  id: 'view-reports',
+                  label: '查看举报',
+                  icon: <FlagIcon />,
+                  onClick: () => { onViewReports(contextMenuTarget!.id); onCloseContextMenu(); },
+                },
+                {
+                  id: 'delete-discussion',
+                  label: '删除讨论',
+                  icon: <TrashIcon />,
+                  shortcut: 'Del',
+                  danger: true,
+                  onClick: () => {
+                    setConfirmDialog({
+                      isOpen: true,
+                      title: '删除讨论',
+                      message: `确定要删除讨论 "${contextMenuTarget!.title.slice(0, 20)}..." 吗？此操作不可恢复。`,
+                      variant: 'danger',
+                      onConfirm: () => {
+                        onDeleteDiscussion(contextMenuTarget!.id);
+                        setConfirmDialog(null);
+                      },
+                    });
+                    onCloseContextMenu();
                   },
-                });
-                onCloseContextMenu();
-              }}
-            >
-              <TrashIcon /> 删除讨论 <span className="shortcut">d</span>
-            </button>
-          </div>
-        </div>
+                },
+              ],
+            },
+          ]}
+          onClose={onCloseContextMenu}
+        />
       )}
 
       {/* 确认对话框 */}
@@ -549,44 +533,51 @@ export default function AdminDiscussionsEnhanced({
       {/* 详情侧边栏 */}
       {selectedDiscussionDetail && (
         <SidePanel
+          isOpen={true}
           title="讨论详情"
           onClose={handleCloseDetail}
         >
-          <div className="detail-section">
-            <h3 className="detail-title">{selectedDiscussionDetail.title || selectedDiscussionDetail.title}</h3>
-            <div className="detail-meta">
+          <div className="mb-5">
+            <h3 className="text-base font-semibold mb-2 break-words">{selectedDiscussionDetail.title}</h3>
+            <div className="flex gap-3 text-[13px] text-[var(--ds-text-secondary)] mb-3">
               <span className="detail-author">
-                @{selectedDiscussionDetail.authorUsername || selectedDiscussionDetail.authorUsername || '未知'}
+                @{selectedDiscussionDetail.authorUsername || '未知'}
               </span>
               <span className="detail-date">
-                {formatDate(selectedDiscussionDetail.createdAt || selectedDiscussionDetail.createdAt)}
+                {formatDate(selectedDiscussionDetail.createdAt)}
               </span>
             </div>
-            <div className="detail-badges">
-              <span className="detail-badge">{getCategoryLabel(selectedDiscussionDetail.category || selectedDiscussionDetail.category)}</span>
-              <span className={`detail-badge status-${selectedDiscussionDetail.status || selectedDiscussionDetail.status}`}>
-                {getStatusLabel(selectedDiscussionDetail.status || selectedDiscussionDetail.status)}
+            <div className="flex gap-2 flex-wrap">
+              <span className="inline-flex px-2 py-0.5 rounded text-xs bg-[var(--ds-surface-subtle)]">{getCategoryLabel(selectedDiscussionDetail.category)}</span>
+              <span className={`inline-flex px-2 py-0.5 rounded text-xs ${
+                selectedDiscussionDetail.status === 'resolved' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' :
+                selectedDiscussionDetail.status === 'closed' ? 'bg-[var(--ds-surface-inset)] text-[var(--ds-text-secondary)]' :
+                'bg-[var(--ds-surface-subtle)]'
+              }`}>
+                {getStatusLabel(selectedDiscussionDetail.status)}
               </span>
             </div>
           </div>
 
-          <div className="detail-section">
-            <h4>统计信息</h4>
-            <div className="detail-stats">
-              <div className="stat-item">
-                <span className="stat-label">浏览数</span>
-                <span className="stat-value">{selectedDiscussionDetail.viewCount || 0}</span>
+          <div className="mb-5">
+            <h4 className="text-sm font-semibold mb-2">统计信息</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-[var(--ds-text-secondary)]">浏览数</span>
+                <span className="text-lg font-semibold">{selectedDiscussionDetail.viewCount || 0}</span>
               </div>
-              <div className="stat-item">
-                <span className="stat-label">评论数</span>
-                <span className="stat-value">{selectedDiscussionDetail.commentsCount || 0}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-[var(--ds-text-secondary)]">评论数</span>
+                <span className="text-lg font-semibold">{selectedDiscussionDetail.commentsCount || 0}</span>
               </div>
             </div>
           </div>
 
-          <div className="detail-actions">
-            <button
-              className="btn btn-secondary btn-sm"
+          <div className="flex flex-col gap-2 pt-4 border-t border-[var(--ds-border-default)]">
+            <Button
+              variant="secondary"
+              size="sm"
+              block
               onClick={() => {
                 if (selectedDiscussionDetail.status === 'resolved') {
                   // 已经是已解决状态
@@ -596,15 +587,19 @@ export default function AdminDiscussionsEnhanced({
               }}
             >
               <CheckIcon /> {selectedDiscussionDetail.status === 'resolved' ? '已解决' : '标记为已解决'}
-            </button>
-            <button
-              className="btn btn-secondary btn-sm"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              block
               onClick={() => onViewReports(selectedDiscussionDetail.id)}
             >
               <FlagIcon /> 查看举报
-            </button>
-            <button
-              className="btn btn-danger btn-sm"
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              block
               onClick={() => {
                 setConfirmDialog({
                   isOpen: true,
@@ -620,37 +615,10 @@ export default function AdminDiscussionsEnhanced({
               }}
             >
               <TrashIcon /> 删除
-            </button>
+            </Button>
           </div>
         </SidePanel>
       )}
-    <style jsx>{`
-      .discussion-cell { display: flex; flex-direction: column; gap: 4px; }
-      .discussion-link { font-weight: 500; color: var(--color-accent-fg); display: block; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .discussion-link:hover { text-decoration: underline; }
-      .discussion-badges { display: flex; gap: 6px; flex-wrap: wrap; }
-      .category-badge { display: inline-flex; padding: 1px 6px; border-radius: 10px; font-size: 11px; background: var(--color-bg-subtle); color: var(--color-fg-muted); }
-      .status-indicator { display: inline-flex; padding: 1px 6px; border-radius: 10px; font-size: 11px; }
-      .status-indicator.resolved { background: var(--color-success-subtle); color: var(--color-success-fg); }
-      .status-indicator.closed { background: var(--color-bg-subtle); color: var(--color-fg-muted); }
-      .category-text { font-size: 13px; color: var(--color-fg-muted); }
-      .count-cell { font-weight: 500; font-size: 13px; }
-      .deleted-indicator { color: var(--color-danger-fg); font-style: italic; }
-      .status-badge.success { background: var(--color-success-subtle); color: var(--color-success-fg); }
-      .detail-section { margin-bottom: 20px; }
-      .detail-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; word-break: break-word; }
-      .detail-meta { display: flex; gap: 12px; font-size: 13px; color: var(--color-fg-muted); margin-bottom: 12px; }
-      .detail-badges { display: flex; gap: 8px; flex-wrap: wrap; }
-      .detail-badge { display: inline-flex; padding: 2px 8px; border-radius: 4px; font-size: 12px; background: var(--color-bg-subtle); }
-      .detail-badge.status-resolved { background: var(--color-success-subtle); color: var(--color-success-fg); }
-      .detail-badge.status-closed { background: var(--color-bg-inset); color: var(--color-fg-muted); }
-      .detail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      .stat-item { display: flex; flex-direction: column; gap: 2px; }
-      .stat-label { font-size: 12px; color: var(--color-fg-muted); }
-      .stat-value { font-size: 18px; font-weight: 600; }
-      .detail-actions { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid var(--color-border-default); }
-      .detail-actions button { width: 100%; justify-content: center; }
-    `}</style>
     </div>
   );
 }
@@ -675,24 +643,3 @@ function getStatusLabel(status: string): string {
   };
   return labels[status] || status;
 }
-
-function getStatusBadgeClass(status: string): string {
-  const classes: Record<string, string> = {
-    open: 'active',
-    resolved: 'success',
-    closed: 'disabled',
-  };
-  return classes[status] || 'default';
-}
-
-function formatDate(dateString: string): string {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-}
-
-

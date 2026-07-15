@@ -5,23 +5,18 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/user/api-keys - 创建新的 API 密钥
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, created, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
 import crypto from 'crypto';
 
 // GET /api/v1/user/api-keys
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
     const apiKeys = await prisma.apiKey.findMany({
-      where: { userId: auth.userId },
+      where: { userId: user!.id },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -37,25 +32,19 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
 
     return success({ apiKeys });
-  } catch (err) {
-    return handlePrismaError(err, '获取 API 密钥列表失败');
-  }
-}
+  },
+});
 
 // POST /api/v1/user/api-keys
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const body = await req.json();
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    name: z.string().min(1, '请提供密钥名称'),
+    scopes: z.array(z.string()).optional(),
+    expiresInDays: z.number().optional(),
+  }),
+  async handler({ user, body }) {
     const { name, scopes, expiresInDays } = body;
-
-    if (!name || name.trim().length === 0) {
-      return errors.badRequest('请提供密钥名称');
-    }
 
     // 生成 API Key
     const rawKey = `ghp_${crypto.randomBytes(32).toString('hex')}`;
@@ -69,7 +58,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const apiKey = await prisma.apiKey.create({
       data: {
-        userId: auth.userId,
+        userId: user!.id,
         name: name.trim(),
         keyHash,
         keyPrefix,
@@ -96,7 +85,5 @@ export async function POST(req: NextRequest): Promise<Response> {
       expiresAt: apiKey.expiresAt?.toISOString() || null,
       message: '请妥善保管您的 API 密钥，关闭后将无法再次查看完整密钥',
     }, 'API 密钥创建成功');
-  } catch (err) {
-    return handlePrismaError(err, '创建 API 密钥失败');
-  }
-}
+  },
+});

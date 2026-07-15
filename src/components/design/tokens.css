@@ -1,0 +1,144 @@
+/* ================================================
+   设计系统 Token — 陶土暖色系
+   灵感: Claude 官网
+   主色: 陶土橙 #C15F3C
+   背景: 暖米白 #FAF9F5
+   文字: 柔深棕 #3B3228
+   ================================================ */
+
+/* === 字体 === */
+:root {
+  --ds-font-display: 'Georgia', 'Noto Serif SC', 'Source Han Serif SC', serif;
+  --ds-font-body: 'Charter', 'Georgia', 'Noto Serif SC', serif;
+  --ds-font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --ds-font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* === 间距 === */
+:root {
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 20px;
+  --ds-space-6: 24px;
+  --ds-space-8: 32px;
+  --ds-space-10: 40px;
+  --ds-space-12: 48px;
+}
+
+/* === 圆角 === */
+:root {
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 10px;
+  --ds-radius-lg: 14px;
+  --ds-radius-xl: 20px;
+  --ds-radius-full: 9999px;
+}
+
+/* === 阴影（暖色调） === */
+:root {
+  --ds-shadow-sm: 0 1px 3px rgba(59, 50, 40, 0.04);
+  --ds-shadow-md: 0 4px 16px rgba(59, 50, 40, 0.06);
+  --ds-shadow-lg: 0 8px 32px rgba(59, 50, 40, 0.10);
+  --ds-shadow-xl: 0 12px 48px rgba(59, 50, 40, 0.14);
+}
+
+/* ================================================
+   亮色模式
+   ================================================ */
+:root {
+  /* 主色 — 陶土橙 */
+  --ds-accent-default: #C15F3C;
+  --ds-accent-hover: #D47A4E;
+  --ds-accent-subtle: rgba(193, 95, 60, 0.08);
+  --ds-accent-muted: rgba(193, 95, 60, 0.15);
+
+  /* 背景 */
+  --ds-page-bg: #FAF9F5;
+  --ds-surface-default: #FFFFFF;
+  --ds-surface-subtle: #F5F2EC;
+  --ds-surface-inset: #F0EDE6;
+  --ds-surface-overlay: rgba(245, 242, 236, 0.92);
+
+  /* 边框 */
+  --ds-border-default: #E8E3DA;
+  --ds-border-muted: #EEE9E2;
+  --ds-border-strong: #D9D2C7;
+
+  /* 文字 */
+  --ds-text-primary: #3B3228;
+  --ds-text-secondary: #7A6E62;
+  --ds-text-tertiary: #A0958B;
+  --ds-text-inverse: #FFFFFF;
+
+  /* 语义色 */
+  --ds-success-default: #4A8B5C;
+  --ds-success-subtle: rgba(74, 139, 92, 0.10);
+  --ds-danger-default: #C8483C;
+  --ds-danger-subtle: rgba(200, 72, 60, 0.08);
+  --ds-warning-default: #B8862D;
+  --ds-warning-subtle: rgba(184, 134, 45, 0.12);
+
+  /* 品牌绿（保留，上传等操作使用） */
+  --ds-brand-default: #4A8B5C;
+  --ds-brand-hover: #3D7450;
+
+  /* 代码 */
+  --ds-code-bg: #F8F6F1;
+  --ds-code-border: #EBE5DA;
+
+  /* 布局 */
+  --ds-header-height: 64px;
+  --ds-sidebar-width: 260px;
+  --ds-sidebar-right-width: 280px;
+  --ds-container-max: 1440px;
+
+  /* 内容宽度 */
+  --ds-content-narrow: 480px;
+  --ds-content-medium: 720px;
+  --ds-content-wide: 1200px;
+  --ds-content-full: 100%;
+}
+
+/* ================================================
+   暗色模式
+   ================================================ */
+[data-theme="dark"] {
+  --ds-accent-default: #D47A4E;
+  --ds-accent-hover: #E08C64;
+  --ds-accent-subtle: rgba(193, 95, 60, 0.15);
+  --ds-accent-muted: rgba(193, 95, 60, 0.25);
+
+  --ds-page-bg: #1E1B18;
+  --ds-surface-default: #272420;
+  --ds-surface-subtle: #2F2B27;
+  --ds-surface-inset: #1A1714;
+  --ds-surface-overlay: rgba(39, 36, 32, 0.95);
+
+  --ds-border-default: #3A3530;
+  --ds-border-muted: #332F2B;
+  --ds-border-strong: #4A4540;
+
+  --ds-text-primary: #E8E0D8;
+  --ds-text-secondary: #A0988E;
+  --ds-text-tertiary: #706860;
+
+  --ds-success-default: #5CA06E;
+  --ds-success-subtle: rgba(74, 139, 92, 0.18);
+  --ds-danger-default: #D46458;
+  --ds-danger-subtle: rgba(200, 72, 60, 0.15);
+  --ds-warning-default: #C99A3C;
+  --ds-warning-subtle: rgba(184, 134, 45, 0.18);
+
+  --ds-brand-default: #5CA06E;
+  --ds-brand-hover: #6DB87E;
+
+  --ds-code-bg: #2A2622;
+  --ds-code-border: #3A3530;
+
+  --ds-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.20);
+  --ds-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.30);
+  --ds-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.40);
+  --ds-shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.50);
+}

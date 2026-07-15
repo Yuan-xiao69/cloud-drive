@@ -6,6 +6,7 @@
 import { EventEmitter } from 'events';
 import { prisma } from '@/lib/prisma';
 import { getCache, CacheKeys } from '@/lib/cache';
+import { AsyncJob } from '@/lib/events';
 
 // ============================================================
 // SSE 连接管理
@@ -91,9 +92,36 @@ async function getUserNotificationSettings(userId: string): Promise<Notification
     if (cached.hit && cached.data) {
       return cached.data;
     }
-  } catch {
-    // 缓存获取失败，返回默认设置
+  } catch (err) {
+    console.warn('[Notification] Cache miss, falling back to database:', err);
   }
+
+  // 缓存不可用时回退到数据库查询
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { notifyWatch: true, notifyReply: true },
+    });
+    if (user) {
+      return {
+        watchNotifications: user.notifyWatch,
+        forkNotifications: user.notifyWatch,
+        releaseNotifications: false,
+        discussionReplies: user.notifyReply,
+        discussionMentions: true,
+        issueComments: user.notifyReply,
+        issueMentions: true,
+        prReviews: user.notifyReply,
+        prComments: user.notifyReply,
+        prMentions: true,
+        securityAlerts: true,
+        accountAlerts: true,
+      };
+    }
+  } catch (dbErr) {
+    console.error('[Notification] Database fallback failed:', dbErr);
+  }
+
   return DEFAULT_SETTINGS;
 }
 
@@ -177,37 +205,76 @@ export interface NotificationPayload {
 }
 
 /**
- * 向单个用户发送实时通知（自动补全 id 和 timestamp）
+ * 向单个用户发送实时通知（先持久化，再用数据库 ID 推送 SSE）
  */
-export function sendNotificationToUser(userId: string, params: NotificationParams): void {
-  const payload: NotificationPayload = {
-    id: crypto.randomUUID(),
-    timestamp: Date.now(),
-    type: params.type,
-    title: params.title,
-    content: params.content,
-    linkUrl: params.linkUrl,
-  };
-  notificationEmitter.emit(`notification:${userId}`, payload);
-}
-
 /**
- * 向多个用户发送实时通知
+ * 直接发送通知（同步：写DB + 推SSE）。
+ * 仅供 AsyncJob 消费者内部使用，外部业务代码请用 sendNotificationToUser。
  */
-export function sendNotificationToUsers(userIds: string[], params: NotificationParams): void {
-  const payload: NotificationPayload = {
-    id: crypto.randomUUID(),
-    timestamp: Date.now(),
-    type: params.type,
-    title: params.title,
-    content: params.content,
-    linkUrl: params.linkUrl,
-  };
-  for (const userId of userIds) {
+export async function sendDirectNotification(userId: string, params: NotificationParams): Promise<void> {
+  try {
+    const saved = await prisma.notification.create({
+      data: {
+        userId,
+        senderId: params.senderId,
+        type: params.type,
+        title: params.title,
+        content: params.content,
+        linkUrl: params.linkUrl,
+        priority: params.priority || 'normal',
+      },
+    });
+
+    const payload: NotificationPayload = {
+      id: saved.id,
+      timestamp: saved.createdAt.getTime(),
+      type: params.type,
+      title: params.title,
+      content: params.content,
+      linkUrl: params.linkUrl,
+    };
+
     notificationEmitter.emit(`notification:${userId}`, payload);
+  } catch (err) {
+    console.error('[Notification] Failed to persist notification:', err);
   }
 }
 
+/**
+ * 发送通知给单个用户（异步：入队后立即返回，后台处理）。
+ * 所有业务代码应调用此函数。
+ */
+export async function sendNotificationToUser(userId: string, params: NotificationParams): Promise<void> {
+  await AsyncJob.enqueue('send_notification', {
+    userId,
+    type: params.type,
+    title: params.title,
+    content: params.content,
+    linkUrl: params.linkUrl,
+    actorId: params.senderId,
+    priority: params.priority || 'normal',
+  });
+}
+
+/**
+ * 向多个用户发送实时通知（持久化后推送 SSE）
+ */
+export async function sendNotificationToUsers(userIds: string[], params: NotificationParams): Promise<void> {
+  if (userIds.length === 0) return;
+
+  // 全部走异步队列，不再直接写DB
+  for (const userId of userIds) {
+    await AsyncJob.enqueue('send_notification', {
+      userId,
+      type: params.type,
+      title: params.title,
+      content: params.content,
+      linkUrl: params.linkUrl,
+      actorId: params.senderId,
+      priority: params.priority || 'normal',
+    });
+  }
+}
 
 /**
  * 发送评论通知

@@ -7,25 +7,27 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, error, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
+import { getUserRepoRole, canWrite } from '@/lib/auth/repo-permission';
+
+const batchSchema = z.object({
+  action: z.string().min(1),
+  fileIds: z.array(z.string()).min(1, '请提供要操作的文件 ID 列表'),
+  targetParentId: z.string().optional(),
+  branch: z.string().min(1, '分支名称不能为空'),
+});
 
 // POST /api/v1/repos/[username]/[repoName]/batch
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { username, repoName } = await params;
-    const body = await req.json();
-    const { action, fileIds, targetParentId, branch } = body;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: batchSchema,
+  handler: async ({ req, user, body, params }) => {
+    const { username, repoName } = params;
+    const { action, fileIds, targetParentId, branch } = body as z.infer<typeof batchSchema>;
 
     const repo = await prisma.repository.findFirst({
       where: {
@@ -40,12 +42,9 @@ export async function POST(
       return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
     }
 
-    if (repo.ownerId !== auth.userId) {
-      return error(ErrorCodes.FORBIDDEN, { message: '只有仓库所有者可以执行批量操作' });
-    }
-
-    if (!branch) {
-      return errors.badRequest('分支名称不能为空');
+    const userRole = await getUserRepoRole(user!.id, repo.id);
+    if (!canWrite(userRole)) {
+      return error(ErrorCodes.FORBIDDEN, { message: '无权执行批量操作' });
     }
 
     const branchRecord = await prisma.branch.findFirst({
@@ -55,10 +54,6 @@ export async function POST(
 
     if (!branchRecord) {
       return error(ErrorCodes.NOT_FOUND, { message: `分支 ${branch} 不存在` });
-    }
-
-    if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
-      return errors.badRequest('请提供要操作的文件 ID 列表');
     }
 
     // action=delete: 批量删除
@@ -99,7 +94,5 @@ export async function POST(
     }
 
     return errors.badRequest('未知的 action，支持: delete, move');
-  } catch (err) {
-    return handlePrismaError(err, '批量操作失败');
-  }
-}
+  },
+});

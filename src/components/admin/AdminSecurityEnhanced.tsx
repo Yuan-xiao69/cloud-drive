@@ -5,7 +5,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { SidePanel, ConfirmDialog, Toast, EnhancedStatCard } from './common/AdminCommon';
+import { Button, Modal, Card } from '@/components/design';
+import { SidePanel, ConfirmDialog, Toast } from './common/AdminCommon';
 import { LineChart, PieChart, RingProgress } from './charts/AdminCharts';
 import type { SecurityEvent, SecurityStats, ContextMenuConfig } from './AdminTypes';
 
@@ -117,9 +118,9 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
     }
 
     return (
-      <div
+      <button
         key={index}
-        className={`context-menu-item ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
+        className={`context-menu-item border-0 bg-transparent w-full text-left ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
         onClick={() => !item.disabled && !item.submenu && item.action?.()}
       >
         <div className="context-menu-item-content">
@@ -132,9 +133,9 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
             <span className="context-menu-arrow">▶</span>
             <div className="context-submenu">
               {item.submenu.map((subItem: NonNullable<ContextMenuConfig['items']>[0], subIndex: number) => (
-                <div
+                <button
                   key={subIndex}
-                  className={`context-menu-item ${subItem.danger ? 'danger' : ''} ${subItem.disabled ? 'disabled' : ''}`}
+                  className={`context-menu-item border-0 bg-transparent w-full text-left ${subItem.danger ? 'danger' : ''} ${subItem.disabled ? 'disabled' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!subItem.disabled) {
@@ -144,12 +145,12 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
                 >
                   <span className="context-menu-label">{subItem.label}</span>
                   {subItem.shortcut && <span className="context-menu-shortcut">{subItem.shortcut}</span>}
-                </div>
+                </button>
               ))}
             </div>
           </>
         )}
-      </div>
+      </button>
     );
   };
 
@@ -175,22 +176,22 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
 
 // ============ 事件分类配置 ============
 const EVENT_TYPES = {
-  'login_failed': { label: '登录失败', icon: '🔑', color: '#bf8700' },
-  'brute_force': { label: '暴力破解', icon: '🔨', color: '#cf222e' },
-  'suspicious_ip': { label: '可疑IP', icon: '🎭', color: '#8250df' },
-  'anomaly': { label: '异常行为', icon: '⚠️', color: '#bf8700' },
-  'data_access': { label: '敏感数据访问', icon: '📊', color: '#cf222e' },
-  'privilege_escalation': { label: '权限提升', icon: '🔐', color: '#cf222e' },
-  'sql_injection': { label: 'SQL注入', icon: '💉', color: '#cf222e' },
-  'xss_attack': { label: 'XSS攻击', icon: '💻', color: '#cf222e' },
-  'account_takeover': { label: '账户盗用', icon: '🎭', color: '#cf222e' },
+  'login_failed': { label: '登录失败', icon: '🔑', color: 'var(--ds-warning-default)' },
+  'brute_force': { label: '暴力破解', icon: '🔨', color: 'var(--ds-danger-default)' },
+  'suspicious_ip': { label: '可疑IP', icon: '🎭', color: 'var(--ds-accent-default)' },
+  'anomaly': { label: '异常行为', icon: '⚠️', color: 'var(--ds-warning-default)' },
+  'data_access': { label: '敏感数据访问', icon: '📊', color: 'var(--ds-danger-default)' },
+  'privilege_escalation': { label: '权限提升', icon: '🔐', color: 'var(--ds-danger-default)' },
+  'sql_injection': { label: 'SQL注入', icon: '💉', color: 'var(--ds-danger-default)' },
+  'xss_attack': { label: 'XSS攻击', icon: '💻', color: 'var(--ds-danger-default)' },
+  'account_takeover': { label: '账户盗用', icon: '🎭', color: 'var(--ds-danger-default)' },
 };
 
 const SEVERITY_CONFIG = {
-  critical: { label: '严重', color: '#cf222e', bg: '#ffebe9' },
-  high: { label: '高风险', color: '#bf5700', bg: '#fff8c5' },
-  medium: { label: '中风险', color: '#bf8700', bg: '#fff8c5' },
-  low: { label: '低风险', color: '#1a7f37', bg: '#dafbe1' },
+  critical: { label: '严重', color: 'var(--ds-danger-default)', bg: 'var(--ds-danger-subtle)' },
+  high: { label: '高风险', color: 'var(--ds-warning-default)', bg: 'var(--ds-warning-subtle)' },
+  medium: { label: '中风险', color: 'var(--ds-warning-default)', bg: 'var(--ds-warning-subtle)' },
+  low: { label: '低风险', color: 'var(--ds-success-default)', bg: 'var(--ds-success-subtle)' },
 };
 
 
@@ -203,7 +204,7 @@ interface SecurityFilters {
   dateTo?: string;
 }
 
-interface AdminSecurityEnhancedProps {
+export interface AdminSecurityEnhancedProps {
   securityEvents: SecurityEvent[];
   securityTotal: number;
   securityPage: number;
@@ -278,11 +279,8 @@ export default function AdminSecurityEnhanced({
     onFiltersChange?.({ ...filters, severity });
   };
 
-  // 解决 contextMenu 冲突：优先使用 props，如果没有则用内部状态
+  // 优先使用 props 的 contextMenu，否则使用内部状态
   const effectiveContextMenu = contextMenu !== undefined ? contextMenu : localContextMenu;
-  const handleSetContextMenu = contextMenu !== undefined
-    ? (menu: ContextMenuConfig | null) => onContextMenu?.({} as React.MouseEvent, '')
-    : setLocalContextMenu;
 
   // ============ 统计数据（基于真实数据） ============
   const stats = useMemo<SecurityStats>(() => {
@@ -300,7 +298,7 @@ export default function AdminSecurityEnhanced({
       typeCounts[e.eventType] = (typeCounts[e.eventType] || 0) + 1;
     });
     const eventsByType = Object.entries(typeCounts).map(([type, count]) => ({
-      type: EVENT_TYPES[type]?.label || type,
+      type: EVENT_TYPES[type as keyof typeof EVENT_TYPES]?.label || type,
       count,
     }));
 
@@ -350,7 +348,7 @@ export default function AdminSecurityEnhanced({
   }, [securityEvents, securityTotal]);
 
   // 安全评分颜色
-  const scoreColor = stats.securityScore >= 80 ? '#1a7f37' : stats.securityScore >= 60 ? '#bf8700' : '#cf222e';
+  const scoreColor = stats.securityScore >= 80 ? 'var(--ds-success-default)' : stats.securityScore >= 60 ? 'var(--ds-warning-default)' : 'var(--ds-danger-default)';
 
   // ============ 右键菜单处理 ============
   const handleContextMenu = useCallback((e: React.MouseEvent, event: SecurityEvent) => {
@@ -424,24 +422,13 @@ export default function AdminSecurityEnhanced({
               setLocalContextMenu(null);
               return;
             }
-            const reason = prompt('请输入封禁原因：') || '安全事件自动封禁';
-            const duration = prompt('请输入封禁时长（如 7d, 30d, permanent）：') || '7d';
+
+
+            const reason = '安全原因';
+            const duration = '7';
             try {
               if (onBanIp) {
                 await onBanIp(event.ipAddress, reason, duration);
-              } else {
-                // 直接调用API
-                const res = await fetch('/api/v1/admin/ip-blacklist', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ ipAddress: event.ipAddress, reason, duration }),
-                });
-                const data = await res.json();
-                if (data.code === 200 || data.code === 0) {
-                  setToast({ message: `已封禁 IP: ${event.ipAddress}`, type: 'success' });
-                } else {
-                  setToast({ message: data.message || '封禁失败', type: 'error' });
-                }
               }
             } catch (err) {
               setToast({ message: '封禁请求失败', type: 'error' });
@@ -454,7 +441,7 @@ export default function AdminSecurityEnhanced({
           icon: '🔒',
           danger: true,
           action: () => {
-            const reason = prompt('请输入锁定原因：') || '安全事件自动锁定';
+            const reason = '安全原因';
             setToast({ message: `账号已锁定，原因：${reason}`, type: 'info' });
             setLocalContextMenu(null);
           },
@@ -473,23 +460,10 @@ export default function AdminSecurityEnhanced({
           label: '发送告警',
           icon: '🔔',
           action: async () => {
-            const message = prompt('请输入告警消息：') || `安全事件告警：${event.eventType}`;
+            const message = '安全告警';
             try {
               if (onSendAlert) {
                 await onSendAlert(event.id, message);
-              } else {
-                // 直接调用API
-                const res = await fetch('/api/v1/admin/notifications/send', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ title: '安全告警', content: message, type: 'security' }),
-                });
-                const data = await res.json();
-                if (data.code === 200 || data.code === 0) {
-                  setToast({ message: '已发送安全告警通知', type: 'success' });
-                } else {
-                  setToast({ message: data.message || '发送失败', type: 'error' });
-                }
               }
             } catch (err) {
               setToast({ message: '发送告警失败', type: 'error' });
@@ -501,7 +475,7 @@ export default function AdminSecurityEnhanced({
     };
 
     setLocalContextMenu(menuConfig);
-  }, [onMarkResolved, onIgnoreEvent]);
+  }, [onMarkResolved, onIgnoreEvent, onBanIp, onSendAlert]);
 
   // ============ 加载关联事件 ============
   const loadRelatedEvents = (event: SecurityEvent) => {
@@ -532,34 +506,40 @@ export default function AdminSecurityEnhanced({
   const totalPages = Math.ceil(securityTotal / 20);
 
   return (
-    <div className="tab-content">
+    <div className="p-4">
       {/* 页面头部 */}
-      <div className="page-header">
-        <h1 className="page-title">安全事件</h1>
-        <div className="page-actions">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">安全事件</h1>
+        <div className="flex items-center gap-3">
           <div className="time-range-selector">
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               className={`range-btn ${timeRange === '7d' ? 'active' : ''}`}
               onClick={() => setTimeRange('7d')}
             >
               7天
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               className={`range-btn ${timeRange === '30d' ? 'active' : ''}`}
               onClick={() => setTimeRange('30d')}
             >
               30天
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               className={`range-btn ${timeRange === '90d' ? 'active' : ''}`}
               onClick={() => setTimeRange('90d')}
             >
               90天
-            </button>
+            </Button>
           </div>
-          <button className="btn btn-secondary" onClick={() => setShowReportModal(true)}>
-            <DownloadIcon /> 导出报告
-          </button>
+          <Button variant="secondary" icon={<DownloadIcon />} onClick={() => setShowReportModal(true)}>
+            导出报告
+          </Button>
         </div>
       </div>
 
@@ -588,22 +568,22 @@ export default function AdminSecurityEnhanced({
 
         {/* 统计卡片 */}
         <div className="severity-stats">
-          <div className="severity-card critical" onClick={() => onSeverityChange('critical')}>
+          <button className="severity-card critical border-0 bg-transparent w-full text-left" onClick={() => onSeverityChange('critical')}>
             <span className="severity-value">{stats.criticalCount}</span>
             <span className="severity-label">严重事件</span>
-          </div>
-          <div className="severity-card high" onClick={() => onSeverityChange('high')}>
+          </button>
+          <button className="severity-card high border-0 bg-transparent w-full text-left" onClick={() => onSeverityChange('high')}>
             <span className="severity-value">{stats.highCount}</span>
             <span className="severity-label">高风险</span>
-          </div>
-          <div className="severity-card medium" onClick={() => onSeverityChange('medium')}>
+          </button>
+          <button className="severity-card medium border-0 bg-transparent w-full text-left" onClick={() => onSeverityChange('medium')}>
             <span className="severity-value">{stats.mediumCount}</span>
             <span className="severity-label">中风险</span>
-          </div>
-          <div className="severity-card low" onClick={() => onSeverityChange('low')}>
+          </button>
+          <button className="severity-card low border-0 bg-transparent w-full text-left" onClick={() => onSeverityChange('low')}>
             <span className="severity-value">{stats.lowCount}</span>
             <span className="severity-label">低风险</span>
-          </div>
+          </button>
           <div className="severity-card resolved">
             <span className="severity-value">{stats.resolvedCount}</span>
             <span className="severity-label">已解决</span>
@@ -622,7 +602,7 @@ export default function AdminSecurityEnhanced({
               data={stats.eventsByDay.map(d => ({ label: d.date, value: d.count }))}
               width={500}
               height={200}
-              color="#0969da"
+              color="var(--ds-accent-default)"
             />
           </div>
         </div>
@@ -636,7 +616,7 @@ export default function AdminSecurityEnhanced({
               data={stats.eventsByType.map((t, i) => ({
                 label: t.type,
                 value: t.count,
-                color: ['#0969da', '#1a7f37', '#bf8700', '#cf222e', '#8250df', '#656d76'][i],
+                color: ['var(--ds-accent-default)', 'var(--ds-success-default)', 'var(--ds-warning-default)', 'var(--ds-danger-default)', 'var(--ds-accent-default)', 'var(--ds-text-tertiary)'][i],
               }))}
               size={180}
             />
@@ -660,24 +640,24 @@ export default function AdminSecurityEnhanced({
       </div>
 
       {/* 筛选栏 */}
-      <div className="filter-bar">
-        <div className="search-input-wrapper">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="search-icon">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="relative flex-1">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ds-text-secondary)]">
             <path d="M11.5 7a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zm-.82 4.74a6 6 0 111.06-1.06l3.04 3.04a.75.75 0 11-1.06 1.06l-3.04-3.04z" />
           </svg>
           <input
             type="search"
-            className="form-control search-input"
+            className="w-full pl-10 pr-3 py-2 rounded-[var(--ds-radius-sm)] border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent-subtle)]"
             placeholder="搜索安全事件..."
             value={filters.search || ''}
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
-        <div className="filter-group">
+        <div className="flex items-center gap-2">
           <select
-            className="form-select"
+            className="px-3 py-2 rounded-[var(--ds-radius-sm)] border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] text-sm"
             value={filters.severity || ''}
-            onChange={(e) => onFiltersChange?.({ ...filters, severity: e.target.value }) || (() => {})}
+            onChange={(e) => onFiltersChange?.({ ...filters, severity: e.target.value })}
           >
             <option value="">全部严重性</option>
             <option value="critical">严重</option>
@@ -686,9 +666,9 @@ export default function AdminSecurityEnhanced({
             <option value="low">低风险</option>
           </select>
           <select
-            className="form-select"
+            className="px-3 py-2 rounded-[var(--ds-radius-sm)] border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] text-sm"
             value={filters.status || ''}
-            onChange={(e) => onFiltersChange?.({ ...filters, status: e.target.value }) || (() => {})}
+            onChange={(e) => onFiltersChange?.({ ...filters, status: e.target.value })}
           >
             <option value="">全部状态</option>
             <option value="pending">待处理</option>
@@ -699,20 +679,20 @@ export default function AdminSecurityEnhanced({
       </div>
 
       {/* 事件列表 */}
-      <div className="admin-table-container">
+      <Card padding="none" className="overflow-hidden">
         {securityLoading ? (
-          <div className="loading-state">
-            <div className="loading-spinner" />
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] mb-3" />
             <p>加载中...</p>
           </div>
         ) : securityEvents.length === 0 ? (
-          <div className="empty-state">
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
             <ShieldCheckIcon />
             <p>暂无安全事件</p>
           </div>
         ) : (
           <>
-            <table className="admin-table">
+            <table className="w-full text-sm">
               <thead>
                 <tr>
                   <th style={{ width: '100px' }}>ID</th>
@@ -730,7 +710,7 @@ export default function AdminSecurityEnhanced({
                   const eventTypeConfig = EVENT_TYPES[event.eventType as keyof typeof EVENT_TYPES] || {
                     label: event.eventType,
                     icon: '❓',
-                    color: '#656d76',
+                    color: 'var(--ds-text-tertiary)',
                   };
                   const severityConfig = SEVERITY_CONFIG[event.severity as keyof typeof SEVERITY_CONFIG] || SEVERITY_CONFIG.low;
 
@@ -783,8 +763,9 @@ export default function AdminSecurityEnhanced({
                         })}
                       </td>
                       <td className="actions-cell">
-                        <button
-                          className="btn btn-ghost btn-xs"
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             setSelectedEvent(event);
                             loadRelatedEvents(event);
@@ -793,11 +774,13 @@ export default function AdminSecurityEnhanced({
                           title="查看详情"
                         >
                           详情
-                        </button>
+                        </Button>
                         {event.status === 'pending' && (
                           <>
-                            <button
-                              className="btn btn-ghost btn-xs text-success"
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-[var(--ds-success-default)] hover:bg-[var(--ds-success-subtle)]"
                               onClick={() => {
                                 onMarkResolved?.(event.id);
                                 setToast({ message: '已标记为已解决', type: 'success' });
@@ -805,7 +788,7 @@ export default function AdminSecurityEnhanced({
                               title="标记已解决"
                             >
                               解决
-                            </button>
+                            </Button>
                           </>
                         )}
                       </td>
@@ -816,29 +799,31 @@ export default function AdminSecurityEnhanced({
             </table>
 
             {totalPages > 1 && (
-              <div className="pagination">
-                <button
-                  className="btn btn-default btn-sm"
+              <div className="flex items-center justify-between py-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={securityPage <= 1}
                   onClick={() => onPageChange(securityPage - 1)}
                 >
                   上一页
-                </button>
-                <span className="page-info">
+                </Button>
+                <span className="text-sm text-[var(--ds-text-secondary)]">
                   第 {securityPage} / {totalPages} 页，共 {securityTotal} 条
                 </span>
-                <button
-                  className="btn btn-default btn-sm"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={securityPage >= totalPages}
                   onClick={() => onPageChange(securityPage + 1)}
                 >
                   下一页
-                </button>
+                </Button>
               </div>
             )}
           </>
         )}
-      </div>
+      </Card>
 
       {/* 右键菜单 */}
       {effectiveContextMenu && (
@@ -857,7 +842,7 @@ export default function AdminSecurityEnhanced({
           <div className="event-detail-content">
             {/* 基本信息 */}
             <section className="detail-section">
-              <h3 className="section-title">基本信息</h3>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">基本信息</h3>
               <div className="info-grid">
                 <div className="info-item">
                   <span className="info-label">事件ID</span>
@@ -897,14 +882,35 @@ export default function AdminSecurityEnhanced({
 
             {/* IP信息 */}
             <section className="detail-section">
-              <h3 className="section-title">
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">
                 <LinkIcon /> IP 信息
               </h3>
               <div className="ip-info-card">
                 <div className="ip-main">
                   <code className="ip-address-large">{selectedEvent.ipAddress}</code>
                   <div className="ip-actions">
-                    <button className="btn btn-danger btn-sm">封禁此IP</button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => {
+                        setConfirmDialog({
+                          isOpen: true,
+                          title: '封禁IP',
+                          message: `确定要封禁 IP ${selectedEvent.ipAddress} 吗？`,
+                          onConfirm: async () => {
+                            try {
+                              await onBanIp?.(selectedEvent.ipAddress, '安全原因', '7');
+                              setToast({ message: `IP ${selectedEvent.ipAddress} 已封禁`, type: 'success' });
+                            } catch {
+                              setToast({ message: '封禁请求失败', type: 'error' });
+                            }
+                            setConfirmDialog(null);
+                          },
+                        });
+                      }}
+                    >
+                      封禁此IP
+                    </Button>
                   </div>
                 </div>
                 <div className="ip-details">
@@ -926,7 +932,7 @@ export default function AdminSecurityEnhanced({
 
             {/* 事件详情 */}
             <section className="detail-section">
-              <h3 className="section-title">事件详情</h3>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">事件详情</h3>
               <div className="detail-content-box">
                 <p>{selectedEvent.details || '无详细描述'}</p>
               </div>
@@ -942,7 +948,7 @@ export default function AdminSecurityEnhanced({
             {/* User Agent */}
             {selectedEvent.userAgent && (
               <section className="detail-section">
-                <h3 className="section-title">用户代理</h3>
+                <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">用户代理</h3>
                 <div className="user-agent-box">
                   <code>{selectedEvent.userAgent}</code>
                 </div>
@@ -952,7 +958,7 @@ export default function AdminSecurityEnhanced({
             {/* 关联事件 */}
             {relatedEvents.length > 0 && (
               <section className="detail-section">
-                <h3 className="section-title">关联事件</h3>
+                <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">关联事件</h3>
                 <div className="related-events">
                   {relatedEvents.map((related) => (
                     <div key={related.id} className="related-event-item">
@@ -971,8 +977,8 @@ export default function AdminSecurityEnhanced({
 
             {/* 快捷操作 */}
             <section className="detail-section quick-actions">
-              <button
-                className="btn btn-primary"
+              <Button
+                variant="primary"
                 onClick={() => {
                   onMarkResolved?.(selectedEvent.id);
                   setShowDetailPanel(false);
@@ -981,9 +987,9 @@ export default function AdminSecurityEnhanced({
                 disabled={selectedEvent.status !== 'pending'}
               >
                 标记为已解决
-              </button>
-              <button
-                className="btn btn-secondary"
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => {
                   onIgnoreEvent?.(selectedEvent.id);
                   setShowDetailPanel(false);
@@ -992,87 +998,78 @@ export default function AdminSecurityEnhanced({
                 disabled={selectedEvent.status !== 'pending'}
               >
                 忽略此事件
-              </button>
+              </Button>
             </section>
           </div>
         )}
       </SidePanel>
 
       {/* 导出报告弹窗 */}
-      {showReportModal && (
-        <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>导出安全报告</h3>
-              <button className="modal-close" onClick={() => setShowReportModal(false)}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
-                </svg>
-              </button>
+      <Modal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        title="导出安全报告"
+        maxWidth="480px"
+        footer={
+          <Button variant="secondary" size="sm" onClick={() => setShowReportModal(false)}>
+            取消
+          </Button>
+        }
+      >
+        <div className="report-options">
+          <button
+            className="report-option border-0 bg-transparent w-full text-left"
+            onClick={() => handleExportReport('pdf')}
+          >
+            <div className="option-icon">📄</div>
+            <div className="option-info">
+              <span className="option-title">PDF 报告</span>
+              <span className="option-desc">适合打印和正式存档</span>
             </div>
-            <div className="modal-body">
-              <div className="report-options">
-                <div
-                  className="report-option"
-                  onClick={() => handleExportReport('pdf')}
-                >
-                  <div className="option-icon">📄</div>
-                  <div className="option-info">
-                    <span className="option-title">PDF 报告</span>
-                    <span className="option-desc">适合打印和正式存档</span>
-                  </div>
-                </div>
-                <div
-                  className="report-option"
-                  onClick={() => handleExportReport('csv')}
-                >
-                  <div className="option-icon">📊</div>
-                  <div className="option-info">
-                    <span className="option-title">CSV 数据</span>
-                    <span className="option-desc">适合数据分析和处理</span>
-                  </div>
-                </div>
-                <div
-                  className="report-option"
-                  onClick={() => handleExportReport('json')}
-                >
-                  <div className="option-icon">💻</div>
-                  <div className="option-info">
-                    <span className="option-title">JSON 数据</span>
-                    <span className="option-desc">适合程序接口调用</span>
-                  </div>
-                </div>
-              </div>
-              <div className="report-summary">
-                <h4>报告摘要</h4>
-                <div className="summary-grid">
-                  <div className="summary-item">
-                    <span className="summary-label">报告周期</span>
-                    <span className="summary-value">最近 {timeRange === '7d' ? '7' : timeRange === '30d' ? '30' : '90'} 天</span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="summary-label">事件总数</span>
-                    <span className="summary-value">{stats.totalEvents}</span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="summary-label">严重事件</span>
-                    <span className="summary-value danger">{stats.criticalCount}</span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="summary-label">解决率</span>
-                    <span className="summary-value success">{Math.round((stats.resolvedCount / stats.totalEvents) * 100)}%</span>
-                  </div>
-                </div>
-              </div>
+          </button>
+          <button
+            className="report-option border-0 bg-transparent w-full text-left"
+            onClick={() => handleExportReport('csv')}
+          >
+            <div className="option-icon">📊</div>
+            <div className="option-info">
+              <span className="option-title">CSV 数据</span>
+              <span className="option-desc">适合数据分析和处理</span>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowReportModal(false)}>
-                取消
-              </button>
+          </button>
+          <button
+            className="report-option border-0 bg-transparent w-full text-left"
+            onClick={() => handleExportReport('json')}
+          >
+            <div className="option-icon">💻</div>
+            <div className="option-info">
+              <span className="option-title">JSON 数据</span>
+              <span className="option-desc">适合程序接口调用</span>
+            </div>
+          </button>
+        </div>
+        <div className="report-summary">
+          <h4>报告摘要</h4>
+          <div className="summary-grid">
+            <div className="summary-item">
+              <span className="summary-label">报告周期</span>
+              <span className="summary-value">最近 {timeRange === '7d' ? '7' : timeRange === '30d' ? '30' : '90'} 天</span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">事件总数</span>
+              <span className="summary-value">{stats.totalEvents}</span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">严重事件</span>
+              <span className="summary-value danger">{stats.criticalCount}</span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">解决率</span>
+              <span className="summary-value success">{Math.round((stats.resolvedCount / stats.totalEvents) * 100)}%</span>
             </div>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* 确认对话框 */}
       {confirmDialog?.isOpen && (

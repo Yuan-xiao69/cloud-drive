@@ -5,34 +5,29 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/penalties/[penaltyId]/extend - 延长处罚时间
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // POST /api/v1/admin/penalties/[penaltyId]/extend - 延长处罚
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ penaltyId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    days: z.number().min(1),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 只有超级管理员可以延长处罚
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以延长处罚');
     }
 
-    const { penaltyId } = await params;
-    const body = await req.json();
+    const { penaltyId } = params;
     const { days } = body;
-
-    if (!days || days < 1) {
-      return errors.badRequest('请输入有效的延长天数');
-    }
 
     const penalty = await prisma.userPenalty.findUnique({
       where: { id: penaltyId },
@@ -49,20 +44,17 @@ export async function POST(
       return errors.badRequest('该处罚已被解除或已过期，无法延长');
     }
 
-    // 计算新的过期时间
     const currentExpiry = penalty.expiresAt || new Date();
     const newExpiresAt = new Date(currentExpiry.getTime() + days * 24 * 60 * 60 * 1000);
 
     await prisma.userPenalty.update({
       where: { id: penaltyId },
-      data: {
-        expiresAt: newExpiresAt,
-      },
+      data: { expiresAt: newExpiresAt },
     });
 
-    // 记录审计日志
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'extend_penalty',
       targetType: 'penalty',
       targetId: penaltyId,
@@ -74,7 +66,5 @@ export async function POST(
       expiresAt: newExpiresAt,
       remainingDays: Math.ceil((newExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
     }, '处罚已延长');
-  } catch (err) {
-    return handlePrismaError(err, '延长处罚失败');
-  }
-}
+  },
+});

@@ -1,4 +1,6 @@
 // @ts-check
+const { withSentryConfig } = require('@sentry/nextjs');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -6,6 +8,7 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'],
     optimizePackageImports: ['lucide-react'],
+    instrumentationHook: true,
   },
   compiler: {
     // 移除 console.log (生产模式)
@@ -33,8 +36,16 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'api.dicebear.com',
       },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.s3.amazonaws.com',
+      },
     ],
-    unoptimized: true,
+    // unoptimized: true, // 已启用 Next.js 图片优化
   },
   // Headers for security
   async headers() {
@@ -54,6 +65,20 @@ const nextConfig = {
             key: 'Referrer-Policy',
             value: 'strict-origin-when-cross-origin',
           },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https:",
+              "connect-src 'self' https://*.sentry.io ws: wss:",
+              "font-src 'self'",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join('; '),
+          },
         ],
       },
     ];
@@ -65,9 +90,36 @@ const nextConfig = {
       fs: false,
       net: false,
       tls: false,
+      crypto: false,
+      stream: false,
+      dns: false,
+      http2: false,
+      dgram: false,
+      child_process: false,
+      path: false,
+      os: false,
+      assert: false,
+      buffer: false,
+      url: false,
+      util: false,
+      zlib: false,
+      http: false,
+      https: false,
+      events: false,
+      constants: false,
+      querystring: false,
+      string_decoder: false,
+      timers: false,
     };
     return config;
   },
 };
 
-module.exports = nextConfig;
+module.exports = withSentryConfig(nextConfig, {
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+});

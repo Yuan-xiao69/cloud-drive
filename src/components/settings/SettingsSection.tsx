@@ -3,32 +3,18 @@
 import React from 'react';
 
 interface SettingsSectionProps {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-  actions?: React.ReactNode;
+  title: string; description?: string; children: React.ReactNode; actions?: React.ReactNode;
 }
 
-export default function SettingsSection({
-  title,
-  description,
-  children,
-  actions
-}: SettingsSectionProps) {
+export default function SettingsSection({ title, description, children, actions }: SettingsSectionProps) {
   return (
-    <div className="settings-section">
-      <div className="section-header">
+    <div>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="section-title">{title}</h1>
-          {description && (
-            <p className="section-description">{description}</p>
-          )}
+          <h2 className="font-display text-[20px] font-bold text-[var(--ds-text)] mb-1">{title}</h2>
+          {description && <p className="text-[13px] text-[var(--ds-text-secondary)]">{description}</p>}
         </div>
-        {actions && (
-          <div className="section-actions">
-            {actions}
-          </div>
-        )}
+        {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>
       {children}
     </div>

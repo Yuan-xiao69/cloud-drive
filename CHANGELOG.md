@@ -137,5 +137,5 @@ perf(upload): 优化大文件上传速度
 - `[minor]` - 新功能，向后兼容
 - `[patch]` - Bug 修复，向后兼容
 
-[未发布]: https://github.com/your-username/github-platform/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/your-username/github-platform/releases/tag/v1.0.0
+[未发布]: https://github.com/WYD915520/cloud-drive/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/WYD915520/cloud-drive/releases/tag/v1.0.0

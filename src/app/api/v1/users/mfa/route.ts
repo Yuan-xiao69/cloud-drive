@@ -1,9 +1,16 @@
 export const dynamic = 'force-dynamic';
+/**
+ * API v1 - MFA 两步验证 API
+ * GET /api/v1/users/mfa - 获取 MFA 状态和设置信息
+ * POST /api/v1/users/mfa - MFA 操作（初始化/启用/禁用/验证）
+ */
+
 import { TOTP, generateSecret, generateURI, verify } from 'otplib';
 import QRCode from 'qrcode';
-import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth/server';
 
 // TOTP 配置
 const totpOptions = {
@@ -33,56 +40,48 @@ async function verifyPassword(userId: string, password: string): Promise<boolean
   return bcrypt.compare(password, user.passwordHash);
 }
 
-// GET: 获取 MFA 状态和设置信息
-export async function GET() {
-  try {
-    const user = await auth();
-    if (!user) {
-      return NextResponse.json({ code: 401, message: '未登录' }, { status: 401 });
-    }
+const mfaSchema = z.object({
+  action: z.enum(['init', 'enable', 'disable', 'verify']),
+  password: z.string().optional(),
+  code: z.string().optional(),
+});
 
+// GET /api/v1/users/mfa - 获取 MFA 状态和设置信息
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
     const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
+      where: { id: user!.id },
       select: { mfaEnabled: true, mfaSecret: true },
     });
 
-    return NextResponse.json({
-      code: 200,
-      data: {
-        enabled: dbUser?.mfaEnabled ?? false,
-        configured: !!dbUser?.mfaSecret,
-      },
+    return success({
+      enabled: dbUser?.mfaEnabled ?? false,
+      configured: !!dbUser?.mfaSecret,
     });
-  } catch (error) {
-    console.error('MFA GET error:', error);
-    return NextResponse.json({ code: 500, message: '服务器错误' }, { status: 500 });
-  }
-}
+  },
+});
 
-// POST: 初始化 MFA 设置 / 验证启用 / 禁用 MFA
-export async function POST(request: NextRequest) {
-  try {
-    const user = await auth();
-    if (!user) {
-      return NextResponse.json({ code: 401, message: '未登录' }, { status: 401 });
-    }
-
-    const body = await request.json();
+// POST /api/v1/users/mfa - MFA 操作
+export const POST = defineRoute({
+  auth: 'required',
+  validation: mfaSchema,
+  async handler({ user, body }) {
     const { action, password, code } = body;
 
     switch (action) {
       case 'init': {
         // 初始化：生成密钥和二维码
         // 验证密码
-        if (!password || !(await verifyPassword(user.id, password))) {
-          return NextResponse.json({ code: 400, message: '密码验证失败' }, { status: 400 });
+        if (!password || !(await verifyPassword(user!.id, password))) {
+          return errors.badRequest('密码验证失败');
         }
 
         // 生成新密钥
         const secret = generateSecret();
         const otpauth = generateURI({
           issuer: 'GitHub Platform',
-          label: user.email || user.username,
+          label: user!.email || user!.username,
           secret,
           algorithm: 'sha1',
           digits: 6,
@@ -94,39 +93,36 @@ export async function POST(request: NextRequest) {
 
         // 临时存储密钥（未验证前不保存到数据库）
         await prisma.user.update({
-          where: { id: user.id },
+          where: { id: user!.id },
           data: { mfaSecret: secret },
         });
 
-        return NextResponse.json({
-          code: 200,
-          data: {
-            secret,
-            qrCode: qrCodeDataUrl,
-            otpauth,
-          },
+        return success({
+          secret,
+          qrCode: qrCodeDataUrl,
+          otpauth,
         });
       }
 
       case 'enable': {
         // 启用：验证 TOTP 代码并激活 MFA
         if (!code) {
-          return NextResponse.json({ code: 400, message: '请输入验证码' }, { status: 400 });
+          return errors.badRequest('请输入验证码');
         }
 
         const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
+          where: { id: user!.id },
           select: { mfaSecret: true },
         });
 
         if (!dbUser?.mfaSecret) {
-          return NextResponse.json({ code: 400, message: '请先初始化 MFA' }, { status: 400 });
+          return errors.badRequest('请先初始化 MFA');
         }
 
         // 验证 TOTP 代码
         const isValid = verify({ token: code, secret: dbUser.mfaSecret, ...totpOptions });
         if (!isValid) {
-          return NextResponse.json({ code: 400, message: '验证码错误' }, { status: 400 });
+          return errors.badRequest('验证码错误');
         }
 
         // 生成恢复码
@@ -134,85 +130,72 @@ export async function POST(request: NextRequest) {
 
         // 启用 MFA（密钥已保存）
         await prisma.user.update({
-          where: { id: user.id },
+          where: { id: user!.id },
           data: { mfaEnabled: true },
         });
 
-        return NextResponse.json({
-          code: 200,
-          data: {
-            enabled: true,
-            recoveryCodes,
-            message: '两步验证已启用，请妥善保管恢复码',
-          },
-        });
+        return success({
+          enabled: true,
+          recoveryCodes,
+        }, '两步验证已启用，请妥善保管恢复码');
       }
 
       case 'disable': {
         // 禁用：验证密码和 TOTP 代码
         if (!password || !code) {
-          return NextResponse.json({ code: 400, message: '请提供密码和验证码' }, { status: 400 });
+          return errors.badRequest('请提供密码和验证码');
         }
 
-        if (!(await verifyPassword(user.id, password))) {
-          return NextResponse.json({ code: 400, message: '密码错误' }, { status: 400 });
+        if (!(await verifyPassword(user!.id, password))) {
+          return errors.badRequest('密码错误');
         }
 
         const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
+          where: { id: user!.id },
           select: { mfaSecret: true },
         });
 
         if (!dbUser?.mfaSecret) {
-          return NextResponse.json({ code: 400, message: 'MFA 未配置' }, { status: 400 });
+          return errors.badRequest('MFA 未配置');
         }
 
         // 验证 TOTP 代码
         const isValid = verify({ token: code, secret: dbUser.mfaSecret, ...totpOptions });
         if (!isValid) {
-          return NextResponse.json({ code: 400, message: '验证码错误' }, { status: 400 });
+          return errors.badRequest('验证码错误');
         }
 
         // 禁用 MFA
         await prisma.user.update({
-          where: { id: user.id },
+          where: { id: user!.id },
           data: { mfaEnabled: false, mfaSecret: null },
         });
 
-        return NextResponse.json({
-          code: 200,
-          data: { enabled: false, message: '两步验证已禁用' },
-        });
+        return success({ enabled: false }, '两步验证已禁用');
       }
 
       case 'verify': {
         // 验证：仅验证当前代码（用于敏感操作前验证）
         if (!code) {
-          return NextResponse.json({ code: 400, message: '请输入验证码' }, { status: 400 });
+          return errors.badRequest('请输入验证码');
         }
 
         const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
+          where: { id: user!.id },
           select: { mfaSecret: true, mfaEnabled: true },
         });
 
         if (!dbUser?.mfaEnabled || !dbUser?.mfaSecret) {
-          return NextResponse.json({ code: 400, message: 'MFA 未启用' }, { status: 400 });
+          return errors.badRequest('MFA 未启用');
         }
 
         const isValid = verify({ token: code, secret: dbUser.mfaSecret, ...totpOptions });
         if (!isValid) {
-          return NextResponse.json({ code: 400, message: '验证码错误' }, { status: 400 });
+          return errors.badRequest('验证码错误');
         }
 
-        return NextResponse.json({ code: 200, data: { valid: true } });
+        return success({ valid: true });
       }
-
-      default:
-        return NextResponse.json({ code: 400, message: '未知操作' }, { status: 400 });
     }
-  } catch (error) {
-    console.error('MFA POST error:', error);
-    return NextResponse.json({ code: 500, message: '服务器错误' }, { status: 500 });
-  }
-}
+  },
+});

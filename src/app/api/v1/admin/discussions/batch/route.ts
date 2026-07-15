@@ -5,25 +5,27 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/discussions/batch - 批量操作讨论
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // POST /api/v1/admin/discussions/batch - 批量操作
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    action: z.string(),
+    discussionIds: z.array(z.string()).min(1),
+    category: z.string().optional(),
+    reason: z.string().optional(),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { action, discussionIds, category, reason } = body;
-
-    if (!action || !discussionIds || !Array.isArray(discussionIds) || discussionIds.length === 0) {
-      return errors.badRequest('缺少必填参数：action, discussionIds');
-    }
 
     // 获取讨论记录
     const discussions = await prisma.discussion.findMany({
@@ -117,8 +119,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
 
     // 记录审计日志
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: logAction,
       targetType: 'discussion',
       targetId: discussionIds.join(','),
@@ -130,7 +133,5 @@ export async function POST(req: NextRequest): Promise<Response> {
       action,
       ids: discussionIds,
     }, `批量操作成功：${logDetail}`);
-  } catch (err) {
-    return handlePrismaError(err, '批量操作失败');
-  }
-}
+  },
+});

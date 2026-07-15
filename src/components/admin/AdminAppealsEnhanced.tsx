@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
   SearchIcon,
@@ -16,7 +16,10 @@ import {
   SendIcon
 } from './AdminIcons';
 import { SidePanel, AdvancedFilter, ConfirmDialog, BatchActionBar } from './common/AdminCommon';
-import type { Appeal, ContextMenuConfig } from './AdminTypes';
+import { AdminContextMenu } from './AdminContextMenu';
+import type { Appeal, ContextMenuConfig, ContextMenuSection } from './AdminTypes';
+import { formatTimeAgo } from '@/lib/utils';
+import { Button, Card  , Field } from '@/components/design';
 
 interface AppealFilters {
   search?: string;
@@ -45,7 +48,7 @@ interface AppealDetail {
   };
 }
 
-interface AdminAppealsEnhancedProps {
+export interface AdminAppealsEnhancedProps {
   appeals: Appeal[];
   appealsTotal: number;
   appealsStats?: {
@@ -157,39 +160,27 @@ export default function AdminAppealsEnhanced({
     handleContextMenu(e, appeal.id);
   };
 
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.context-menu')) return;
-      handleCloseContextMenu();
-    };
-    if (contextMenu) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [contextMenu, handleCloseContextMenu]);
-
   return (
-    <div className="tab-content">
-      <div className="page-header">
-        <div className="page-title-section">
-          <h1 className="page-title">申诉管理</h1>
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">申诉管理</h1>
           {appealsStats && appealsStats.pending > 0 && (
             <span className="pending-badge">{appealsStats.pending} 个待处理</span>
           )}
         </div>
-        <div className="header-actions">
-          <button className="btn btn-secondary btn-sm" onClick={onExportAppeals}>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" onClick={onExportAppeals}>
             <DownloadIcon /> 导出
-          </button>
-          <button
-            className={`btn btn-secondary btn-sm ${showAdvancedFilter ? 'active' : ''}`}
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
           >
             <FilterIcon /> 筛选
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={onRefresh}>刷新</button>
-          <div className="search-box">
+          </Button>
+          <Button variant="secondary" onClick={onRefresh}>刷新</Button>
+          <div className="relative">
             <SearchIcon />
             <input
               type="search"
@@ -203,22 +194,22 @@ export default function AdminAppealsEnhanced({
 
       {appealsStats && (
         <div className="stats-section">
-          <div className="mini-stat-card">
-            <span className="stat-value warning">{appealsStats.pending}</span>
-            <span className="stat-label">待处理</span>
-          </div>
-          <div className="mini-stat-card">
-            <span className="stat-value success">{appealsStats.approved}</span>
-            <span className="stat-label">已通过</span>
-          </div>
-          <div className="mini-stat-card">
-            <span className="stat-value danger">{appealsStats.rejected}</span>
-            <span className="stat-label">已拒绝</span>
-          </div>
-          <div className="mini-stat-card">
-            <span className="stat-value">{appealsStats.avgProcessingTime}</span>
-            <span className="stat-label">平均处理时间</span>
-          </div>
+          <Card padding="none" className="p-4 flex flex-col items-center">
+            <span className="text-2xl font-semibold text-[var(--ds-warning-default)]">{appealsStats.pending}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">待处理</span>
+          </Card>
+          <Card padding="none" className="p-4 flex flex-col items-center">
+            <span className="text-2xl font-semibold text-[var(--ds-success-default)]">{appealsStats.approved}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">已通过</span>
+          </Card>
+          <Card padding="none" className="p-4 flex flex-col items-center">
+            <span className="text-2xl font-semibold text-[var(--ds-danger-default)]">{appealsStats.rejected}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">已拒绝</span>
+          </Card>
+          <Card padding="none" className="p-4 flex flex-col items-center">
+            <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{appealsStats.avgProcessingTime}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">平均处理时间</span>
+          </Card>
         </div>
       )}
 
@@ -228,8 +219,7 @@ export default function AdminAppealsEnhanced({
           values={filters as Record<string, string | number | Date | null>}
           onChange={(name, value) => {
             const updated = { ...filters, [name]: value };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onFiltersChange(updated as any);
+            onFiltersChange(updated);
           }}
           onApply={() => onPageChange(1)}
           onReset={() => onFiltersChange({} as AppealFilters)}
@@ -245,11 +235,11 @@ export default function AdminAppealsEnhanced({
         ]}
       />
 
-      <div className="admin-table-container">
-        <table className="admin-table">
+      <Card padding="none" className="overflow-hidden">
+        <table className="w-full text-sm">
           <thead>
             <tr>
-              <th style={{ width: '40px' }}>
+              <th className="w-10">
                 <input
                   type="checkbox"
                   checked={selectedAppeals.size === appeals.length && appeals.length > 0}
@@ -305,62 +295,78 @@ export default function AdminAppealsEnhanced({
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {appealsTotal > appealsPageSize && (
-        <div className="pagination">
-          <div className="pagination-info">
+        <div className="flex items-center justify-between py-3">
+          <div className="text-sm text-[var(--ds-text-secondary)]">
             第 {appealsPage} / {totalPages} 页
           </div>
-          <div className="pagination-controls">
-            <button
-              className="btn btn-secondary btn-sm"
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
               disabled={appealsPage <= 1}
               onClick={() => onPageChange(appealsPage - 1)}
-            >上一页</button>
-            <button
-              className="btn btn-secondary btn-sm"
+            >上一页</Button>
+            <Button
+              variant="secondary"
               disabled={appealsPage >= totalPages}
               onClick={() => onPageChange(appealsPage + 1)}
-            >下一页</button>
+            >下一页</Button>
           </div>
         </div>
       )}
 
       {contextMenu && contextMenuTarget && (
-        <div
-          className="context-menu enhanced"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="context-menu-header">
-            <span className="context-menu-title">📝 申诉 #{contextMenuTarget.id}</span>
-          </div>
-          <div className="context-menu-section">
-            <button className="context-menu-item" onClick={() => { onViewDetail(contextMenuTarget.id); handleCloseContextMenu(); }}>
-              <EyeIcon /> 查看详情
-            </button>
-            <button className="context-menu-item" onClick={() => { onViewUser(contextMenuTarget.id); handleCloseContextMenu(); }}>
-              👤 查看用户
-            </button>
-            <button className="context-menu-item" onClick={() => { onViewPenalty(contextMenuTarget.id); handleCloseContextMenu(); }}>
-              <FlagIcon /> 查看原处罚
-            </button>
-          </div>
-          {contextMenuTarget.status === 'pending' && (
-            <>
-              <div className="context-menu-divider" />
-              <div className="context-menu-section">
-                <button className="context-menu-item success" onClick={() => { onApproveAppeal(contextMenuTarget.id); handleCloseContextMenu(); }}>
-                  <CheckIcon /> 通过申诉
-                </button>
-                <button className="context-menu-item danger" onClick={() => { onRejectAppeal(contextMenuTarget.id); handleCloseContextMenu(); }}>
-                  <XIcon /> 拒绝申诉
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <AdminContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          sections={[
+            {
+              id: 'view',
+              items: [
+                {
+                  id: 'view-detail',
+                  label: '查看详情',
+                  icon: <EyeIcon />,
+                  shortcut: 'Enter',
+                  onClick: () => { onViewDetail(contextMenuTarget!.id); handleCloseContextMenu(); },
+                },
+                {
+                  id: 'view-user',
+                  label: '查看用户',
+                  icon: <EyeIcon />,
+                  onClick: () => { onViewUser(contextMenuTarget!.id); handleCloseContextMenu(); },
+                },
+                {
+                  id: 'view-penalty',
+                  label: '查看原处罚',
+                  icon: <FlagIcon />,
+                  onClick: () => { onViewPenalty(contextMenuTarget!.id); handleCloseContextMenu(); },
+                },
+              ],
+            },
+            ...(contextMenuTarget!.status === 'pending' ? [{
+              id: 'actions',
+              items: [
+                {
+                  id: 'approve',
+                  label: '通过申诉',
+                  icon: <CheckIcon />,
+                  onClick: () => { onApproveAppeal(contextMenuTarget!.id); handleCloseContextMenu(); },
+                },
+                {
+                  id: 'reject',
+                  label: '拒绝申诉',
+                  icon: <XIcon />,
+                  danger: true,
+                  onClick: () => { onRejectAppeal(contextMenuTarget!.id); handleCloseContextMenu(); },
+                },
+              ],
+            }] : []),
+          ]}
+          onClose={handleCloseContextMenu}
+        />
       )}
 
       {selectedAppealDetail && (
@@ -407,7 +413,7 @@ function AppealDetailPanel({ appeal, onClose, onApprove, onReject, onReply }: Ap
       width={480}
     >
       <div className="detail-section">
-        <h3 className="detail-section-title">基本信息</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">基本信息</h3>
         <div className="detail-grid">
           <div className="detail-item"><span className="detail-label">用户</span><span className="detail-value">@{appeal.userUsername}</span></div>
           <div className="detail-item"><span className="detail-label">状态</span><span className={`status-badge ${getStatusBadgeClass(appeal.status)}`}>{getStatusLabel(appeal.status)}</span></div>
@@ -416,13 +422,13 @@ function AppealDetailPanel({ appeal, onClose, onApprove, onReject, onReply }: Ap
       </div>
 
       <div className="detail-section">
-        <h3 className="detail-section-title">申诉内容</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">申诉内容</h3>
         <div className="appeal-content-box"><p>{appeal.content}</p></div>
       </div>
 
       {appeal.adminReply && (
         <div className="detail-section">
-          <h3 className="detail-section-title">管理员回复</h3>
+          <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">管理员回复</h3>
           <div className="admin-reply-box"><p>{appeal.adminReply}</p></div>
         </div>
       )}
@@ -430,7 +436,7 @@ function AppealDetailPanel({ appeal, onClose, onApprove, onReject, onReply }: Ap
       {appeal.status === 'pending' && (
         <>
           <div className="detail-section">
-            <h3 className="detail-section-title">添加回复</h3>
+            <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">添加回复</h3>
             <textarea
               className="reply-input"
               placeholder="输入回复内容..."
@@ -441,9 +447,9 @@ function AppealDetailPanel({ appeal, onClose, onApprove, onReject, onReply }: Ap
           </div>
           <div className="detail-section">
             <div className="action-buttons-grid">
-              <button className="btn btn-success btn-block" onClick={onApprove}>✓ 通过申诉</button>
-              <button className="btn btn-danger btn-block" onClick={onReject}>✗ 拒绝申诉</button>
-              <button className="btn btn-secondary btn-block" onClick={() => onReply(replyText)} disabled={!replyText.trim()}>📝 保存回复</button>
+              <Button variant="primary" onClick={onApprove}>✓ 通过申诉</Button>
+              <Button variant="danger" onClick={onReject}>✗ 拒绝申诉</Button>
+              <Button variant="secondary" onClick={() => onReply(replyText)} disabled={!replyText.trim()}>📝 保存回复</Button>
             </div>
           </div>
         </>
@@ -462,16 +468,3 @@ function getStatusBadgeClass(status: string): string {
   return classes[status] || 'default';
 }
 
-function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins} 分钟前`;
-  if (diffHours < 24) return `${diffHours} 小时前`;
-  if (diffDays < 30) return `${diffDays} 天前`;
-  return date.toLocaleDateString('zh-CN');
-}

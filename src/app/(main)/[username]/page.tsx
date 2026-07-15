@@ -1,10 +1,13 @@
 // User Profile Page - Server Component
 // Fetches initial data on the server side
 
+export const dynamic = 'force-dynamic';
+
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import Header from '@/components/layout/Header';
 import UserProfileClient from './UserProfileClient';
 import { prisma } from '@/lib/prisma';
+import { Button, PageLayout, PageLayoutContent } from '@/components/design';
 import type { UserSummary, RepositorySummary, DiscussionSummary } from '@/types';
 import type { Prisma } from '@prisma/client';
 
@@ -20,9 +23,11 @@ function transformUser(user: {
   email: string | null;
   avatarUrl: string | null;
   bio: string | null;
+  location: string | null;
+  website: string | null;
   role: string;
   createdAt: Date;
-  _count?: { repositories?: number; stars?: number };
+  _count?: { repositories?: number; stars?: number; followers?: number; following?: number };
 }): UserSummary {
   return {
     id: user.id,
@@ -32,14 +37,16 @@ function transformUser(user: {
     name: undefined,
     avatarUrl: user.avatarUrl,
     bio: user.bio,
+    location: user.location,
+    website: user.website,
     isAdmin: user.role === 'admin' || user.role === 'super_admin',
     isSuperAdmin: user.role === 'super_admin',
     createdAt: user.createdAt,
     stats: user._count ? {
       reposCount: user._count.repositories || 0,
       starsCount: user._count.stars || 0,
-      followersCount: 0,
-      followingCount: 0,
+      followersCount: user._count.followers || 0,
+      followingCount: user._count.following || 0,
     } : undefined,
   };
 }
@@ -68,9 +75,9 @@ function transformRepo(repo: {
     ownerName: repo.owner?.name,
     ownerAvatar: repo.owner?.avatarUrl,
     description: repo.description,
-    visibility: repo.visibility === 1 ? 'public' : 'private',
-    starsCount: repo.starCount || repo._count?.stars || 0,
-    forksCount: repo.forkCount || 0,
+    visibility: repo.visibility === 0 ? 'private' : 'public',
+    starCount: repo.starCount || repo._count?.stars || 0,
+    forkCount: repo.forkCount || 0,
     watchersCount: repo.watchCount || 0,
     language: repo.language,
     createdAt: repo.createdAt,
@@ -119,36 +126,22 @@ function transformDiscussion(discussion: {
 export default async function UserProfilePage({ params }: PageProps) {
   const { username } = await params;
 
-  // Fetch user with stats
+  // 按用户名查找（UID 用于内部标识，URL 用用户名）
   const user = await prisma.user.findUnique({
     where: { username },
     select: {
-      id: true,
-      uid: true,
-      username: true,
-      email: true,
-      bio: true,
-      avatarUrl: true,
-      location: true,
-      website: true,
-      role: true,
-      createdAt: true,
-      _count: {
-        select: {
-          repositories: true,
-          stars: true,
-        },
-      },
+      id: true, uid: true, username: true, email: true, bio: true,
+      avatarUrl: true, location: true, website: true, role: true, createdAt: true,
+      _count: { select: { repositories: true, stars: true, followers: true, following: true } },
     },
   });
 
   if (!user) {
     return (
-      <div className="min-h-screen">
-        <Header />
-        <div style={{ paddingTop: 80, maxWidth: 1200, margin: '0 auto', padding: '80px 24px 48px', textAlign: 'center' }}>
+      <div className="flex-1 min-w-0">
+        <div className="max-w-[var(--ds-container-max)] mx-auto pt-20 pb-12 px-6 text-center">
           <h1>用户不存在</h1>
-          <a href="/" className="btn btn-primary" style={{ marginTop: 16, display: 'inline-block' }}>返回首页</a>
+          <Link href="/"><Button variant="primary">返回首页</Button></Link>
         </div>
       </div>
     );
@@ -219,6 +212,7 @@ export default async function UserProfilePage({ params }: PageProps) {
     .map(s => transformRepo(s.repo));
 
   return (
+    <PageLayout containerWidth="wide"><PageLayoutContent>
     <UserProfileClient
       initialUser={transformedUser}
       initialRepos={transformedRepos}
@@ -226,6 +220,7 @@ export default async function UserProfilePage({ params }: PageProps) {
       initialStars={transformedStars}
       username={username}
     />
+    </PageLayoutContent></PageLayout>
   );
 }
 
@@ -233,7 +228,7 @@ export default async function UserProfilePage({ params }: PageProps) {
 export async function generateMetadata({ params }: PageProps) {
   const { username } = await params;
   return {
-    title: `${username} - 代码平台`,
+    title: `${username} - 文件平台`,
     description: `查看 ${username} 的个人主页、仓库和讨论`,
   };
 }

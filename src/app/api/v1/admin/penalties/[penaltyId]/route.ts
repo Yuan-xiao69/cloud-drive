@@ -1,22 +1,24 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
+import { recordAuditLog } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // DELETE /api/v1/admin/penalties/[penaltyId] - 解除处罚
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ penaltyId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    reason: z.string().optional(),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { penaltyId } = await params;
+    const { penaltyId } = params;
+    const removeReason = body.reason || '';
 
     const penalty = await prisma.userPenalty.findUnique({
       where: { id: penaltyId },
@@ -33,27 +35,19 @@ export async function DELETE(
       return errors.badRequest('该处罚已被解除或已过期');
     }
 
-    // 解析可选的解除原因（从 body 中）
-    let removeReason = '';
-    try {
-      const body = await req.json();
-      removeReason = body.reason || '';
-    } catch {
-      // body 为空时忽略
-    }
-
     await prisma.userPenalty.update({
       where: { id: penaltyId },
       data: {
         isActive: false,
         removedAt: new Date(),
-        removedBy: auth.userId,
+        removedBy: user!.id,
         removeReason: removeReason || undefined,
       },
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       userId: penalty.userId,
       actionType: 'remove_penalty',
       targetType: 'penalty',
@@ -62,7 +56,5 @@ export async function DELETE(
     });
 
     return success({ id: penaltyId }, '处罚已解除');
-  } catch (err) {
-    return handlePrismaError(err, '解除处罚失败');
-  }
-}
+  },
+});

@@ -3,6 +3,8 @@
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useAuth } from '@/lib/providers';
 import { tokenManager } from '@/lib/api/client';
+import { Button } from '@/components/design';
+import toast from 'react-hot-toast';
 
 interface ChunkedUploaderProps {
   username: string;
@@ -46,6 +48,13 @@ interface UploadInitResponse {
     skipped?: boolean;
     fileId?: string;
     message?: string;
+    existingFile?: {
+      id: string;
+      name: string;
+      fileSize: number;
+      mimeType?: string;
+      path?: string;
+    };
   };
 }
 
@@ -137,7 +146,7 @@ function PasteOverlay({ isVisible, imageUrl, onConfirm, onCancel, fileName }: Pa
       <div className="paste-modal">
         <div className="paste-modal-header">
           <span>粘贴截图预览</span>
-          <button className="paste-modal-close" onClick={onCancel}>&times;</button>
+          <Button variant="ghost" size="sm" onClick={onCancel}>&times;</Button>
         </div>
         <div className="paste-modal-body">
           <img src={imageUrl} alt="粘贴的图片" className="paste-preview-image" />
@@ -146,8 +155,8 @@ function PasteOverlay({ isVisible, imageUrl, onConfirm, onCancel, fileName }: Pa
           </div>
         </div>
         <div className="paste-modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>取消</button>
-          <button className="btn btn-primary" onClick={onConfirm}>添加到上传队列</button>
+          <Button variant="secondary" size="sm" onClick={onCancel}>取消</Button>
+          <Button variant="primary" size="sm" onClick={onConfirm}>添加到上传队列</Button>
         </div>
       </div>
       <style>{`
@@ -164,7 +173,7 @@ function PasteOverlay({ isVisible, imageUrl, onConfirm, onCancel, fileName }: Pa
           z-index: 9999;
         }
         .paste-modal {
-          background: var(--bg-primary, #fff);
+          background: var(--ds-surface-default);
           border-radius: 8px;
           box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
           max-width: 500px;
@@ -178,7 +187,7 @@ function PasteOverlay({ isVisible, imageUrl, onConfirm, onCancel, fileName }: Pa
           justify-content: space-between;
           align-items: center;
           padding: 12px 16px;
-          border-bottom: 1px solid var(--border-color, #e1e4e8);
+          border-bottom: 1px solid var(--ds-border-default);
           font-weight: 600;
         }
         .paste-modal-close {
@@ -186,7 +195,7 @@ function PasteOverlay({ isVisible, imageUrl, onConfirm, onCancel, fileName }: Pa
           border: none;
           font-size: 20px;
           cursor: pointer;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           padding: 4px;
           line-height: 1;
         }
@@ -200,17 +209,17 @@ function PasteOverlay({ isVisible, imageUrl, onConfirm, onCancel, fileName }: Pa
           max-height: 400px;
           object-fit: contain;
           border-radius: 4px;
-          background: var(--bg-tertiary, #f6f8fa);
+          background: var(--ds-surface-inset);
         }
         .paste-file-info {
           margin-top: 12px;
           padding: 8px 12px;
-          background: var(--bg-secondary, #f6f8fa);
+          background: var(--ds-surface-subtle);
           border-radius: 4px;
         }
         .paste-file-name {
           font-size: 14px;
-          color: var(--text-primary, #24292e);
+          color: var(--ds-text-primary);
           word-break: break-all;
         }
         .paste-modal-footer {
@@ -218,7 +227,7 @@ function PasteOverlay({ isVisible, imageUrl, onConfirm, onCancel, fileName }: Pa
           gap: 8px;
           justify-content: flex-end;
           padding: 12px 16px;
-          border-top: 1px solid var(--border-color, #e1e4e8);
+          border-top: 1px solid var(--ds-border-default);
         }
       `}</style>
     </div>
@@ -278,7 +287,7 @@ export interface ChunkedUploaderRef {
   triggerFileInput: () => void;
 }
 
-const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
+const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(function ChunkedUploader({
   username,
   repoName,
   currentPath,
@@ -291,7 +300,7 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
   onGlobalDragEnter,
   onGlobalDragLeave,
   onGlobalDrop
-}, ref) => {
+}, ref) {
   const { user } = useAuth();
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -316,19 +325,38 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
   const globalDropRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef(0);
   
+  // 前端文件大小限制
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+  const MAX_FILE_SIZE_STR = '100MB';
+
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList) return;
     
-    const newFiles: UploadFile[] = Array.from(fileList).map(file => ({
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      file,
-      progress: 0,
-      status: 'pending' as const,
-      skipped: false
-    }));
+    const newFiles: UploadFile[] = [];
+    const oversizedFiles: string[] = [];
     
-    setFiles(prev => [...prev, ...newFiles]);
+    for (const file of Array.from(fileList)) {
+      if (file.size > MAX_FILE_SIZE) {
+        oversizedFiles.push(`${file.name} (${formatFileSize(file.size)})`);
+        continue;
+      }
+      newFiles.push({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        file,
+        progress: 0,
+        status: 'pending' as const,
+        skipped: false
+      });
+    }
+    
+    if (oversizedFiles.length > 0) {
+      toast(`以下文件超过大小限制（${MAX_FILE_SIZE_STR}），已跳过：\n${oversizedFiles.join('\n')}`);
+    }
+    
+    if (newFiles.length > 0) {
+      setFiles(prev => [...prev, ...newFiles]);
+    }
     
     // 如果有 onFilesSelected 回调，传递给父组件
     if (onFilesSelected) {
@@ -580,8 +608,12 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
           body: JSON.stringify({
             fileName: file.name,
             fileSize: file.size,
-            parentPath: currentPath || '/',
+            // path 为完整文件路径（目录 + 文件名），与后端 path: filePath 字段名一致
+            path: currentPath
+              ? `${currentPath.replace(/\/$/, '')}/${file.name}`
+              : `/${file.name}`,
             totalChunks,
+            chunkSize,
             fileHash,
             branch  // 传递当前分支
           }),
@@ -591,30 +623,33 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
       
       if (!initResponse.ok) {
         const data: UploadInitResponse = await initResponse.json();
-        throw new Error(data.data?.message || '初始化上传失败');
+        const err: any = new Error(data.data?.message || '初始化上传失败');
+        err.status = initResponse.status;
+        throw err;
       }
       
       const initData: UploadInitResponse = await initResponse.json();
       
       if (initData.data?.skipped) {
-        setFiles(prev => prev.map(f => 
-          f.id === id ? { 
-            ...f, 
-            status: 'completed' as const, 
+        const existingFile = initData.data?.existingFile;
+        setFiles(prev => prev.map(f =>
+          f.id === id ? {
+            ...f,
+            status: 'completed' as const,
             progress: 100,
             skipped: true,
             result: {
-              id: initData.data?.fileId || '',
-              name: file.name,
-              fileSize: file.size
+              id: existingFile?.id || '',
+              name: existingFile?.name || file.name,
+              fileSize: existingFile?.fileSize || file.size
             }
           } : f
         ));
-        
+
         onUploadComplete?.({
-          id: initData.data?.fileId || '',
-          name: file.name,
-          fileSize: file.size
+          id: existingFile?.id || '',
+          name: existingFile?.name || file.name,
+          fileSize: existingFile?.fileSize || file.size
         });
         return;
       }
@@ -624,7 +659,7 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
       const serverTotalChunks = initData.data?.totalChunks || totalChunks;
       
       const statusResponse = await fetch(
-        `/api/v1/repos/${username}/${repoName}/upload-chunked?action=status&uploadId=${uploadId}`,
+        `/api/v1/repos/${username}/${repoName}/upload-chunked?uploadId=${uploadId}`,
         { headers: authHeaders, signal: controller.signal }
       );
       
@@ -661,7 +696,7 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
             body: JSON.stringify({
               uploadId,
               chunkIndex,
-              chunk: chunkBase64,
+              chunkData: chunkBase64,
               totalChunks: serverTotalChunks,
               fileName: file.name,
               parentPath: currentPath || '/',
@@ -719,11 +754,15 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
       
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
-        setFiles(prev => prev.map(f => 
+        setFiles(prev => prev.map(f =>
           f.id === id ? { ...f, status: 'paused' as const } : f
         ));
+      } else if ((error as any).status === 409) {
+        setFiles(prev => prev.map(f =>
+          f.id === id ? { ...f, status: 'error' as const, error: (error as Error).message } : f
+        ));
       } else {
-        setFiles(prev => prev.map(f => 
+        setFiles(prev => prev.map(f =>
           f.id === id ? { ...f, status: 'error' as const, error: (error as Error).message } : f
         ));
       }
@@ -831,16 +870,19 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
       <div className="uploader-header">
         <span className="uploader-title">上传文件</span>
         {onClose && (
-          <button className="close-btn" onClick={onClose}>&times;</button>
+          <Button variant="ghost" size="sm" onClick={onClose}>&times;</Button>
         )}
       </div>
       
       <div
+        role="button"
+        tabIndex={0}
         className={`drop-zone ${isDragging ? 'dragging' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
       >
         <p className="drop-zone-text">
           拖拽文件到此处，或点击选择文件
@@ -904,13 +946,14 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
                       <div className="progress-fill" style={{ width: `${uploadFile.progress}%` }}></div>
                     </div>
                     <span className="progress-text">{uploadFile.progress}%</span>
-                    <button
-                      className="queue-btn pause-btn"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => pauseFile(uploadFile.id)}
                       title="暂停"
                     >
                       ⏸
-                    </button>
+                    </Button>
                   </>
                 )}
                 {uploadFile.status === 'completed' && (
@@ -926,13 +969,14 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
                 {uploadFile.status === 'paused' && (
                   <>
                     <span className="status-badge status-paused">⏸ 已暂停</span>
-                    <button
-                      className="queue-btn resume-btn"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => resumeFile(uploadFile.id)}
                       title="继续"
                     >
                       ▶
-                    </button>
+                    </Button>
                   </>
                 )}
                 {uploadFile.status === 'pending' && (
@@ -941,22 +985,24 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
               </div>
               <div className="file-actions">
                 {uploadFile.status === 'error' && (
-                  <button
-                    className="action-btn retry-btn"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => retryFile(uploadFile.id)}
                     title="重试"
                   >
                     ↻
-                  </button>
+                  </Button>
                 )}
                 {(uploadFile.status === 'pending' || uploadFile.status === 'error' || uploadFile.status === 'paused') && (
-                  <button
-                    className="action-btn remove-btn"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => removeFile(uploadFile.id)}
                     title="移除"
                   >
                     ×
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -970,40 +1016,44 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
             {showQueueButton && (
               <>
                 {uploading && (
-                  <button
-                    className="btn btn-outline"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={pauseAll}
                     title="暂停全部"
                   >
                     ⏸ 暂停
-                  </button>
+                  </Button>
                 )}
                 {files.some(f => f.status === 'paused') && (
-                  <button
-                    className="btn btn-outline"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={resumeAll}
                     title="继续全部"
                   >
                     ▶ 继续
-                  </button>
+                  </Button>
                 )}
                 {files.some(f => f.status === 'completed') && (
-                  <button
-                    className="btn btn-outline"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={clearCompleted}
                     title="清除已完成"
                   >
                     🗑 清除完成
-                  </button>
+                  </Button>
                 )}
-                <button
-                  className="btn btn-outline btn-danger"
+                <Button
+                  variant="danger"
+                  size="sm"
                   onClick={cancelAll}
                   disabled={uploading}
                   title="取消全部"
                 >
                   × 取消全部
-                </button>
+                </Button>
               </>
             )}
           </div>
@@ -1016,20 +1066,22 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
                 </span>
               )}
             </span>
-            <button
-              className="btn btn-secondary"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setFiles([])}
               disabled={uploading}
             >
               清空队列
-            </button>
-            <button
-              className="btn btn-primary"
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
               onClick={startUpload}
               disabled={uploading || files.filter(f => f.status === 'pending').length === 0}
             >
               {uploading ? '上传中...' : `上传 ${files.filter(f => f.status === 'pending').length} 个文件`}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1042,8 +1094,8 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
       
       <style>{`
         .chunked-uploader {
-          background: var(--bg-secondary, #fff);
-          border: 1px solid var(--border-color, #e1e4e8);
+          background: var(--ds-surface-default);
+          border: 1px solid var(--ds-border-default);
           border-radius: 6px;
           padding: 16px;
           max-width: 600px;
@@ -1059,7 +1111,7 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         .uploader-title {
           font-size: 16px;
           font-weight: 600;
-          color: var(--text-primary, #24292e);
+          color: var(--ds-text-primary);
         }
         
         .close-btn {
@@ -1067,12 +1119,12 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
           border: none;
           cursor: pointer;
           font-size: 20px;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           padding: 4px;
         }
         
         .drop-zone {
-          border: 2px dashed var(--border-color, #e1e4e8);
+          border: 2px dashed var(--ds-border-default);
           border-radius: 6px;
           padding: 32px;
           text-align: center;
@@ -1083,18 +1135,18 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         
         .drop-zone:hover,
         .drop-zone.dragging {
-          border-color: var(--accent-color, #0366d6);
-          background: var(--bg-hover, #f6f8fa);
+          border-color: var(--ds-accent-default);
+          background: var(--ds-surface-subtle);
         }
         
         .drop-zone-text {
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           margin-bottom: 8px;
         }
         
         .drop-zone-hint {
           font-size: 12px;
-          color: var(--text-tertiary, #6a737d);
+          color: var(--ds-text-tertiary);
         }
         
         .file-input {
@@ -1112,8 +1164,8 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
           padding: 8px 12px;
           font-size: 12px;
           font-weight: 600;
-          color: var(--text-secondary, #586069);
-          border-bottom: 1px solid var(--border-color, #e1e4e8);
+          color: var(--ds-text-secondary);
+          border-bottom: 1px solid var(--ds-border-default);
           margin-bottom: 4px;
         }
         
@@ -1123,16 +1175,16 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
           gap: 8px;
           align-items: center;
           padding: 12px;
-          border: 1px solid var(--border-color, #e1e4e8);
+          border: 1px solid var(--ds-border-default);
           border-radius: 6px;
           margin-bottom: 8px;
-          background: var(--bg-primary, #fff);
+          background: var(--ds-surface-default);
           transition: all 0.2s;
           cursor: grab;
         }
         
         .file-item:hover {
-          background: var(--bg-secondary, #f6f8fa);
+          background: var(--ds-surface-subtle);
         }
         
         .file-item.dragging {
@@ -1141,13 +1193,13 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         }
         
         .file-item.drag-over {
-          border-color: var(--accent-color, #0366d6);
-          background: var(--bg-hover, #e6f3ff);
+          border-color: var(--ds-accent-default);
+          background: var(--ds-accent-subtle);
         }
         
         .file-drag-handle {
           cursor: grab;
-          color: var(--text-tertiary, #6a737d);
+          color: var(--ds-text-tertiary);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1168,7 +1220,7 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         
         .file-name {
           font-weight: 500;
-          color: var(--text-primary, #24292e);
+          color: var(--ds-text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1176,7 +1228,7 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         
         .file-size {
           font-size: 12px;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
         }
         
         .file-status {
@@ -1188,20 +1240,20 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         .progress-bar {
           width: 80px;
           height: 6px;
-          background: var(--bg-tertiary, #e1e4e8);
+          background: var(--ds-border-default);
           border-radius: 3px;
           overflow: hidden;
         }
         
         .progress-fill {
           height: 100%;
-          background: var(--accent-color, #0366d6);
+          background: var(--ds-accent-default);
           transition: width 0.3s;
         }
         
         .progress-text {
           font-size: 12px;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           min-width: 36px;
         }
         
@@ -1213,33 +1265,33 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         }
         
         .status-pending {
-          background: var(--bg-tertiary, #e1e4e8);
-          color: var(--text-secondary, #586069);
+          background: var(--ds-border-default);
+          color: var(--ds-text-secondary);
         }
         
         .status-uploading {
-          background: #dbedff;
-          color: #0969da;
+          background: var(--ds-accent-subtle);
+          color: var(--ds-accent-default);
         }
         
         .status-completed {
-          background: #dafbe1;
-          color: #1a7f37;
+          background: var(--ds-success-subtle);
+          color: var(--ds-success-default);
         }
         
         .status-error {
-          background: #ffebe9;
-          color: #cf222e;
+          background: var(--ds-danger-subtle);
+          color: var(--ds-danger-default);
         }
         
         .status-paused {
-          background: #fff8c5;
-          color: #9a6700;
+          background: var(--ds-warning-subtle);
+          color: var(--ds-warning-default);
         }
         
         .status-skipped {
-          background: #fff8c5;
-          color: #9a6700;
+          background: var(--ds-warning-subtle);
+          color: var(--ds-warning-default);
         }
         
         .queue-btn {
@@ -1254,7 +1306,7 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         
         .pause-btn:hover,
         .resume-btn:hover {
-          background: var(--bg-tertiary, #e1e4e8);
+          background: var(--ds-border-default);
         }
         
         .file-actions {
@@ -1267,7 +1319,7 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
           background: none;
           border: none;
           cursor: pointer;
-          color: var(--text-tertiary, #6a737d);
+          color: var(--ds-text-tertiary);
           font-size: 16px;
           padding: 4px 8px;
           border-radius: 4px;
@@ -1276,13 +1328,13 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         }
         
         .retry-btn:hover {
-          color: var(--accent-color, #0366d6);
-          background: var(--bg-hover, #e6f3ff);
+          color: var(--ds-accent-default);
+          background: var(--ds-accent-subtle);
         }
         
         .remove-btn:hover {
-          color: #cf222e;
-          background: #ffebe9;
+          color: var(--ds-danger-default);
+          background: var(--ds-danger-subtle);
         }
         
         .action-bar {
@@ -1302,12 +1354,12 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         
         .file-count {
           font-size: 12px;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           white-space: nowrap;
         }
         
         .error-count {
-          color: #cf222e;
+          color: var(--ds-danger-default);
         }
         
         .btn {
@@ -1320,54 +1372,54 @@ const ChunkedUploader = forwardRef<ChunkedUploaderRef, ChunkedUploaderProps>(({
         }
         
         .btn-secondary {
-          background: var(--bg-secondary, #f6f8fa);
-          border: 1px solid var(--border-color, #e1e4e8);
-          color: var(--text-primary, #24292e);
+          background: var(--ds-surface-subtle);
+          border: 1px solid var(--ds-border-default);
+          color: var(--ds-text-primary);
         }
         
         .btn-secondary:hover {
-          background: var(--bg-tertiary, #e1e4e8);
+          background: var(--ds-border-default);
         }
         
         .btn-primary {
-          background: var(--accent-color, #0366d6);
-          border: 1px solid var(--accent-color, #0366d6);
+          background: var(--ds-accent-default);
+          border: 1px solid var(--ds-accent-default);
           color: #fff;
         }
         
         .btn-primary:hover {
-          background: #0256b9;
+          background: var(--ds-accent-default);
         }
         
         .btn-primary:disabled {
-          background: var(--bg-tertiary, #e1e4e8);
-          border-color: var(--border-color, #e1e4e8);
-          color: var(--text-tertiary, #6a737d);
+          background: var(--ds-border-default);
+          border-color: var(--ds-border-default);
+          color: var(--ds-text-tertiary);
           cursor: not-allowed;
         }
         
         .btn-outline {
           background: transparent;
-          border: 1px solid var(--border-color, #e1e4e8);
-          color: var(--text-primary, #24292e);
+          border: 1px solid var(--ds-border-default);
+          color: var(--ds-text-primary);
           padding: 6px 12px;
           font-size: 12px;
         }
         
         .btn-outline:hover {
-          background: var(--bg-secondary, #f6f8fa);
-          border-color: var(--text-secondary, #586069);
+          background: var(--ds-surface-subtle);
+          border-color: var(--ds-text-secondary);
         }
         
         .btn-outline.btn-danger:hover {
-          background: #ffebe9;
-          border-color: #cf222e;
-          color: #cf222e;
+          background: var(--ds-danger-subtle);
+          border-color: var(--ds-danger-default);
+          color: var(--ds-danger-default);
         }
         
         .upload-info {
           font-size: 12px;
-          color: var(--text-secondary, #586069);
+          color: var(--ds-text-secondary);
           margin-top: 8px;
         }
       `}</style>

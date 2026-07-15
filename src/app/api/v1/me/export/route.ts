@@ -5,28 +5,24 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/me/export
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 
 // POST /api/v1/me/export - 申请导出用户数据
-export async function POST(
-  req: NextRequest
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.UNAUTHORIZED();
-    }
-
-    const body = await req.json();
-    const exportType: string = body.exportType || 'all';
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    exportType: z.enum(['all', 'repos']).optional().default('all'),
+  }),
+  async handler({ user, body }) {
+    const exportType = body.exportType;
 
     if (exportType === 'repos') {
       // 仅导出仓库元数据
       const repositories = await prisma.repository.findMany({
-        where: { ownerId: auth.id, deletedAt: null },
+        where: { ownerId: user!.id, deletedAt: null },
         select: {
           id: true,
           name: true,
@@ -48,9 +44,9 @@ export async function POST(
     }
 
     // exportType === 'all'：导出所有数据
-    const [user, repositories, discussions, comments, stars, activity] = await Promise.all([
+    const [userData, repositories, discussions, comments, stars, activity] = await Promise.all([
       prisma.user.findUnique({
-        where: { id: auth.id },
+        where: { id: user!.id },
         select: {
           id: true,
           username: true,
@@ -63,7 +59,7 @@ export async function POST(
         },
       }),
       prisma.repository.findMany({
-        where: { ownerId: auth.id, deletedAt: null },
+        where: { ownerId: user!.id, deletedAt: null },
         select: {
           id: true,
           name: true,
@@ -75,7 +71,7 @@ export async function POST(
         },
       }),
       prisma.discussion.findMany({
-        where: { authorId: auth.id, isDeleted: false },
+        where: { authorId: user!.id, isDeleted: false },
         select: {
           id: true,
           title: true,
@@ -86,7 +82,7 @@ export async function POST(
         },
       }),
       prisma.discussionComment.findMany({
-        where: { authorId: auth.id, isDeleted: false },
+        where: { authorId: user!.id, isDeleted: false },
         select: {
           id: true,
           discussionId: true,
@@ -96,7 +92,7 @@ export async function POST(
         },
       }),
       prisma.star.findMany({
-        where: { userId: auth.id },
+        where: { userId: user!.id },
         include: {
           repo: {
             select: {
@@ -108,7 +104,7 @@ export async function POST(
         },
       }),
       prisma.userActivityLog.findMany({
-        where: { userId: auth.id },
+        where: { userId: user!.id },
         orderBy: { createdAt: 'desc' },
         take: 1000,
         select: {
@@ -123,15 +119,12 @@ export async function POST(
 
     return success({
       exportType: 'all',
-      profile: user,
+      profile: userData,
       repositories,
       discussions,
       comments,
       stars,
       activity,
     });
-  } catch (err) {
-    console.error('[Export] POST Error:', err);
-    return errors.INTERNAL_SERVER_ERROR();
-  }
-}
+  },
+});

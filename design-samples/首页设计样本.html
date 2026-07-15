@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设计样本 — 陶土暖色系</title>
+<style>
+/* ============================================
+   Design Tokens — 陶土暖色系
+   灵感: Claude 官网配色
+   ============================================ */
+:root {
+  /* 主色 — 陶土橙 */
+  --color-primary: #C15F3C;
+  --color-primary-hover: #D47A4E;
+  --color-primary-subtle: rgba(193, 95, 60, 0.08);
+  --color-primary-muted: rgba(193, 95, 60, 0.15);
+
+  /* 背景 */
+  --color-bg-page: #FAF9F5;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-subtle: #F5F2EC;
+  --color-bg-inset: #F0EDE6;
+  --color-bg-overlay: rgba(245, 242, 236, 0.92);
+
+  /* 边框 */
+  --color-border-default: #E8E3DA;
+  --color-border-muted: #EEE9E2;
+  --color-border-strong: #D9D2C7;
+
+  /* 文字 */
+  --color-text-primary: #3B3228;
+  --color-text-secondary: #7A6E62;
+  --color-text-tertiary: #A0958B;
+  --color-text-inverse: #FFFFFF;
+
+  /* 语义色 */
+  --color-success: #4A8B5C;
+  --color-success-subtle: rgba(74, 139, 92, 0.1);
+  --color-danger: #C8483C;
+  --color-danger-subtle: rgba(200, 72, 60, 0.08);
+  --color-warning: #B8862D;
+
+  /* 内容/文档 */
+  --color-code-bg: #F8F6F1;
+  --color-code-border: #EBE5DA;
+
+  /* 间距 */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --space-8: 32px; --space-10: 40px; --space-12: 48px;
+
+  /* 圆角 */
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 3px rgba(59, 50, 40, 0.04);
+  --shadow-md: 0 4px 16px rgba(59, 50, 40, 0.06);
+  --shadow-lg: 0 8px 32px rgba(59, 50, 40, 0.1);
+
+  /* 字体 */
+  --font-display: 'Georgia', 'Noto Serif SC', 'Source Han Serif SC', serif;
+  --font-body: 'Charter', 'Georgia', 'Noto Serif SC', serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* 布局 */
+  --header-height: 64px;
+  --sidebar-width: 260px;
+}
+
+/* 暗色模式 */
+.dark {
+  --color-bg-page: #1E1B18;
+  --color-bg-surface: #272420;
+  --color-bg-subtle: #2F2B27;
+  --color-bg-inset: #1A1714;
+  --color-bg-overlay: rgba(39, 36, 32, 0.95);
+  --color-border-default: #3A3530;
+  --color-border-muted: #332F2B;
+  --color-border-strong: #4A4540;
+  --color-text-primary: #E8E0D8;
+  --color-text-secondary: #A0988E;
+  --color-text-tertiary: #706860;
+  --color-code-bg: #2A2622;
+  --color-code-border: #3A3530;
+  --color-primary-subtle: rgba(193, 95, 60, 0.15);
+  --color-primary-muted: rgba(193, 95, 60, 0.25);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================
+   Reset & Base
+   ============================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.header {
+  position: sticky; top: 0; z-index: 50;
+  height: var(--header-height);
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border-default);
+  display: flex; align-items: center; padding: 0 var(--space-6);
+  gap: var(--space-4);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+.header-logo {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: 20px; font-weight: 700; color: var(--color-primary);
+  text-decoration: none;
+}
+.header-logo svg { width: 28px; height: 28px; opacity: 0.9; }
+.header-nav { display: flex; gap: var(--space-1); margin-left: var(--space-4); }
+.header-nav a {
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
+  font-family: var(--font-ui); font-size: 14px; font-weight: 500;
+  color: var(--color-text-secondary); text-decoration: none;
+  transition: all 0.15s;
+}
+.header-nav a:hover, .header-nav a.active { color: var(--color-text-primary); background: var(--color-bg-subtle); }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
+.header-search {
+  padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-default); background: var(--color-bg-inset);
+  font-family: var(--font-ui); font-size: 13px; color: var(--color-text-primary);
+  width: 240px; outline: none; transition: border-color 0.2s;
+}
+.header-search:focus { border-color: var(--color-primary); }
+.header-search::placeholder { color: var(--color-text-tertiary); }
+
+/* ============================================
+   Theme Toggle
+   ============================================ */
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-default); background: var(--color-bg-surface);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-secondary); transition: all 0.2s;
+}
+.theme-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+/* ============================================
+   Main Layout — 平台三栏
+   ============================================ */
+.layout {
+  display: flex; min-height: calc(100vh - var(--header-height));
+  max-width: 1440px; margin: 0 auto;
+}
+.sidebar-left {
+  width: var(--sidebar-width); flex-shrink: 0;
+  padding: var(--space-6) var(--space-4);
+  border-right: 1px solid var(--color-border-muted);
+  overflow-y: auto; position: sticky; top: var(--header-height);
+  height: calc(100vh - var(--header-height));
+}
+.main-content {
+  flex: 1; min-width: 0;
+  padding: var(--space-6);
+}
+.sidebar-right {
+  width: 280px; flex-shrink: 0;
+  padding: var(--space-6) var(--space-4);
+  border-left: 1px solid var(--color-border-muted);
+  overflow-y: auto; position: sticky; top: var(--header-height);
+  height: calc(100vh - var(--header-height));
+}
+
+/* 响应式 */
+@media (max-width: 1024px) { .sidebar-right { display: none; } }
+@media (max-width: 768px) { .sidebar-left { display: none; } }
+
+/* ============================================
+   Sidebar Styles
+   ============================================ */
+.sidebar-section { margin-bottom: var(--space-6); }
+.sidebar-title {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2); padding: 0 var(--space-2);
+}
+.sidebar-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-2); border-radius: var(--radius-sm);
+  font-family: var(--font-ui); font-size: 14px; color: var(--color-text-secondary);
+  text-decoration: none; transition: all 0.12s;
+}
+.sidebar-item:hover { background: var(--color-bg-subtle); color: var(--color-text-primary); }
+.sidebar-item.active { background: var(--color-primary-subtle); color: var(--color-primary); font-weight: 600; }
+.sidebar-item .count {
+  margin-left: auto; font-size: 12px; font-weight: 600;
+  padding: 1px 6px; border-radius: 10px;
+  background: var(--color-bg-inset); color: var(--color-text-tertiary);
+}
+.sidebar-divider { border: none; border-top: 1px solid var(--color-border-muted); margin: var(--space-4) 0; }
+
+/* ============================================
+   Cards
+   ============================================ */
+.card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  transition: box-shadow 0.2s, border-color 0.2s, background 0.3s;
+}
+.card:hover { border-color: var(--color-border-strong); }
+.card-elevated {
+  composes: card;
+  box-shadow: var(--shadow-sm);
+  border-color: var(--color-border-muted);
+}
+.card-subtle {
+  background: var(--color-bg-subtle);
+  border-color: var(--color-border-muted);
+}
+
+.repo-card {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border-muted);
+  transition: background 0.15s, border-color 0.15s;
+}
+.repo-card:last-child { border-bottom: none; }
+.repo-card:hover { background: var(--color-bg-subtle); }
+
+.repo-card-title {
+  display: flex; align-items: baseline; gap: var(--space-1);
+  font-family: var(--font-ui); font-size: 14px; margin-bottom: var(--space-1);
+}
+.repo-card-title a {
+  color: var(--color-primary); text-decoration: none; font-weight: 600;
+}
+.repo-card-title a:hover { text-decoration: underline; }
+.repo-card-title .owner { color: var(--color-text-secondary); font-weight: 400; }
+.repo-card-desc {
+  font-family: var(--font-body); font-size: 14px; color: var(--color-text-secondary);
+  line-height: 1.5; margin-bottom: var(--space-2);
+}
+.repo-card-meta {
+  display: flex; align-items: center; gap: var(--space-4);
+  font-family: var(--font-ui); font-size: 12px; color: var(--color-text-tertiary);
+}
+.repo-card-meta svg { width: 14px; height: 14px; opacity: 0.6; }
+
+/* ============================================
+   Buttons
+   ============================================ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-ui); font-size: 14px; font-weight: 600;
+  border-radius: var(--radius-sm); border: 1px solid transparent;
+  cursor: pointer; transition: all 0.15s; text-decoration: none;
+}
+.btn-primary { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+.btn-primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+.btn-secondary { background: var(--color-bg-surface); color: var(--color-text-primary); border-color: var(--color-border-default); }
+.btn-secondary:hover { background: var(--color-bg-subtle); border-color: var(--color-border-strong); }
+.btn-ghost { background: transparent; color: var(--color-text-secondary); }
+.btn-ghost:hover { background: var(--color-bg-subtle); color: var(--color-text-primary); }
+.btn-sm { padding: var(--space-1) var(--space-2); font-size: 12px; }
+.btn-lg { padding: var(--space-3) var(--space-6); font-size: 14px; }
+
+/* ============================================
+   Section Headers
+   ============================================ */
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+.section-title {
+  font-family: var(--font-display); font-size: 18px; font-weight: 700;
+  color: var(--color-text-primary);
+}
+.section-subtitle {
+  font-family: var(--font-ui); font-size: 13px; color: var(--color-text-tertiary);
+  margin-top: var(--space-1);
+}
+
+/* ============================================
+   Motto
+   ============================================ */
+.motto {
+  text-align: center; padding: var(--space-6) 0 var(--space-4);
+}
+.motto-text {
+  font-family: var(--font-display); font-size: 20px; font-weight: 400;
+  color: var(--color-text-secondary); letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+.motto-line {
+  display: block; width: 40px; height: 2px;
+  background: var(--color-primary); opacity: 0.4;
+  margin: var(--space-3) auto 0;
+  border-radius: 1px;
+}
+
+/* ============================================
+   Stat Bar
+   ============================================ */
+.stats {
+  display: flex; gap: 0;
+  border: 1px solid var(--color-border-default); border-radius: var(--radius-md);
+  overflow: hidden; margin-bottom: var(--space-6);
+}
+.stat {
+  flex: 1; text-align: center; padding: var(--space-4) var(--space-6);
+  border-right: 1px solid var(--color-border-muted);
+}
+.stat:last-child { border-right: none; }
+.stat-value {
+  font-family: var(--font-display); font-size: 26px; font-weight: 700;
+  color: var(--color-primary); line-height: 1.2;
+}
+.stat-label {
+  font-family: var(--font-ui); font-size: 12px; color: var(--color-text-tertiary);
+  margin-top: var(--space-1); text-transform: uppercase; letter-spacing: 0.05em;
+}
+
+/* ============================================
+   Right Sidebar
+   ============================================ */
+.sidebar-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4); margin-bottom: var(--space-4);
+}
+.sidebar-card h4 {
+  font-family: var(--font-display); font-size: 14px; font-weight: 700;
+  color: var(--color-text-primary); margin-bottom: var(--space-3);
+}
+.tip-item {
+  font-family: var(--font-ui); font-size: 13px; color: var(--color-text-secondary);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border-muted);
+  line-height: 1.4;
+}
+.tip-item:last-child { border-bottom: none; }
+
+/* ============================================
+   Tabs
+   ============================================ */
+.tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--color-border-default);
+  margin-bottom: var(--space-4);
+}
+.tab {
+  padding: var(--space-2) var(--space-4); font-family: var(--font-ui);
+  font-size: 14px; font-weight: 500; color: var(--color-text-secondary);
+  cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--color-text-primary); }
+.tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+
+/* ============================================
+   Input
+   ============================================ */
+.input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-default); border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  font-family: var(--font-ui); font-size: 14px; color: var(--color-text-primary);
+  width: 100%; outline: none; transition: border-color 0.2s;
+}
+.input:focus { border-color: var(--color-primary); }
+.input::placeholder { color: var(--color-text-tertiary); }
+
+/* ============================================
+   Badge
+   ============================================ */
+.badge {
+  display: inline-flex; align-items: center; padding: 2px 8px;
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  border-radius: 10px;
+}
+.badge-primary { background: var(--color-primary-subtle); color: var(--color-primary); }
+.badge-success { background: var(--color-success-subtle); color: var(--color-success); }
+.badge-warning { background: rgba(184,134,45,0.12); color: var(--color-warning); }
+
+/* ============================================
+   Footer
+   ============================================ */
+.footer {
+  border-top: 1px solid var(--color-border-default);
+  padding: var(--space-6);
+  text-align: center;
+  font-family: var(--font-ui); font-size: 13px; color: var(--color-text-tertiary);
+}
+.footer a { color: var(--color-text-secondary); text-decoration: none; margin: 0 var(--space-2); }
+.footer a:hover { color: var(--color-primary); }
+
+/* ============================================
+   Code Block
+   ============================================ */
+.code-block {
+  background: var(--color-code-bg); border: 1px solid var(--color-code-border);
+  border-radius: var(--radius-md); padding: var(--space-4);
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.7;
+  color: var(--color-text-primary); overflow-x: auto;
+  margin-bottom: var(--space-6);
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <a href="#" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="currentColor"><path d="M16 2C8.268 2 2 8.268 2 16c0 6.084 3.993 11.247 9.548 13.085.697.129.953-.303.953-.674 0-.332-.012-1.213-.018-2.38-3.876.842-4.694-1.869-4.694-1.869-.634-1.612-1.548-2.041-1.548-2.041-1.266-.866.096-.849.096-.849 1.4.099 2.137 1.438 2.137 1.438 1.244 2.131 3.263 1.515 4.057 1.159.126-.901.486-1.515.884-1.863-3.098-.353-6.354-1.549-6.354-6.894 0-1.523.544-2.769 1.438-3.745-.144-.353-.623-1.775.137-3.694 0 0 1.173-.375 3.857 1.43A13.38 13.38 0 0116 8.37c1.185.002 2.38.16 3.494.469 2.682-1.805 3.855-1.43 3.855-1.43.761 1.919.282 3.341.138 3.694.895.976 1.437 2.222 1.437 3.745 0 5.354-3.259 6.539-6.366 6.886.501.431.947 1.28 1.17 1.996.103.2.185.593.185 1.195 0 .865-.013 1.561-.013 1.774 0 .373.254.809 1.959.668C26.01 27.243 30 22.083 30 16c0-7.732-6.268-14-14-14z"/></svg>
+    陶土设计
+  </a>
+  <nav class="header-nav">
+    <a href="#" class="active">首页</a>
+    <a href="#">文章</a>
+    <a href="#">社区</a>
+    <a href="#">发现</a>
+  </nav>
+  <div class="header-right">
+    <input class="header-search" placeholder="搜索文章、话题..." />
+    <button class="btn btn-primary">注册</button>
+    <button class="theme-toggle" onclick="document.body.classList.toggle('dark')" title="切换主题">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- Three-column layout -->
+<div class="layout">
+
+  <!-- Left Sidebar -->
+  <aside class="sidebar-left">
+    <div class="sidebar-section">
+      <div class="sidebar-title">快捷导航</div>
+      <a href="#" class="sidebar-item active">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        首页
+      </a>
+      <a href="#" class="sidebar-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        发现
+      </a>
+      <a href="#" class="sidebar-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        社区
+      </a>
+    </div>
+
+    <hr class="sidebar-divider">
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">你的文章</div>
+      <a href="#" class="sidebar-item">设计系统入门 <span class="count">12</span></a>
+      <a href="#" class="sidebar-item">组件开发指南 <span class="count">3</span></a>
+      <a href="#" class="sidebar-item">色彩理论基础</a>
+      <a href="#" class="sidebar-item" style="color: var(--color-text-tertiary);">+ 查看全部 8 篇文章</a>
+    </div>
+
+    <hr class="sidebar-divider">
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">最近活跃</div>
+      <a href="#" class="sidebar-item">排版与字体设计</a>
+      <a href="#" class="sidebar-item">暗色模式实践</a>
+      <a href="#" class="sidebar-item">设计规范整理</a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Motto -->
+    <div class="motto">
+      <p class="motto-text">天下万般绝学，莫过于恒心</p>
+      <span class="motto-line"></span>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value">2,847</div>
+        <div class="stat-label">文章</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">5,312</div>
+        <div class="stat-label">创作者</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">18,429</div>
+        <div class="stat-label">话题</div>
+      </div>
+    </div>
+
+    <!-- Content Tabs -->
+    <div class="tabs">
+      <div class="tab active">热门文章</div>
+      <div class="tab">最新</div>
+      <div class="tab">推荐</div>
+    </div>
+
+    <!-- 文章卡片 -->
+    <div class="card card-elevated" style="margin-bottom: var(--space-3);">
+      <div class="repo-card">
+        <div class="repo-card-title">
+          <span class="owner">林知夏</span><span>/</span><a href="#">设计系统从零到一</a>
+          <span class="badge badge-primary" style="margin-left: var(--space-2);">热门</span>
+        </div>
+        <div class="repo-card-desc">从零开始构建一套完整的设计系统，涵盖设计令牌、组件规范和文档编写，帮助团队建立统一的设计语言。</div>
+        <div class="repo-card-meta">
+          <span>📄 12 章节</span>
+          <span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> 1.2k</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9"/><path d="M12 12v3"/></svg> 340</span>
+          <span>更新于 2 小时前</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-title">
+          <span class="owner">陈墨白</span><span>/</span><a href="#">组件化开发的哲学</a>
+          <span class="badge badge-warning" style="margin-left: var(--space-2);">Trending</span>
+        </div>
+        <div class="repo-card-desc">深入探讨组件化开发的思想与方法论，从原子设计到复合组件的演进之路，实践与理论并重。</div>
+        <div class="repo-card-meta">
+          <span>📄 8 章节</span>
+          <span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> 856</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9"/><path d="M12 12v3"/></svg> 127</span>
+          <span>更新于 5 小时前</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-title">
+          <span class="owner">苏染青</span><span>/</span><a href="#">色彩与情感的关联</a>
+        </div>
+        <div class="repo-card-desc">探索色彩心理学的前沿研究，从古代陶土色系到现代数字界面，揭示色彩如何影响用户的情绪与行为。</div>
+        <div class="repo-card-meta">
+          <span>📄 6 章节</span>
+          <span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> 2.4k</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9"/><path d="M12 12v3"/></svg> 512</span>
+          <span>更新于 昨天</span>
+        </div>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card-title">
+          <span class="owner">顾长风</span><span>/</span><a href="#">排版节奏与呼吸感</a>
+          <span class="badge badge-success" style="margin-left: var(--space-2);">新</span>
+        </div>
+        <div class="repo-card-desc">好的排版让阅读成为一种享受。从字体选择到行距、字距的微调，打造具有呼吸感的文字编排。</div>
+        <div class="repo-card-meta">
+          <span>📄 10 章节</span>
+          <span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> 3.1k</span>
+          <span>更新于 3 分钟前</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div style="text-align: center; padding: var(--space-10); color: var(--color-text-tertiary);">
+      <p style="font-family: var(--font-display); font-size: 14px;">发现更多精彩内容</p>
+      <p style="font-size: 14px; margin-top: var(--space-1);">浏览社区中最受欢迎的文章，或发布你的第一篇创作。</p>
+      <a href="#" class="btn btn-primary" style="margin-top: var(--space-4);">写文章</a>
+    </div>
+
+    <!-- 内容预览示例 -->
+    <div class="code-block">
+<h2>设计系统从零到一</h2>
+
+<p>一套完整的设计系统应包含以下核心要素：</p>
+
+<ul>
+  <li><strong>设计令牌/</strong> — 颜色、间距、圆角等基本原子</li>
+  <li><strong>组件库/</strong> — 按钮、卡片、弹窗等可复用单元</li>
+  <li><strong>使用文档/</strong> — 规范说明与最佳实践</li>
+  <li><strong>资源文件/</strong> — 图标、字体等设计资源</li>
+</ul>
+
+<blockquote>好的设计系统像一门语言，让团队沟通更高效。</blockquote>
+    </div>
+  </main>
+
+  <!-- Right Sidebar -->
+  <aside class="sidebar-right">
+    <div class="sidebar-card">
+      <h4>💡 快速开始</h4>
+      <div class="tip-item">发布一篇文章分享你的见解</div>
+      <div class="tip-item">浏览热门内容发现灵感</div>
+      <div class="tip-item">加入社区与创作者交流</div>
+      <div class="tip-item">完善个人资料让更多人找到你</div>
+    </div>
+
+    <div class="sidebar-card">
+      <h4>🔥 热门话题</h4>
+      <div class="tip-item" style="display: flex; justify-content: space-between;">
+        <span>#设计系统</span>
+        <span style="color: var(--color-text-tertiary); font-size:12px;">1.2k</span>
+      </div>
+      <div class="tip-item" style="display: flex; justify-content: space-between;">
+        <span>#交互体验</span>
+        <span style="color: var(--color-text-tertiary); font-size:12px;">3.4k</span>
+      </div>
+      <div class="tip-item" style="display: flex; justify-content: space-between;">
+        <span>#视觉设计</span>
+        <span style="color: var(--color-text-tertiary); font-size:12px;">5.6k</span>
+      </div>
+      <div class="tip-item" style="display: flex; justify-content: space-between;">
+        <span>#创意实践</span>
+        <span style="color: var(--color-text-tertiary); font-size:12px;">8.9k</span>
+      </div>
+    </div>
+
+    <div class="sidebar-card" style="background: var(--color-primary-subtle); border-color: transparent;">
+      <h4 style="color: var(--color-primary);">🎨 陶土暖色设计系统</h4>
+      <div class="tip-item" style="font-size: 13px; border: none; padding-top: 0;">
+        以自然陶土为灵感源泉。主色陶土橙 #C15F3C，背景暖米白 #FAF9F5，文字柔深棕。支持明暗双模式，营造温润舒适的阅读体验。
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Footer -->
+<footer class="footer">
+  <a href="#">关于</a>
+  <a href="#">帮助</a>
+  <a href="#">隐私</a>
+  <a href="#">条款</a>
+  <span style="margin-left: var(--space-2); opacity: 0.5;">© 2026 陶土设计系统</span>
+</footer>
+
+</body>
+</html>

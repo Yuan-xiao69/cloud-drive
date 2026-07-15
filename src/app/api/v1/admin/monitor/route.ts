@@ -6,18 +6,17 @@ export const dynamic = 'force-dynamic';
  * 所有数据均为真实数据，无模拟值。
  */
 
-import { NextRequest } from 'next/server';
+import { defineRoute } from '@/lib/framework/define-route';
 import os from 'os';
 import { success, errors } from '@/lib/api/v1';
-import { requireAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/v1/admin/monitor
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (!auth) {
-      return errors.unauthorized();
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     // 获取用户统计
@@ -120,41 +119,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       // 数据库连接
       databaseConnectionCount: connectionCount,
     });
-  } catch (error) {
-    console.error('Monitor API error:', error);
-    return success({
-      totalUsers: 0,
-      activeUsers: 0,
-      totalRepos: 0,
-      publicRepos: 0,
-      privateRepos: 0,
-      totalDiscussions: 0,
-      totalIssues: 0,
-      totalPRs: 0,
-      storageUsed: 0,
-      storageLimit: 100 * 1024 * 1024 * 1024,
-      cpuUsage: 0,
-      cpuCores: 0,
-      cpuLoadAvg: [0, 0, 0],
-      memoryUsage: 0,
-      memoryTotal: 0,
-      memoryUsed: 0,
-      memoryFree: 0,
-      uptime: 0,
-      osPlatform: '',
-      nodeVersion: '',
-      heapUsed: 0,
-      heapTotal: 0,
-      rss: 0,
-      requestCount: 0,
-      errorCount: 0,
-      auditTotal: 0,
-      auditToday: 0,
-      avgResponseTime: 0,
-      databaseConnectionCount: 0,
-    });
-  }
-}
+  },
+});
 
 /**
  * 获取真实系统性能指标

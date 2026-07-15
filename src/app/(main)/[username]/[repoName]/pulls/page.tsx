@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import Header from '@/components/layout/Header';
+import { Button, Input, Select, Field, PageLayout, PageLayoutContent, Modal, ModalFooter, Empty } from '@/components/design';
 import {
   Plus,
   Search,
@@ -13,42 +15,26 @@ import {
   Clock,
   GitBranch,
   ArrowRight,
-} from '@/components/ui/icons';
+} from '@/components/design/icons';
 import { formatTimeAgo } from '@/lib/utils';
-import { tokenManager } from '@/lib/api/client';
-
-interface PullRequest {
-  id: string;
-  title: string;
-  content: string;
-  status: string;
-  sourceBranch: string;
-  targetBranch: string;
-  sourceRepo?: {
-    id: string;
-    name: string;
-    owner: { username: string };
-  };
-  commentsCount: number;
-  authorUsername: string;
-  authorAvatar: string | null;
-  createdAt: string;
-}
+import { usePulls } from '@/components/repo/hooks/usePulls';
+import type { PullRequestItem } from '@/components/repo/hooks/usePulls';
+import { api } from '@/lib/api/client';
+import { useAuth } from '@/lib/providers';
+import toast from 'react-hot-toast';
 
 export default function PullsListPage() {
   const params = useParams();
   const username = params.username as string;
   const repoName = params.repoName as string;
 
-  const [pulls, setPulls] = useState<PullRequest[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
-  const [totalPages, setTotalPages] = useState(1);
-  const [status, setStatus] = useState<'open' | 'merged' | 'closed' | 'all'>('open');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const {
+    pulls, total, page, totalPages,
+    status, setStatus,
+    searchQuery, setSearchQuery,
+    isLoading, error,
+    setPage, fetchPulls,
+  } = usePulls({ username, repoName });
 
   // 创建 PR 模态框
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -57,24 +43,9 @@ export default function PullsListPage() {
   const [newSourceBranch, setNewSourceBranch] = useState('');
   const [newTargetBranch, setNewTargetBranch] = useState('main');
   const [isCreating, setIsCreating] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
   const [repoBranches, setRepoBranches] = useState<{name: string}[]>([]);
 
-  // 获取当前用户
-  useEffect(() => {
-    const token = tokenManager.getAccessToken();
-    if (!token) return;
-    fetch('/api/v1/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(d => {
-        if (d.code === 200) setCurrentUser(d.data);
-      })
-      .catch(() => {});
-  }, []);
-
-  // 获取分支列表
+  const { user: currentUser } = useAuth();
   useEffect(() => {
     fetch(`/api/v1/repos/${username}/${repoName}/branches`)
       .then(r => r.json())
@@ -90,66 +61,18 @@ export default function PullsListPage() {
       .catch(() => {});
   }, [username, repoName]);
 
-  // 获取 PRs
-  const fetchPulls = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const params = new URLSearchParams({
-        status: status === 'all' ? 'all' : status,
-        page: page.toString(),
-        size: pageSize.toString(),
-      });
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/pulls?${params}`);
-      const data = await res.json();
-      if (data.code === 200) {
-        setPulls(data.data.data);
-        setTotal(data.data.total);
-        setTotalPages(data.data.totalPages);
-      } else {
-        setError(data.message || '加载失败');
-      }
-    } catch {
-      setError('网络错误');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPulls();
-  }, [username, repoName, status, page]);
-
-  // 过滤搜索
-  const filteredPulls = searchQuery
-    ? pulls.filter(pr =>
-        pr.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        pr.content.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : pulls;
-
   // 创建 PR
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreate = async () => {
     if (!newTitle.trim() || !newSourceBranch) return;
 
     setIsCreating(true);
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/pulls`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
-          title: newTitle.trim(),
-          content: newContent.trim(),
-          sourceBranch: newSourceBranch,
-          targetBranch: newTargetBranch,
-        }),
+      const data = await api.post(`/api/v1/repos/${username}/${repoName}/pulls`, {
+        title: newTitle.trim(),
+        content: newContent.trim(),
+        sourceBranch: newSourceBranch,
+        targetBranch: newTargetBranch,
       });
-      const data = await res.json();
       if (data.code === 200) {
         setShowCreateModal(false);
         setNewTitle('');
@@ -157,10 +80,10 @@ export default function PullsListPage() {
         setNewSourceBranch(repoBranches.find(b => b.name !== 'main')?.name || '');
         fetchPulls();
       } else {
-        alert(data.message || '创建失败');
+        toast.error(data.message || '创建失败');
       }
     } catch {
-      alert('网络错误');
+      toast.error('网络错误');
     } finally {
       setIsCreating(false);
     }
@@ -170,11 +93,11 @@ export default function PullsListPage() {
   const StatusIcon = ({ status }: { status: string }) => {
     switch (status) {
       case 'open':
-        return <GitPullRequest size={20} className="status-icon open" />;
+        return <GitPullRequest size={20} className="text-[var(--ds-success-default)]" />;
       case 'merged':
-        return <GitMerge size={20} className="status-icon merged" />;
+        return <GitMerge size={20} className="text-[var(--ds-accent-default)]" />;
       case 'closed':
-        return <XCircle size={20} className="status-icon closed" />;
+        return <XCircle size={20} className="text-[var(--ds-danger-default)]" />;
       default:
         return <GitPullRequest size={20} />;
     }
@@ -191,142 +114,137 @@ export default function PullsListPage() {
   };
 
   return (
-    <div className="pulls-page">
+    <PageLayout containerWidth="medium"><PageLayoutContent>
+      <div className="py-8 px-6">
+        <Header />
       {/* Header */}
-      <div className="page-header">
-        <div className="header-left">
-          <h1>拉取请求</h1>
-          <span className="count-badge">{total}</span>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-[var(--ds-text-primary)] flex items-center gap-2 m-0">拉取请求</h1>
+          <span className="bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)] text-sm font-medium px-2 py-0.5 rounded-full">{total}</span>
         </div>
         {currentUser && (
-          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+          <Button variant="primary" onClick={() => setShowCreateModal(true)}>
             <Plus size={16} />
             新建拉取请求
-          </button>
+          </Button>
         )}
       </div>
 
       {/* 状态标签栏 */}
-      <div className="status-tabs">
-        <button
-          className={`status-tab ${status === 'open' ? 'active' : ''}`}
+      <div className="flex border-b border-[var(--ds-border-default)] mb-5">
+        <Button
+          variant="ghost"
+          className={`border-b-2 mb-[-1px] ${status === 'open' ? 'text-[var(--ds-text-primary)] border-[var(--ds-accent-default)] font-semibold' : 'text-[var(--ds-text-secondary)] border-transparent hover:text-[var(--ds-text-primary)]'}`}
           onClick={() => { setStatus('open'); setPage(1); }}
         >
-          <GitPullRequest size={16} />
+          <GitPullRequest size={16} className={status === 'open' ? 'text-[var(--ds-success-default)]' : ''} />
           开放
-        </button>
-        <button
-          className={`status-tab ${status === 'merged' ? 'active' : ''}`}
+        </Button>
+        <Button
+          variant="ghost"
+          className={`border-b-2 mb-[-1px] ${status === 'merged' ? 'text-[var(--ds-text-primary)] border-[var(--ds-accent-default)] font-semibold' : 'text-[var(--ds-text-secondary)] border-transparent hover:text-[var(--ds-text-primary)]'}`}
           onClick={() => { setStatus('merged'); setPage(1); }}
         >
-          <GitMerge size={16} />
+          <GitMerge size={16} className={status === 'merged' ? 'text-[var(--ds-accent-default)]' : ''} />
           已合并
-        </button>
-        <button
-          className={`status-tab ${status === 'closed' ? 'active' : ''}`}
+        </Button>
+        <Button
+          variant="ghost"
+          className={`border-b-2 mb-[-1px] ${status === 'closed' ? 'text-[var(--ds-text-primary)] border-[var(--ds-accent-default)] font-semibold' : 'text-[var(--ds-text-secondary)] border-transparent hover:text-[var(--ds-text-primary)]'}`}
           onClick={() => { setStatus('closed'); setPage(1); }}
         >
-          <XCircle size={16} />
+          <XCircle size={16} className={status === 'closed' ? 'text-[var(--ds-danger-default)]' : ''} />
           已关闭
-        </button>
-        <button
-          className={`status-tab ${status === 'all' ? 'active' : ''}`}
+        </Button>
+        <Button
+          variant="ghost"
+          className={`border-b-2 mb-[-1px] ${status === 'all' ? 'text-[var(--ds-text-primary)] border-[var(--ds-accent-default)] font-semibold' : 'text-[var(--ds-text-secondary)] border-transparent hover:text-[var(--ds-text-primary)]'}`}
           onClick={() => { setStatus('all'); setPage(1); }}
         >
           全部
-        </button>
+        </Button>
       </div>
 
       {/* 搜索栏 */}
-      <div className="search-bar">
-        <Search size={16} />
-        <input
-          type="text"
-          placeholder="搜索拉取请求..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-        />
-      </div>
+      <Input
+        icon={<Search size={16} />}
+        wrapperClassName="mb-5"
+        placeholder="搜索拉取请求..."
+        value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
+      />
 
       {/* 列表 */}
       {isLoading ? (
-        <div className="loading-state">
-          <div className="loading-spinner" />
-          <span>加载中...</span>
-        </div>
+        <Empty
+          icon={<div className="w-5 h-5 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] rounded-full animate-spin" />}
+          title="加载中..."
+        />
       ) : error ? (
-        <div className="error-state">
-          <AlertCircle size={32} />
-          <p>{error}</p>
-          <button className="btn btn-secondary" onClick={fetchPulls}>重试</button>
-        </div>
-      ) : filteredPulls.length === 0 ? (
-        <div className="empty-state">
-          {status === 'open' ? (
-            <>
-              <GitPullRequest size={48} />
-              <h3>没有开放的拉取请求</h3>
-              <p>创建一个新的拉取请求来合并分支</p>
-              {currentUser && repoBranches.length > 1 && (
-                <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-                  创建第一个拉取请求
-                </button>
-              )}
-              {repoBranches.length <= 1 && (
-                <p className="hint">创建多个分支后才能创建拉取请求</p>
-              )}
-            </>
-          ) : (
-            <>
-              <GitMerge size={48} />
-              <h3>没有已合并的拉取请求</h3>
-              <p>已合并的拉取请求会显示在这里</p>
-            </>
-          )}
-        </div>
+        <Empty
+          icon={<AlertCircle size={32} className="text-[var(--ds-danger-default)]" />}
+          title={error}
+          action={{ label: '重试', onClick: fetchPulls }}
+        />
+      ) : pulls.length === 0 ? (
+        <>{status === 'open' ? (
+          <Empty
+            icon={<GitPullRequest size={40} />}
+            title="没有开放的拉取请求"
+            description={repoBranches.length <= 1 ? '创建多个分支后才能创建拉取请求' : '创建一个新的拉取请求来合并分支'}
+            action={currentUser && repoBranches.length > 1 ? { label: '创建第一个拉取请求', onClick: () => setShowCreateModal(true) } : undefined}
+          />
+        ) : (
+          <Empty
+            icon={<GitMerge size={40} />}
+            title="没有已合并的拉取请求"
+            description="已合并的拉取请求会显示在这里"
+          />
+        )}</>
       ) : (
-        <div className="pulls-list">
-          {filteredPulls.map(pr => (
+        <div className="flex flex-col border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] overflow-hidden">
+          {pulls.map(pr => (
             <Link
               key={pr.id}
               href={`/${username}/${repoName}/pulls/${pr.id}`}
-              className="pr-item"
+              className="flex gap-3 p-4 border-b border-[var(--ds-border-default)] no-underline text-[var(--ds-text-primary)] transition-colors hover:bg-[var(--ds-surface-subtle)] last:border-b-0"
             >
-              <div className="pr-status-icon">
+              <div className="flex-shrink-0 pt-0.5">
                 <StatusIcon status={pr.status} />
               </div>
-              <div className="pr-content">
-                <div className="pr-title-row">
-                  <span className="pr-title">{pr.title}</span>
-                  <span className={`status-badge ${pr.status}`}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <span className="text-[15px] font-medium text-[var(--ds-accent-default)]">{pr.title}</span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${pr.status === 'open' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' : pr.status === 'merged' ? 'bg-[var(--ds-accent-subtle)] text-[var(--ds-accent-default)]' : 'bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]'}`}>
                     {getStatusText(pr.status)}
                   </span>
                 </div>
-                <div className="pr-branch-info">
-                  <span className="branch-label">
+                <div className="flex items-center gap-1.5 mb-1.5 text-[13px]">
+                  <span className="flex items-center gap-1 text-[var(--ds-text-secondary)] bg-[var(--ds-surface-subtle)] px-2 py-0.5 rounded">
                     <GitBranch size={14} />
                     {pr.sourceBranch}
                   </span>
-                  <ArrowRight size={14} className="arrow" />
-                  <span className="branch-label">
+                  <ArrowRight size={14} className="text-[var(--ds-text-secondary)]" />
+                  <span className="flex items-center gap-1 text-[var(--ds-text-secondary)] bg-[var(--ds-surface-subtle)] px-2 py-0.5 rounded">
                     {pr.targetBranch}
                   </span>
                   {pr.sourceRepo && (
-                    <span className="cross-repo">
-                      ← 来自 {pr.sourceRepo.owner.username}/{pr.sourceRepo.name}
+                    <span className="text-xs text-[var(--ds-text-secondary)] ml-2">
+                      ← 来自 {pr.sourceRepo.fullName}
                     </span>
                   )}
                 </div>
-                <div className="pr-meta">
-                  <span className="meta-item">
-                    #{pr.id.slice(0, 8)} • 由 {pr.authorUsername} 提交
+                <div className="flex items-center gap-3 text-xs text-[var(--ds-text-secondary)]">
+                  <span className="flex items-center gap-1">
+                    #{pr.id.slice(0, 8)} • 由 {pr.author?.username} 提交
                   </span>
-                  <span className="meta-item">
+                  <span className="flex items-center gap-1">
                     <Clock size={12} />
                     {formatTimeAgo(pr.createdAt)}
                   </span>
                   {pr.commentsCount > 0 && (
-                    <span className="meta-item comments">
+                    <span className="flex items-center gap-1 text-[var(--ds-text-secondary)]">
                       💬 {pr.commentsCount} 条评论
                     </span>
                   )}
@@ -339,476 +257,91 @@ export default function PullsListPage() {
 
       {/* 分页 */}
       {totalPages > 1 && (
-        <div className="pagination">
-          <button
-            className="btn btn-secondary btn-sm"
+        <div className="flex justify-center items-center gap-4 mt-6">
+          <Button
+            variant="secondary"
             disabled={page <= 1}
             onClick={() => setPage(p => p - 1)}
           >
             上一页
-          </button>
-          <span className="page-info">
+          </Button>
+          <span className="text-sm text-[var(--ds-text-secondary)]">
             第 {page} / {totalPages} 页，共 {total} 条
           </span>
-          <button
-            className="btn btn-secondary btn-sm"
+          <Button
+            variant="secondary"
             disabled={page >= totalPages}
             onClick={() => setPage(p => p + 1)}
           >
             下一页
-          </button>
+          </Button>
         </div>
       )}
 
       {/* 创建模态框 */}
-      {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>新建拉取请求</h2>
-              <button className="modal-close" onClick={() => setShowCreateModal(false)}>
-                ×
-              </button>
-            </div>
-            <form onSubmit={handleCreate}>
-              <div className="form-group">
-                <label>标题 *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  placeholder="拉取请求标题"
-                  autoFocus
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>描述</label>
-                <textarea
-                  className="form-input"
-                  rows={6}
-                  value={newContent}
-                  onChange={e => setNewContent(e.target.value)}
-                  placeholder="详细描述你的更改..."
-                />
-              </div>
-              <div className="branch-select-row">
-                <div className="form-group">
-                  <label>源分支 *</label>
-                  <select
-                    className="form-select"
-                    value={newSourceBranch}
-                    onChange={e => setNewSourceBranch(e.target.value)}
-                    required
-                  >
-                    {repoBranches
-                      .filter(b => b.name !== newTargetBranch)
-                      .map(b => (
-                        <option key={b.name} value={b.name}>{b.name}</option>
-                      ))}
-                  </select>
-                </div>
-                <div className="branch-arrow">
-                  <ArrowRight size={24} />
-                </div>
-                <div className="form-group">
-                  <label>目标分支 *</label>
-                  <select
-                    className="form-select"
-                    value={newTargetBranch}
-                    onChange={e => setNewTargetBranch(e.target.value)}
-                    required
-                  >
-                    {repoBranches
-                      .filter(b => b.name !== newSourceBranch)
-                      .map(b => (
-                        <option key={b.name} value={b.name}>{b.name}</option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
-                  取消
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={isCreating || !newTitle.trim() || !newSourceBranch}>
-                  {isCreating ? '创建中...' : '创建拉取请求'}
-                </button>
-              </div>
-            </form>
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="创建拉取请求"
+        maxWidth="560px"
+        footer={
+          <ModalFooter
+            onCancel={() => setShowCreateModal(false)}
+            onConfirm={handleCreate}
+            confirmLabel="创建拉取请求"
+            confirmLoading={isCreating}
+          />
+        }
+      >
+        <Field label="标题 *">
+          <Input
+            id="pr-new-title"
+            type="text"
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            placeholder="拉取请求标题"
+            required
+          />
+        </Field>
+        <Field label="描述">
+          <Input
+            id="pr-new-content"
+            multiline
+            rows={6}
+            value={newContent}
+            onChange={e => setNewContent(e.target.value)}
+            placeholder="详细描述你的更改..."
+          />
+        </Field>
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <Field label="源分支 *">
+              <Select
+                id="pr-source-branch"
+                value={newSourceBranch}
+                onChange={e => setNewSourceBranch(e.target.value)}
+                required
+                options={repoBranches.filter(b => b.name !== newTargetBranch).map(b => ({ value: b.name, label: b.name }))}
+              />
+            </Field>
+          </div>
+          <div className="pb-2 text-[var(--ds-text-secondary)]">
+            <ArrowRight size={24} />
+          </div>
+          <div className="flex-1">
+            <Field label="目标分支 *">
+              <Select
+                id="pr-target-branch"
+                value={newTargetBranch}
+                onChange={e => setNewTargetBranch(e.target.value)}
+                required
+                options={repoBranches.filter(b => b.name !== newSourceBranch).map(b => ({ value: b.name, label: b.name }))}
+              />
+            </Field>
           </div>
         </div>
-      )}
-
-      <style jsx global>{`
-        .pulls-page {
-          max-width: 900px;
-          margin: 0 auto;
-          padding: 32px 24px;
-        }
-
-        .page-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-        }
-
-        .page-header h1 {
-          font-size: 24px;
-          font-weight: 600;
-          margin: 0;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .count-badge {
-          background: var(--skeleton-bg);
-          color: var(--color-text-secondary);
-          font-size: 14px;
-          font-weight: 500;
-          padding: 2px 8px;
-          border-radius: 20px;
-        }
-
-        .status-tabs {
-          display: flex;
-          gap: 0;
-          border-bottom: 1px solid var(--border-color);
-          margin-bottom: 20px;
-        }
-
-        .status-tab {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 16px;
-          border: none;
-          background: none;
-          color: var(--color-text-secondary);
-          font-size: 14px;
-          cursor: pointer;
-          border-bottom: 2px solid transparent;
-          margin-bottom: -1px;
-          transition: all 0.2s;
-        }
-
-        .status-tab:hover {
-          color: var(--color-text);
-        }
-
-        .status-tab.active {
-          color: var(--color-text);
-          border-bottom-color: var(--accent-color);
-        }
-
-        .status-tab .status-icon.open {
-          color: var(--color-success-fg);
-        }
-
-        .status-tab .status-icon.merged {
-          color: #8250df;
-        }
-
-        .status-tab .status-icon.closed {
-          color: var(--color-danger-fg);
-        }
-
-        .search-bar {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          background: var(--input-bg);
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          margin-bottom: 20px;
-        }
-
-        .search-bar svg {
-          color: var(--color-text-secondary);
-          flex-shrink: 0;
-        }
-
-        .search-bar input {
-          flex: 1;
-          border: none;
-          background: none;
-          font-size: 14px;
-          color: var(--color-text);
-          outline: none;
-        }
-
-        .pulls-list {
-          display: flex;
-          flex-direction: column;
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          overflow: hidden;
-        }
-
-        .pr-item {
-          display: flex;
-          gap: 12px;
-          padding: 16px;
-          border-bottom: 1px solid var(--border-color);
-          text-decoration: none;
-          color: inherit;
-          transition: background 0.15s;
-        }
-
-        .pr-item:last-child {
-          border-bottom: none;
-        }
-
-        .pr-item:hover {
-          background: var(--hover-bg);
-        }
-
-        .pr-status-icon {
-          flex-shrink: 0;
-          padding-top: 2px;
-        }
-
-        .status-icon.open {
-          color: var(--color-success-fg);
-        }
-
-        .status-icon.merged {
-          color: #8250df;
-        }
-
-        .status-icon.closed {
-          color: var(--color-danger-fg);
-        }
-
-        .pr-content {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .pr-title-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-bottom: 6px;
-        }
-
-        .pr-title {
-          font-size: 15px;
-          font-weight: 500;
-          color: var(--link-color);
-        }
-
-        .status-badge {
-          font-size: 12px;
-          font-weight: 500;
-          padding: 2px 8px;
-          border-radius: 100px;
-        }
-
-        .status-badge.open {
-          background: var(--color-success-bg);
-          color: var(--color-success-fg);
-        }
-
-        .status-badge.merged {
-          background: #f6eefd;
-          color: #8250df;
-        }
-
-        .status-badge.closed {
-          background: var(--color-danger-bg);
-          color: var(--color-danger-fg);
-        }
-
-        .pr-branch-info {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          margin-bottom: 6px;
-          font-size: 13px;
-        }
-
-        .branch-label {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          color: var(--color-text-secondary);
-          background: var(--code-bg);
-          padding: 2px 8px;
-          border-radius: 4px;
-        }
-
-        .branch-arrow {
-          color: var(--color-text-secondary);
-        }
-
-        .cross-repo {
-          font-size: 12px;
-          color: var(--color-text-secondary);
-          margin-left: 8px;
-        }
-
-        .pr-meta {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          font-size: 12px;
-          color: var(--color-text-secondary);
-        }
-
-        .meta-item {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .comments {
-          color: var(--color-text-secondary);
-        }
-
-        .loading-state,
-        .error-state,
-        .empty-state {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 64px 24px;
-          text-align: center;
-          color: var(--color-text-secondary);
-        }
-
-        .empty-state svg {
-          margin-bottom: 16px;
-          opacity: 0.5;
-        }
-
-        .empty-state h3 {
-          margin: 0 0 8px;
-          font-size: 18px;
-          color: var(--color-text);
-        }
-
-        .empty-state p {
-          margin: 0 0 16px;
-        }
-
-        .hint {
-          font-size: 12px;
-          color: var(--color-text-secondary);
-        }
-
-        .pagination {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: 16px;
-          margin-top: 24px;
-        }
-
-        .page-info {
-          font-size: 14px;
-          color: var(--color-text-secondary);
-        }
-
-        .modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          padding: 24px;
-        }
-
-        .modal-content {
-          background: var(--bg-primary);
-          border-radius: 8px;
-          width: 100%;
-          max-width: 560px;
-          max-height: 90vh;
-          overflow-y: auto;
-        }
-
-        .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          border-bottom: 1px solid var(--border-color);
-        }
-
-        .modal-header h2 {
-          margin: 0;
-          font-size: 18px;
-        }
-
-        .modal-close {
-          background: none;
-          border: none;
-          font-size: 24px;
-          cursor: pointer;
-          color: var(--color-text-secondary);
-        }
-
-        .form-group {
-          margin-bottom: 16px;
-        }
-
-        .form-group label {
-          display: block;
-          font-size: 14px;
-          font-weight: 500;
-          margin-bottom: 6px;
-        }
-
-        .form-input,
-        .form-select {
-          width: 100%;
-          padding: 8px 12px;
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
-          font-size: 14px;
-          background: var(--input-bg);
-          color: var(--color-text);
-        }
-
-        .form-input:focus,
-        .form-select:focus {
-          outline: none;
-          border-color: var(--accent-color);
-        }
-
-        .branch-select-row {
-          display: flex;
-          align-items: flex-end;
-          gap: 12px;
-        }
-
-        .branch-select-row .form-group {
-          flex: 1;
-          margin-bottom: 0;
-        }
-
-        .branch-arrow {
-          padding-bottom: 8px;
-          color: var(--color-text-secondary);
-        }
-
-        .modal-footer {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-          padding: 16px 20px;
-          border-top: 1px solid var(--border-color);
-        }
-      `}</style>
+      </Modal>
     </div>
+    </PageLayoutContent></PageLayout>
   );
 }

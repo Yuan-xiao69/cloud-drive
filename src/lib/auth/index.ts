@@ -1,6 +1,33 @@
 ﻿import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { v4 as uuidv4 } from 'uuid';
+
+// ---- V1 标准错误响应格式（与 @/lib/api/v1/response.ts 保持一致）----
+const API_VERSION = '1.0.0';
+const ERROR_CODES = {
+  UNAUTHORIZED: 2000,
+  FORBIDDEN: 3000,
+} as const;
+
+function buildV1ErrorResponse(code: number, message: string, httpStatus: number): Response {
+  return new Response(
+    JSON.stringify({
+      code,
+      message,
+      errors: null,
+      meta: {
+        version: API_VERSION,
+        timestamp: new Date().toISOString(),
+        requestId: uuidv4(),
+      },
+    }),
+    {
+      status: httpStatus,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    }
+  );
+}
 
 // JWT Secret - 生产环境必须从环境变量读取
 const isProduction = process.env.NODE_ENV === 'production';
@@ -38,6 +65,7 @@ export interface JWTPayload {
   userId: string;
   username: string;
   role: string;
+  tokenVersion: number;
   iat?: number;
   exp?: number;
 }
@@ -106,16 +134,26 @@ export async function getAuthUser(req: NextRequest): Promise<{
 } | null> {
   // 优先从 Authorization Header 获取（兼容旧版）
   let token = extractBearerToken(req);
-  
+
   // 如果没有，尝试从 Cookie 获取（HttpOnly Cookie）
   if (!token) {
     token = extractCookieToken(req);
   }
-  
+
   if (!token) return null;
 
   const payload = verifyAccessToken(token);
   if (!payload) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { isBanned: true, tokenVersion: true },
+  });
+
+  if (!user || user.isBanned) return null;
+
+  // Token 版本号校验：改密码/被封禁后旧 Token 立即失效
+  if (user.tokenVersion !== payload.tokenVersion) return null;
 
   return {
     userId: payload.userId,
@@ -134,9 +172,10 @@ export async function requireAuth(req: NextRequest): Promise<{
   const user = await getAuthUser(req);
   if (!user) {
     return {
-      error: new Response(
-        JSON.stringify({ code: 401, message: '未登录或 Token 已过期', data: null }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      error: buildV1ErrorResponse(
+        ERROR_CODES.UNAUTHORIZED,
+        '未登录或 Token 已过期',
+        401
       ),
     };
   }
@@ -172,9 +211,10 @@ export async function requireAdmin(req: NextRequest): Promise<AdminAuthResult> {
 
   if (result.role !== 'admin' && result.role !== 'super_admin') {
     return {
-      error: new Response(
-        JSON.stringify({ code: 403, message: '无权限访问管理面板', data: null }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      error: buildV1ErrorResponse(
+        ERROR_CODES.FORBIDDEN,
+        '无权限访问管理面板',
+        403
       ),
     };
   }
@@ -207,6 +247,17 @@ export async function recordAuditLog(params: {
   } catch (error) {
     console.error('Failed to record audit log:', error);
   }
+}
+
+/**
+ * 递增用户 Token 版本号（使所有已签发 Token 失效）
+ * 调用时机：修改密码、管理员封禁、登出所有设备
+ */
+export async function invalidateAllTokens(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { tokenVersion: { increment: 1 } },
+  });
 }
 
 // ---- 获取客户端 IP ----

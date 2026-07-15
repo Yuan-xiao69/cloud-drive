@@ -5,37 +5,27 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest } from 'next/server';
-import { success, paginated, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { paginated, error, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
 import { parsePagination, buildPaginationMeta } from '@/lib/api/v1/pagination';
 
 // GET /api/v1/repos/[username]/[repoName]/fork-requests - 获取 Fork 申请列表
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { username, repoName } = await params;
+export const GET = defineRoute({
+  auth: 'required',
+  handler: async ({ req, user, params }) => {
+    const { username, repoName } = params;
     const { searchParams } = new URL(req.url);
 
-    // 解析分页参数
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20', 10), 100);
     const skip = (page - 1) * pageSize;
 
-    // 状态筛选
     const status = searchParams.get('status');
     const validStatuses = ['pending', 'approved', 'rejected', 'expired'];
     const statusFilter = status && validStatuses.includes(status) ? status : 'pending';
 
-    // 查找仓库
     const repo = await prisma.repository.findFirst({
       where: {
         owner: { username },
@@ -49,12 +39,10 @@ export async function GET(
       return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
     }
 
-    // 只有仓库所有者可以查看申请列表
-    if (repo.ownerId !== auth.userId) {
+    if (repo.ownerId !== user!.id) {
       return errors.forbidden('只有仓库所有者可以查看 Fork 申请列表');
     }
 
-    // 查询申请列表
     const where: Record<string, unknown> = {
       repoId: repo.id,
       status: statusFilter,
@@ -99,7 +87,5 @@ export async function GET(
     }));
 
     return paginated(items, buildPaginationMeta(total, page, pageSize));
-  } catch (err) {
-    return handlePrismaError(err, '获取 Fork 申请列表失败');
-  }
-}
+  },
+});

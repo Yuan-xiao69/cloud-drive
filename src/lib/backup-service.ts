@@ -3,15 +3,13 @@
  * 支持 PostgreSQL 数据库备份和数据导出
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-
-const prisma = new PrismaClient();
 
 /**
  * 备份配置

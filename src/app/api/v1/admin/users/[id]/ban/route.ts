@@ -1,27 +1,27 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
+import { recordAuditLog, invalidateAllTokens } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // POST /api/v1/admin/users/[id]/ban - 封禁用户
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    reason: z.string().optional(),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 仅超级管理员可封禁用户
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('仅超级管理员可执行封禁操作');
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     const targetUser = await prisma.user.findUnique({
       where: { id },
@@ -36,7 +36,7 @@ export async function POST(
       return errors.forbidden('无法封禁系统内置账号');
     }
 
-    if (targetUser.id === auth.userId) {
+    if (targetUser.id === user!.id) {
       return errors.forbidden('无法封禁自己');
     }
 
@@ -48,25 +48,30 @@ export async function POST(
       return errors.conflict('该用户已被封禁');
     }
 
-    // 创建封禁记录
-    await prisma.userBan.create({
-      data: {
-        userId: id,
-        bannerId: auth.userId,
-        reason: '管理员直接封禁',
-        banType: 'permanent',
-        isActive: true,
-      },
+    const reason = body.reason?.trim() || '管理员直接封禁';
+
+    await prisma.$transaction(async (tx) => {
+      await tx.userBan.create({
+        data: {
+          userId: id,
+          bannerId: user!.id,
+          reason,
+          banType: 'permanent',
+          isActive: true,
+        },
+      });
+
+      await tx.user.update({
+        where: { id },
+        data: { isBanned: true },
+      });
     });
 
-    // 更新用户封禁状态
-    await prisma.user.update({
-      where: { id },
-      data: { isBanned: true },
-    });
+    await invalidateAllTokens(id);
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'ban',
       targetType: 'user',
       targetId: id,
@@ -74,23 +79,18 @@ export async function POST(
     });
 
     return success({ userId: id }, '用户已被封禁');
-  } catch (err) {
-    return handlePrismaError(err, '封禁用户失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/users/[id]/ban - 解封用户
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     const targetUser = await prisma.user.findUnique({
       where: { id },
@@ -105,7 +105,6 @@ export async function DELETE(
       return errors.badRequest('该用户未被封禁');
     }
 
-    // 使用事务：停用封禁记录 + 解除用户封禁标记
     await prisma.$transaction(async (tx) => {
       await tx.userBan.updateMany({
         where: { userId: id, isActive: true },
@@ -113,7 +112,7 @@ export async function DELETE(
           isActive: false,
           unbanReason: '管理员解除封禁',
           unbannedAt: new Date(),
-          unbannedBy: auth.userId,
+          unbannedBy: user!.id,
         },
       });
 
@@ -123,8 +122,9 @@ export async function DELETE(
       });
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'unban',
       targetType: 'user',
       targetId: id,
@@ -132,7 +132,5 @@ export async function DELETE(
     });
 
     return success({ userId: id }, '用户已解封');
-  } catch (err) {
-    return handlePrismaError(err, '解封用户失败');
-  }
-}
+  },
+});

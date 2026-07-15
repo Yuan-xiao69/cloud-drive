@@ -6,27 +6,20 @@ export const dynamic = 'force-dynamic';
  * PATCH  /api/v1/user/api-keys/[id] - 更新密钥（名称/状态）
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, error, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
 
 // GET /api/v1/user/api-keys/[id]
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { id } = await params;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    const { id } = params;
 
     const apiKey = await prisma.apiKey.findFirst({
-      where: { id, userId: auth.userId },
+      where: { id, userId: user!.id },
       select: {
         id: true,
         name: true,
@@ -45,29 +38,23 @@ export async function GET(
     }
 
     return success({ apiKey });
-  } catch (err) {
-    return handlePrismaError(err, '获取 API 密钥详情失败');
-  }
-}
+  },
+});
 
 // PATCH /api/v1/user/api-keys/[id]
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { id } = await params;
-    const body = await req.json();
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    name: z.string().optional(),
+    isActive: z.boolean().optional(),
+  }),
+  async handler({ user, body, params }) {
+    const { id } = params;
     const { name, isActive } = body;
 
     // 验证密钥存在且属于当前用户
     const existing = await prisma.apiKey.findFirst({
-      where: { id, userId: auth.userId },
+      where: { id, userId: user!.id },
     });
 
     if (!existing) {
@@ -101,27 +88,18 @@ export async function PATCH(
     });
 
     return success({ apiKey }, 'API 密钥更新成功');
-  } catch (err) {
-    return handlePrismaError(err, '更新 API 密钥失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/user/api-keys/[id]
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { id } = await params;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    const { id } = params;
 
     // 验证密钥存在且属于当前用户
     const existing = await prisma.apiKey.findFirst({
-      where: { id, userId: auth.userId },
+      where: { id, userId: user!.id },
     });
 
     if (!existing) {
@@ -133,7 +111,5 @@ export async function DELETE(
     });
 
     return success({ message: 'API 密钥已删除' });
-  } catch (err) {
-    return handlePrismaError(err, '删除 API 密钥失败');
-  }
-}
+  },
+});

@@ -8,6 +8,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SidePanel, ConfirmDialog, Toast, EnhancedStatCard } from './common/AdminCommon';
 import { PieChart } from './charts/AdminCharts';
 import type { IpBlacklistEntry, IpGeoInfo, IpFormData, ContextMenuConfig } from './AdminTypes';
+import { Button, Modal, Card, Field } from '@/components/design';
 
 // ============ 图标组件 ============
 const GlobeIcon = () => (
@@ -106,9 +107,9 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
     }
 
     return (
-      <div
+      <button
         key={index}
-        className={`context-menu-item ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
+        className={`context-menu-item border-0 bg-transparent w-full text-left ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
         onClick={() => !item.disabled && !item.submenu && item.action?.()}
       >
         <div className="context-menu-item-content">
@@ -121,9 +122,9 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
             <span className="context-menu-arrow">▶</span>
             <div className="context-submenu">
               {item.submenu.map((subItem: NonNullable<ContextMenuConfig['items']>[0], subIndex: number) => (
-                <div
+                <button
                   key={subIndex}
-                  className={`context-menu-item ${subItem.danger ? 'danger' : ''} ${subItem.disabled ? 'disabled' : ''}`}
+                  className={`context-menu-item border-0 bg-transparent w-full text-left ${subItem.danger ? 'danger' : ''} ${subItem.disabled ? 'disabled' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!subItem.disabled) {
@@ -133,12 +134,12 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
                 >
                   <span className="context-menu-label">{subItem.label}</span>
                   {subItem.shortcut && <span className="context-menu-shortcut">{subItem.shortcut}</span>}
-                </div>
+                </button>
               ))}
             </div>
           </>
         )}
-      </div>
+      </button>
     );
   };
 
@@ -187,7 +188,7 @@ interface AutoBlockRule {
 }
 
 // ============ 主组件 ============
-interface AdminIpBlacklistEnhancedProps {
+export interface AdminIpBlacklistEnhancedProps {
   // 原始props（兼容现有hook）
   ipBlacklist: IpBlacklistEntry[];
   ipBlacklistTotal: number;
@@ -513,17 +514,17 @@ export default function AdminIpBlacklistEnhanced({
   const totalPages = Math.ceil(ipBlacklistTotal / 20);
 
   return (
-    <div className="tab-content">
+    <div className="p-4">
       {/* 页面头部 */}
-      <div className="page-header">
-        <h1 className="page-title">IP 黑名单</h1>
-        <div className="page-actions">
-          <button className="btn btn-secondary" onClick={() => setShowRuleModal(true)}>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">IP 黑名单</h1>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" onClick={() => setShowRuleModal(true)}>
             <ShieldIcon /> 自动封禁规则
-          </button>
-          <button className="btn btn-danger" onClick={onOpenModal}>
+          </Button>
+          <Button variant="danger" onClick={onOpenModal}>
             <BanIcon /> 添加 IP
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -557,45 +558,45 @@ export default function AdminIpBlacklistEnhanced({
       </div>
 
       {/* 搜索栏 */}
-      <div className="filter-bar">
-        <div className="search-input-wrapper">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="search-icon">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="relative flex-1">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ds-text-secondary)]">
             <path d="M11.5 7a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zm-.82 4.74a6 6 0 111.06-1.06l3.04 3.04a.75.75 0 11-1.06 1.06l-3.04-3.04z" />
           </svg>
           <input
             type="search"
-            className="form-control search-input"
+            className="w-full pl-10 pr-3 py-2 rounded-[var(--ds-radius-sm)] border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent-subtle)]"
             placeholder="搜索 IP 地址..."
             value={ipBlacklistSearch}
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
-        <div className="filter-tabs">
-          <button className="filter-tab active">全部</button>
-          <button className="filter-tab">生效中</button>
-          <button className="filter-tab">已过期</button>
-          <button className="filter-tab">永久</button>
+        <div className="flex items-center gap-1">
+          <Button variant="primary">全部</Button>
+          <Button variant="ghost">生效中</Button>
+          <Button variant="ghost">已过期</Button>
+          <Button variant="ghost">永久</Button>
         </div>
       </div>
 
       {/* 表格 */}
-      <div className="admin-table-container">
+      <Card padding="none" className="overflow-hidden">
         {ipBlacklistLoading ? (
-          <div className="loading-state">
-            <div className="loading-spinner" />
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] mb-3" />
             <p>加载中...</p>
           </div>
         ) : ipBlacklist.length === 0 ? (
-          <div className="empty-state">
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
             <GlobeIcon />
             <p>暂无黑名单 IP</p>
-            <button className="btn btn-primary" onClick={onOpenModal}>
+            <Button variant="primary" onClick={onOpenModal}>
               添加第一个 IP
-            </button>
+            </Button>
           </div>
         ) : (
           <>
-            <table className="admin-table">
+            <table className="w-full text-sm">
               <thead>
                 <tr>
                   <th style={{ width: '120px' }}>IP 地址</th>
@@ -641,8 +642,8 @@ export default function AdminIpBlacklistEnhanced({
                     </td>
                     <td>@{entry.createdBy}</td>
                     <td className="actions-cell">
-                      <button
-                        className="btn btn-ghost btn-xs"
+                      <Button
+                        variant="ghost"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedIp(entry);
@@ -652,9 +653,9 @@ export default function AdminIpBlacklistEnhanced({
                         title="查看详情"
                       >
                         详情
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-xs text-danger"
+                      </Button>
+                      <Button
+                        variant="danger"
                         onClick={(e) => {
                           e.stopPropagation();
                           onDelete(entry.id);
@@ -662,7 +663,7 @@ export default function AdminIpBlacklistEnhanced({
                         title="删除"
                       >
                         删除
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -670,29 +671,29 @@ export default function AdminIpBlacklistEnhanced({
             </table>
 
             {totalPages > 1 && (
-              <div className="pagination">
-                <button
-                  className="btn btn-default btn-sm"
+              <div className="flex items-center justify-between py-3">
+                <Button
+                  variant="secondary"
                   disabled={ipBlacklistPage <= 1}
                   onClick={() => onPageChange(ipBlacklistPage - 1)}
                 >
                   上一页
-                </button>
-                <span className="page-info">
+                </Button>
+                <span className="text-sm text-[var(--ds-text-secondary)]">
                   第 {ipBlacklistPage} / {totalPages} 页，共 {ipBlacklistTotal} 条
                 </span>
-                <button
-                  className="btn btn-default btn-sm"
+                <Button
+                  variant="secondary"
                   disabled={ipBlacklistPage >= totalPages}
                   onClick={() => onPageChange(ipBlacklistPage + 1)}
                 >
                   下一页
-                </button>
+                </Button>
               </div>
             )}
           </>
         )}
-      </div>
+      </Card>
 
       {/* 右键菜单 */}
       {contextMenu && (
@@ -710,8 +711,8 @@ export default function AdminIpBlacklistEnhanced({
         {selectedIp && ipDetail ? (
           <div className="ip-detail-content">
             {/* 基本信息 */}
-            <section className="detail-section">
-              <h3 className="section-title">基本信息</h3>
+            <Card>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">基本信息</h3>
               <div className="info-grid">
                 <div className="info-item">
                   <span className="info-label">IP地址</span>
@@ -736,11 +737,11 @@ export default function AdminIpBlacklistEnhanced({
                   </span>
                 </div>
               </div>
-            </section>
+            </Card>
 
             {/* 地理位置 */}
-            <section className="detail-section">
-              <h3 className="section-title">
+            <Card>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">
                 <MapPinIcon /> 地理位置
               </h3>
               <div className="geo-info">
@@ -760,36 +761,36 @@ export default function AdminIpBlacklistEnhanced({
                   {ipDetail.geo?.isHosting && <span className="badge badge-info">托管</span>}
                 </div>
               </div>
-            </section>
+            </Card>
 
             {/* 访问统计 */}
-            <section className="detail-section">
-              <h3 className="section-title">
+            <Card>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">
                 <ServerIcon /> 访问统计
               </h3>
               <div className="stats-row">
-                <div className="stat-box">
-                  <span className="stat-value">{ipDetail.stats.totalAccess}</span>
-                  <span className="stat-label">总访问</span>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{ipDetail.stats.totalAccess}</span>
+                  <span className="text-xs text-[var(--ds-text-secondary)]">总访问</span>
                 </div>
                 <div className="stat-box danger">
-                  <span className="stat-value">{ipDetail.stats.failedAttempts}</span>
-                  <span className="stat-label">失败次数</span>
+                  <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{ipDetail.stats.failedAttempts}</span>
+                  <span className="text-xs text-[var(--ds-text-secondary)]">失败次数</span>
                 </div>
-                <div className="stat-box">
-                  <span className="stat-value">{ipDetail.stats.relatedUsers}</span>
-                  <span className="stat-label">关联用户</span>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{ipDetail.stats.relatedUsers}</span>
+                  <span className="text-xs text-[var(--ds-text-secondary)]">关联用户</span>
                 </div>
               </div>
               <div className="last-access">
                 <ClockIcon />
                 <span>最后访问: {ipDetail.stats.lastAccess}</span>
               </div>
-            </section>
+            </Card>
 
             {/* 访问记录 */}
-            <section className="detail-section">
-              <h3 className="section-title">最近访问记录</h3>
+            <Card>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">最近访问记录</h3>
               <div className="access-records">
                 {ipDetail.accessRecords.map((record) => (
                   <div key={record.id} className="access-record">
@@ -804,141 +805,134 @@ export default function AdminIpBlacklistEnhanced({
                   </div>
                 ))}
               </div>
-            </section>
+            </Card>
           </div>
         ) : (
-          <div className="loading-state">
-            <div className="loading-spinner" />
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] mb-3" />
             <p>加载中...</p>
           </div>
         )}
       </SidePanel>
 
       {/* 添加/编辑IP弹窗 */}
-      {showIpModal && (
-        <div className="modal-overlay" onClick={onCloseModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>添加 IP 到黑名单</h3>
-              <button className="modal-close" onClick={onCloseModal}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
-                </svg>
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>IP 地址 <span style={{ color: 'var(--color-fg-muted)', fontWeight: 'normal' }}>(支持单个IP或CIDR格式)</span></label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={ipForm.ipAddress}
-                  onChange={(e) => onFormChange('ipAddress', e.target.value)}
-                  placeholder="例如: 192.168.1.1 或 10.0.0.0/24"
-                />
-                <span style={{ fontSize: '12px', color: 'var(--color-fg-muted)' }}>
-                  支持格式: 单个IP (192.168.1.1) 或 CIDR网段 (10.0.0.0/24)
-                </span>
-              </div>
-              <div className="form-group">
-                <label>原因</label>
-                <textarea
-                  className="form-control"
-                  rows={3}
-                  value={ipForm.reason}
-                  onChange={(e) => onFormChange('reason', e.target.value)}
-                  placeholder="输入封禁原因"
-                />
-              </div>
-              <div className="form-group">
-                <label>持续天数</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  value={ipForm.duration}
-                  onChange={(e) => onFormChange('duration', e.target.value)}
-                  placeholder="0 表示永久"
-                  min="0"
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={onCloseModal}>
-                取消
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={onSubmit}
-                disabled={ipSaving || !ipForm.ipAddress || !ipForm.reason}
-              >
-                {ipSaving ? '提交中...' : '提交'}
-              </button>
-            </div>
+      <Modal
+        isOpen={showIpModal}
+        onClose={onCloseModal}
+        title="添加 IP 到黑名单"
+        maxWidth="480px"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={onCloseModal}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={onSubmit}
+              disabled={ipSaving || !ipForm.ipAddress || !ipForm.reason}
+              loading={ipSaving}
+            >
+              {ipSaving ? '提交中...' : '提交'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="ip-blacklist-address" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1">
+              IP 地址 <span className="text-[var(--ds-text-secondary)] font-normal">(支持单个IP或CIDR格式)</span>
+            </label>
+            <input
+              id="ip-blacklist-address"
+              type="text"
+              className="w-full px-3 py-2 rounded-[var(--ds-radius-sm)] border border-[var(--ds-border-default)] bg-[var(--ds-surface-default)] text-[var(--ds-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent-default)]/30"
+              value={ipForm.ipAddress}
+              onChange={(e) => onFormChange('ipAddress', e.target.value)}
+              placeholder="例如: 192.168.1.1 或 10.0.0.0/24"
+            />
+            <span className="text-xs text-[var(--ds-text-secondary)]">
+              支持格式: 单个IP (192.168.1.1) 或 CIDR网段 (10.0.0.0/24)
+            </span>
+          </div>
+          <div>
+            <label htmlFor="ip-blacklist-reason" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1">封禁原因</label>
+            <textarea
+              id="ip-blacklist-reason"
+              className="w-full px-3 py-2 rounded-[var(--ds-radius-sm)] border border-[var(--ds-border-default)] bg-[var(--ds-surface-default)] text-[var(--ds-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent-default)]/30"
+              rows={3}
+              value={ipForm.reason}
+              onChange={(e) => onFormChange('reason', e.target.value)}
+              placeholder="输入封禁原因"
+            />
+          </div>
+          <div>
+            <label htmlFor="ip-blacklist-duration" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1">持续天数</label>
+            <input
+              id="ip-blacklist-duration"
+              type="number"
+              className="w-full px-3 py-2 rounded-[var(--ds-radius-sm)] border border-[var(--ds-border-default)] bg-[var(--ds-surface-default)] text-[var(--ds-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent-default)]/30"
+              value={ipForm.duration}
+              onChange={(e) => onFormChange('duration', e.target.value)}
+              placeholder="0 表示永久"
+              min="0"
+            />
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* 自动封禁规则弹窗 */}
-      {showRuleModal && (
-        <div className="modal-overlay" onClick={() => setShowRuleModal(false)}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>自动封禁规则</h3>
-              <button className="modal-close" onClick={() => setShowRuleModal(false)}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
-                </svg>
-              </button>
-            </div>
-            <div className="modal-body">
-              <p className="text-muted" style={{ marginBottom: '16px' }}>
-                当触发以下任一条件时，系统将自动将相关IP加入黑名单。
-              </p>
-              <div className="rules-list">
-                {autoBlockRules.map((rule) => (
-                  <div key={rule.id} className={`rule-item ${rule.enabled ? '' : 'disabled'}`}>
-                    <div className="rule-header">
-                      <label className="rule-toggle">
-                        <input
-                          type="checkbox"
-                          checked={rule.enabled}
-                          onChange={() => toggleRule(rule.id)}
-                        />
-                        <span className="toggle-slider"></span>
-                      </label>
-                      <div className="rule-info">
-                        <span className="rule-name">{rule.name}</span>
-                        <span className="rule-desc">{rule.description}</span>
-                      </div>
-                      <div className="rule-stats">
-                        <span className="rule-match-count">{rule.matchCount} 次触发</span>
-                        {rule.lastTriggered && (
-                          <span className="rule-last-triggered">
-                            最近: {rule.lastTriggered}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="rule-condition">
-                      <span className="condition-label">条件:</span>
-                      <code>{rule.condition}</code>
-                    </div>
-                    <div className="rule-action">
-                      <span className="action-label">执行:</span>
-                      <span className="action-value">封禁 {rule.duration}</span>
-                    </div>
-                  </div>
-                ))}
+      <Modal
+        isOpen={showRuleModal}
+        onClose={() => setShowRuleModal(false)}
+        title="自动封禁规则"
+        maxWidth="672px"
+        footer={
+          <Button variant="secondary" size="sm" onClick={() => setShowRuleModal(false)}>
+            关闭
+          </Button>
+        }
+      >
+        <p className="text-sm text-[var(--ds-text-secondary)] mb-4">
+          当触发以下任一条件时，系统将自动将相关IP加入黑名单。
+        </p>
+        <div className="rules-list">
+          {autoBlockRules.map((rule) => (
+            <div key={rule.id} className={`rule-item ${rule.enabled ? '' : 'disabled'}`}>
+              <div className="rule-header">
+                <label className="rule-toggle" aria-label={`规则 ${rule.id}`}>
+                  <input
+                    type="checkbox"
+                    checked={rule.enabled}
+                    onChange={() => toggleRule(rule.id)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+                <div className="rule-info">
+                  <span className="rule-name">{rule.name}</span>
+                  <span className="rule-desc">{rule.description}</span>
+                </div>
+                <div className="rule-stats">
+                  <span className="rule-match-count">{rule.matchCount} 次触发</span>
+                  {rule.lastTriggered && (
+                    <span className="rule-last-triggered">
+                      最近: {rule.lastTriggered}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="rule-condition">
+                <span className="condition-label">条件:</span>
+                <code>{rule.condition}</code>
+              </div>
+              <div className="rule-action">
+                <span className="action-label">执行:</span>
+                <span className="action-value">封禁 {rule.duration}</span>
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowRuleModal(false)}>
-                关闭
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
-      )}
+      </Modal>
 
       {/* 确认对话框 */}
       {confirmDialog?.isOpen && (

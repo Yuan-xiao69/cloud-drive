@@ -5,24 +5,19 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/users/[id]/detail - 获取用户详情
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/v1/admin/users/[id]/detail - 获取用户详情
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user: currentUser, params }) {
+    if (currentUser!.role !== 'admin' && currentUser!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const resolvedParams = await params;
-    const userId = resolvedParams.id;
+    const userId = params.id;
 
     // 获取用户基本信息
     const user = await prisma.user.findUnique({
@@ -152,8 +147,5 @@ export async function GET(
       })),
       status,
     });
-  } catch (err) {
-    console.error('获取用户详情失败:', err);
-    return handlePrismaError(err);
-  }
-}
+  },
+});

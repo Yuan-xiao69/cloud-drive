@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic';
-import { NextRequest } from 'next/server';
-import { success, errors, handlePrismaError, getRequestId } from '@/lib/api/v1';
-import { getAuthUser } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
 
 interface UserResponse {
@@ -20,45 +19,41 @@ interface UserResponse {
 }
 
 // GET /api/v1/auth/me
-export async function GET(req: NextRequest) {
-  const requestId = getRequestId(req);
-
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized('未登录或 Token 已过期', requestId);
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: auth.userId },
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user }) {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user!.id },
+      select: {
+        id: true, username: true, email: true, avatarUrl: true,
+        bio: true, role: true, isBanned: true, mfaEnabled: true,
+        location: true, website: true, createdAt: true, updatedAt: true,
+      },
     });
 
-    if (!user) {
-      return errors.userNotFound(undefined, requestId);
+    if (!dbUser) {
+      return errors.userNotFound();
     }
 
-    if (user.isBanned) {
-      return errors.userBanned(requestId);
+    if (dbUser.isBanned) {
+      return errors.userBanned();
     }
 
     const userResponse: UserResponse = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      avatarUrl: user.avatarUrl ?? undefined,
-      bio: user.bio ?? undefined,
-      role: user.role,
-      isBanned: user.isBanned,
-      mfaEnabled: user.mfaEnabled,
-      location: user.location ?? undefined,
-      website: user.website ?? undefined,
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
+      id: dbUser.id,
+      username: dbUser.username,
+      email: dbUser.email,
+      avatarUrl: dbUser.avatarUrl ?? undefined,
+      bio: dbUser.bio ?? undefined,
+      role: dbUser.role,
+      isBanned: dbUser.isBanned,
+      mfaEnabled: dbUser.mfaEnabled,
+      location: dbUser.location ?? undefined,
+      website: dbUser.website ?? undefined,
+      createdAt: dbUser.createdAt.toISOString(),
+      updatedAt: dbUser.updatedAt.toISOString(),
     };
 
     return success(userResponse, '获取用户信息成功');
-  } catch (error) {
-    console.error('[v1/auth/me] Error:', error);
-    return handlePrismaError(error, requestId);
-  }
-}
+  },
+});

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import Header from '@/components/layout/Header';
+import { Button, Input, PageLayout, PageLayoutContent, Empty } from '@/components/design';
 import {
   ArrowLeft,
   Clock,
@@ -13,11 +15,13 @@ import {
   CheckCircle,
   AlertCircle,
   Trash2,
-} from '@/components/ui/icons';
+} from '@/components/design/icons';
 import { formatTimeAgo } from '@/lib/utils';
-import { tokenManager } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
+import { useAuth } from '@/lib/providers';
 import ReportModal from '@/components/common/ReportModal';
 import ActionMenu from '@/components/common/ActionMenu';
+import toast from 'react-hot-toast';
 
 interface IssueLabel {
   id: string;
@@ -76,7 +80,7 @@ function renderLine(line: string, lineKey: number): React.ReactNode {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: '#0969da' }}
+          style={{ color: 'var(--ds-accent-default)' }}
         >
           {text}
         </a>
@@ -106,9 +110,17 @@ export default function IssueDetailPage() {
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
-  const [isOwner, setIsOwner] = useState(false);
-  const [isAuthor, setIsAuthor] = useState(false);
+
+  const { user: currentUser } = useAuth();
+
+  const isOwner = useMemo(() =>
+    !!(currentUser && issue && currentUser.username === issue.repository.owner.username),
+    [currentUser, issue]
+  );
+  const isAuthor = useMemo(() =>
+    !!(currentUser && issue && currentUser.id === issue.author.id),
+    [currentUser, issue]
+  );
 
   // 编辑状态
   const [isEditing, setIsEditing] = useState(false);
@@ -117,25 +129,10 @@ export default function IssueDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   // 评论状态
-  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commentError, setCommentError] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
-
-  // 拉取当前用户信息
-  useEffect(() => {
-    const token = tokenManager.getAccessToken();
-    if (!token) return;
-    fetch('/api/v1/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(d => {
-        if (d.code === 200) setCurrentUser(d.data);
-      })
-      .catch(() => {});
-  }, []);
 
   // 拉取 issue 详情
   useEffect(() => {
@@ -146,14 +143,8 @@ export default function IssueDetailPage() {
         const data = await res.json();
         if (data.code === 200) {
           setIssue(data.data);
-          setComments(data.data.comments || []);
           setEditTitle(data.data.title);
           setEditContent(data.data.content);
-          const u = currentUser;
-          if (u) {
-            setIsOwner(data.data.repository.owner.username === username);
-            setIsAuthor(data.data.author.id === u.id);
-          }
         } else {
           setError(data.message || '无法加载问题');
         }
@@ -164,29 +155,20 @@ export default function IssueDetailPage() {
       }
     }
     fetchIssue();
-  }, [username, repoName, issueId, currentUser]);
+  }, [username, repoName, issueId]);
 
   // 关闭/重新打开问题
   const handleStatusChange = async (action: 'close' | 'reopen') => {
     if (!issue) return;
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/issues/${issueId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
+      const data = await api.patch<{ status: string }>(`/api/v1/repos/${username}/${repoName}/issues/${issueId}`, { action });
       if (data.code === 200) {
         setIssue(prev => prev ? { ...prev, status: data.data.status } : null);
       } else {
-        alert(data.message || '操作失败');
+        toast.error(data.message || '操作失败');
       }
     } catch {
-      alert('网络错误');
+      toast.error('网络错误');
     }
   };
 
@@ -195,24 +177,15 @@ export default function IssueDetailPage() {
     if (!editTitle.trim()) return;
     setIsSaving(true);
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/issues/${issueId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ title: editTitle, content: editContent }),
-      });
-      const data = await res.json();
+      const data = await api.patch(`/api/v1/repos/${username}/${repoName}/issues/${issueId}`, { title: editTitle, content: editContent });
       if (data.code === 200) {
         setIssue(prev => prev ? { ...prev, title: editTitle, content: editContent } : null);
         setIsEditing(false);
       } else {
-        alert(data.message || '保存失败');
+        toast.error(data.message || '保存失败');
       }
     } catch {
-      alert('网络错误');
+      toast.error('网络错误');
     } finally {
       setIsSaving(false);
     }
@@ -225,20 +198,10 @@ export default function IssueDetailPage() {
     setIsSubmitting(true);
     setCommentError('');
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/issues/${issueId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ content: newComment }),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setComments(prev => [...prev, data.data]);
+      const data = await api.post<Comment>(`/api/v1/repos/${username}/${repoName}/issues/${issueId}`, { content: newComment });
+      if (data.code === 201) {
+        setIssue(prev => prev ? { ...prev, comments: [...prev.comments, data.data], commentsCount: prev.commentsCount + 1 } : null);
         setNewComment('');
-        setIssue(prev => prev ? { ...prev, commentsCount: prev.commentsCount + 1 } : null);
       } else {
         setCommentError(data.message || '发送失败');
       }
@@ -251,67 +214,58 @@ export default function IssueDetailPage() {
 
   // 删除评论
   const handleDeleteComment = async (commentId: string) => {
-    if (!confirm('确定删除此评论？')) return;
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(
-        `/api/v1/repos/${username}/${repoName}/issues/${issueId}?commentId=${commentId}`,
-        {
-          method: 'DELETE',
-          headers: { ...(token && { Authorization: `Bearer ${token}` }) },
-        }
-      );
-      const data = await res.json();
+      const data = await api.delete(`/api/v1/repos/${username}/${repoName}/issues/${issueId}?commentId=${commentId}`);
       if (data.code === 200) {
-        setComments(prev => prev.filter(c => c.id !== commentId));
-        setIssue(prev => prev ? { ...prev, commentsCount: Math.max(0, prev.commentsCount - 1) } : null);
+        setIssue(prev => prev ? { ...prev, comments: prev.comments.filter(c => c.id !== commentId), commentsCount: Math.max(0, prev.commentsCount - 1) } : null);
       } else {
-        alert(data.message || '删除失败');
+        toast.error(data.message || '删除失败');
       }
     } catch {
-      alert('网络错误');
+      toast.error('网络错误');
     }
   };
 
   if (isLoading) {
     return (
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
-        <div style={{ height: 32, background: 'var(--skeleton-bg)', borderRadius: 6, marginBottom: 24 }} />
-        <div style={{ height: 200, background: 'var(--skeleton-bg)', borderRadius: 6 }} />
-      </div>
+      <PageLayout containerWidth="medium"><PageLayoutContent>
+        <div style={{ height: 32, background: 'var(--ds-surface-subtle)', borderRadius: 6, marginBottom: 24 }} />
+        <div style={{ height: 200, background: 'var(--ds-surface-subtle)', borderRadius: 6 }} />
+      </PageLayoutContent></PageLayout>
     );
   }
 
   if (error || !issue) {
     return (
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '64px 24px', textAlign: 'center' }}>
-        <AlertCircle size={48} style={{ color: 'var(--color-danger-fg)', marginBottom: 16 }} />
-        <h2 style={{ marginBottom: 8 }}>{error || '问题不存在'}</h2>
-        <button className="btn btn-secondary" onClick={() => router.back()}>
-          返回
-        </button>
-      </div>
+      <PageLayout containerWidth="medium"><PageLayoutContent>
+        <Empty
+          icon={<AlertCircle size={48} style={{ color: 'var(--ds-danger-default)' }} />}
+          title={error || '问题不存在'}
+          action={{ label: '返回', onClick: () => router.back() }}
+        />
+      </PageLayoutContent></PageLayout>
     );
   }
 
   return (
-    <div className="issue-detail-container">
+    <PageLayout containerWidth="medium"><PageLayoutContent>
+      <Header />
       {/* Header */}
-      <div className="issue-detail-header">
-        <button className="back-link" onClick={() => router.back()}>
+      <div className="mb-5">
+        <Button variant="ghost" className="mb-4" onClick={() => router.back()}>
           <ArrowLeft size={16} />
           <span>返回问题列表</span>
-        </button>
+        </Button>
 
-        <div className="issue-detail-title-row">
-          <div className="issue-status-icon">
+        <div className="flex items-center gap-3 flex-wrap mb-3">
+          <div className="shrink-0">
             {issue.status === 'open' ? (
-              <span className="status-badge open">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-medium rounded-full bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]">
                 <CircleIcon />
                 开放
               </span>
             ) : (
-              <span className="status-badge closed">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-medium rounded-full bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]">
                 <CheckCircle size={16} />
                 已关闭
               </span>
@@ -319,15 +273,15 @@ export default function IssueDetailPage() {
           </div>
 
           {isAuthor && !isEditing && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setIsEditing(true)}>
+            <Button variant="secondary" onClick={() => setIsEditing(true)}>
               <Edit3 size={14} />
               编辑
-            </button>
+            </Button>
           )}
 
           {(isAuthor || isOwner) && (
-            <button
-              className={`btn btn-sm ${issue.status === 'open' ? 'btn-secondary' : 'btn-primary'}`}
+            <Button
+              variant={issue.status === 'open' ? 'secondary' : 'primary'}
               onClick={() => handleStatusChange(issue.status === 'open' ? 'close' : 'reopen')}
             >
               {issue.status === 'open' ? (
@@ -341,57 +295,57 @@ export default function IssueDetailPage() {
                   重新打开
                 </>
               )}
-            </button>
+            </Button>
           )}
         </div>
 
         {/* Title */}
+        <div className="flex items-center gap-2">
         {isEditing ? (
-          <input
-            className="issue-edit-title"
+          <Input
             value={editTitle}
             onChange={e => setEditTitle(e.target.value)}
             placeholder="问题标题"
-            autoFocus
           />
         ) : (
-          <h1 className="issue-detail-title">{issue.title}</h1>
+          <h1 className="text-2xl font-semibold m-0 leading-relaxed">{issue.title}</h1>
         )}
         {currentUser && !isAuthor && issue && (
-          <button
-            className="btn btn-default btn-sm"
+          <Button
+            variant="secondary"
+            className="flex-shrink-0"
             onClick={() => setShowReportModal(true)}
             title="举报此 Issue"
-            style={{ marginLeft: 8, flexShrink: 0 }}
           >
             举报
-          </button>
+          </Button>
         )}
+        </div>
       </div>
 
       {/* Main Layout */}
-      <div className="issue-detail-layout">
+      <div className="grid grid-cols-[1fr_280px] gap-8 max-md:grid-cols-1 max-md:gap-6">
         {/* Post */}
-        <article className="issue-post">
-          <div className="issue-post-header">
-            <Link href={`/${issue.author.username}`} className="post-author">
+        <article className="bg-[var(--ds-page-bg)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-4 border-b border-[var(--ds-border-default)] bg-[var(--ds-surface-subtle)]">
+            <Link href={`/${issue.author.username}`} className="flex items-center gap-2 no-underline text-[var(--ds-text-primary)] font-medium">
               <img
                 src={issue.author.avatarUrl || '/default-avatar.png'}
                 alt={issue.author.username}
-                className="author-avatar"
+                className="w-8 h-8 rounded-full object-cover"
               />
               <span>{issue.author.username}</span>
             </Link>
-            <span className="meta-item">
+            <span className="flex items-center gap-1 text-[13px] text-[var(--ds-text-secondary)]">
               <Clock size={14} />
               {formatTimeAgo(issue.createdAt)}
             </span>
             {issue.labels && issue.labels.length > 0 && (
-              <div className="issue-labels">
+              <div className="flex gap-1 flex-wrap">
                 {issue.labels.map(label => (
                   <span
                     key={label.id}
-                    className="label-badge"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border font-medium"
                     style={{ backgroundColor: label.color + '22', color: label.color, borderColor: label.color }}
                   >
                     <Tag size={12} />
@@ -403,17 +357,17 @@ export default function IssueDetailPage() {
           </div>
 
           {isEditing ? (
-            <div className="issue-edit-body">
-              <textarea
-                className="form-input"
+            <div className="p-5">
+              <Input
+                multiline
                 rows={10}
                 value={editContent}
                 onChange={e => setEditContent(e.target.value)}
                 placeholder="问题描述..."
               />
-              <div className="edit-actions">
-                <button
-                  className="btn btn-secondary"
+              <div className="flex justify-end gap-2 mt-3">
+                <Button
+                  variant="secondary"
                   onClick={() => {
                     setIsEditing(false);
                     setEditTitle(issue.title);
@@ -421,56 +375,56 @@ export default function IssueDetailPage() {
                   }}
                 >
                   取消
-                </button>
-                <button
-                  className="btn btn-primary"
+                </Button>
+                <Button
+                  variant="primary"
                   onClick={handleSaveEdit}
                   disabled={isSaving || !editTitle.trim()}
                 >
                   {isSaving ? '保存中...' : '保存'}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
-            <div className="issue-post-content">
+            <div className="p-5 text-[15px] leading-relaxed">
               {issue.content ? (
                 renderContent(issue.content)
               ) : (
-                <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>暂无描述</p>
+                <p style={{ color: 'var(--ds-text-secondary)', fontStyle: 'italic' }}>暂无描述</p>
               )}
             </div>
           )}
         </article>
 
         {/* Sidebar */}
-        <aside className="issue-sidebar">
-          <div className="sidebar-card">
-            <h3 className="sidebar-card-title">关于此问题</h3>
-            <div className="sidebar-info-list">
-              <div className="sidebar-info-item">
-                <span className="sidebar-info-label">状态</span>
-                <span className={`status-badge ${issue.status}`}>
+        <aside className="flex flex-col gap-5 max-md:order-first">
+          <div className="bg-[var(--ds-page-bg)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] p-4">
+            <h3 className="text-sm font-semibold m-0 mb-3 text-[var(--ds-text-primary)]">关于此问题</h3>
+            <div className="flex flex-col gap-2.5">
+              <div className="flex justify-between items-center text-[13px]">
+                <span className="text-[var(--ds-text-secondary)]">状态</span>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-sm font-medium rounded-full ${issue.status === 'open' ? 'bg-[var(--ds-success-subtle)] text-[var(--ds-success-default)]' : 'bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)]'}`}>
                   {issue.status === 'open' ? '开放' : '已关闭'}
                 </span>
               </div>
-              <div className="sidebar-info-item">
-                <span className="sidebar-info-label">评论</span>
-                <span className="sidebar-info-value">{issue.commentsCount}</span>
+              <div className="flex justify-between items-center text-[13px]">
+                <span className="text-[var(--ds-text-secondary)]">评论</span>
+                <span className="font-medium">{issue.commentsCount}</span>
               </div>
-              <div className="sidebar-info-item">
-                <span className="sidebar-info-label">创建时间</span>
-                <span className="sidebar-info-value">
+              <div className="flex justify-between items-center text-[13px]">
+                <span className="text-[var(--ds-text-secondary)]">创建时间</span>
+                <span className="font-medium">
                   {new Date(issue.createdAt).toLocaleDateString('zh-CN')}
                 </span>
               </div>
               {issue.labels && issue.labels.length > 0 && (
-                <div className="sidebar-info-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-                  <span className="sidebar-info-label">标签</span>
-                  <div className="issue-labels" style={{ flexWrap: 'wrap' }}>
+                <div className="flex justify-between items-start text-[13px]">
+                  <span className="text-[var(--ds-text-secondary)]">标签</span>
+                  <div className="flex gap-1 flex-wrap">
                     {issue.labels.map(label => (
                       <span
                         key={label.id}
-                        className="label-badge"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border font-medium"
                         style={{
                           backgroundColor: label.color + '22',
                           color: label.color,
@@ -487,64 +441,66 @@ export default function IssueDetailPage() {
             </div>
           </div>
 
-          <div className="sidebar-card">
-            <Link href={`/${issue.author.username}`} className="sidebar-author">
+          <div className="bg-[var(--ds-page-bg)] border border-[var(--ds-border-default)] rounded-[var(--ds-radius-sm)] p-4">
+            <Link href={`/${issue.author.username}`} className="flex items-center gap-2.5 no-underline text-[var(--ds-text-primary)] mb-2">
               <img
                 src={issue.author.avatarUrl || '/default-avatar.png'}
                 alt={issue.author.username}
-                className="author-avatar-lg"
+                className="w-10 h-10 rounded-full object-cover"
               />
-              <span className="sidebar-author-name">{issue.author.username}</span>
+              <span className="font-medium">{issue.author.username}</span>
             </Link>
             {issue.author.bio && (
-              <p className="sidebar-author-bio">{issue.author.bio}</p>
+              <p className="text-[13px] text-[var(--ds-text-secondary)] m-0 leading-relaxed">{issue.author.bio}</p>
             )}
           </div>
         </aside>
       </div>
 
       {/* Comment Section */}
-      <div className="issue-comments">
-        <div className="comment-section-header">
+      <div className="mt-8">
+        <div className="flex items-center gap-2 mb-5 pb-3 border-b border-[var(--ds-border-default)]">
           <Send size={18} />
-          <h2>{comments.length} 条评论</h2>
+          <h2 className="text-base font-semibold m-0">{issue.comments.length} 条评论</h2>
         </div>
 
         {commentError && (
-          <div className="comment-error">
+          <div className="flex items-center gap-2 p-3 bg-[var(--ds-danger-subtle)] text-[var(--ds-danger-default)] rounded-[var(--ds-radius-md)] mb-4 text-sm">
             <AlertCircle size={16} />
             {commentError}
           </div>
         )}
 
-        {comments.length === 0 && (
-          <div className="comment-empty">
-            <Send size={32} className="comment-empty-icon" />
-            <p>暂无评论，发表第一条评论吧</p>
-          </div>
+        {issue.comments.length === 0 && (
+          <Empty
+            icon={<Send size={32} className="opacity-30" />}
+            title="暂无评论"
+            description="发表第一条评论吧"
+          />
         )}
 
-        {comments.map(comment => (
-          <div key={comment.id} className="comment-item">
-            <div className="comment-main">
-              <div className="comment-header">
-                <Link href={`/${comment.author.username}`} className="comment-author">
+        {issue.comments.map(comment => (
+          <div key={comment.id} className="py-5 border-b border-[var(--ds-border-default)]">
+            <div>
+              <div className="flex items-center gap-2 mb-2.5">
+                <Link href={`/${comment.author.username}`} className="flex items-center gap-2 no-underline text-[var(--ds-text-primary)]">
                   <img
                     src={comment.author.avatarUrl || '/default-avatar.png'}
                     alt={comment.author.username}
-                    className="comment-avatar"
+                    className="w-7 h-7 rounded-full object-cover"
                   />
-                  <span className="comment-author-name">{comment.author.username}</span>
+                  <span className="font-medium text-sm">{comment.author.username}</span>
                 </Link>
-                <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
+                <span className="text-xs text-[var(--ds-text-secondary)]">{formatTimeAgo(comment.createdAt)}</span>
                 {(comment.author.id === currentUser?.id || isOwner) && (
-                  <button
-                    className="comment-delete-btn"
+                  <Button
+                    variant="ghost"
+                    className="ml-auto"
                     onClick={() => handleDeleteComment(comment.id)}
                     title="删除评论"
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </Button>
                 )}
                 {currentUser && comment.author.id !== currentUser?.id && (
                   <ActionMenu
@@ -554,37 +510,37 @@ export default function IssueDetailPage() {
                   />
                 )}
               </div>
-              <div className="comment-content">{renderContent(comment.content)}</div>
+              <div className="text-sm leading-relaxed text-[var(--ds-text-primary)]">{renderContent(comment.content)}</div>
             </div>
           </div>
         ))}
 
         {/* New comment form */}
         {currentUser ? (
-          <form onSubmit={handleSubmitComment} className="new-comment-form">
-            <textarea
-              className="comment-textarea"
+          <form onSubmit={handleSubmitComment} className="mt-5">
+            <Input
+              multiline
               placeholder="写下你的评论..."
               value={newComment}
               onChange={e => setNewComment(e.target.value)}
               rows={4}
             />
-            <div className="new-comment-footer">
-              <span className="comment-hint">支持 Markdown 格式</span>
-              <button
+            <div className="flex justify-between items-center mt-2">
+              <span className="text-xs text-[var(--ds-text-secondary)]">支持 Markdown 格式</span>
+              <Button
                 type="submit"
-                className="btn btn-primary"
+                variant="primary"
                 disabled={isSubmitting || !newComment.trim()}
               >
                 <Send size={14} />
                 {isSubmitting ? '发送中...' : '发表评论'}
-              </button>
+              </Button>
             </div>
           </form>
         ) : (
-          <div className="comment-login-prompt">
-            <p>
-              <Link href="/login" className="link">登录</Link> 后参与评论
+          <div className="p-5 text-center bg-[var(--ds-surface-subtle)] rounded-[var(--ds-radius-md)] mt-5">
+            <p className="m-0 text-[var(--ds-text-secondary)]">
+              <Link href="/login" className="text-[var(--ds-accent-default)]">登录</Link> 后参与评论
             </p>
           </div>
         )}
@@ -597,7 +553,7 @@ export default function IssueDetailPage() {
           onClose={() => setShowReportModal(false)}
         />
       )}
-    </div>
+    </PageLayoutContent></PageLayout>
   );
 }
 

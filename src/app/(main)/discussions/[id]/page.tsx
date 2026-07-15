@@ -9,13 +9,12 @@ import {
   MessageSquare,
   Pin,
   CheckCircle,
-} from '@/components/ui/icons';
+} from '@/components/design/icons';
 import { formatTimeAgo } from '@/lib/utils';
 import { auth } from '@/lib/auth/server';
-import Header from '@/components/layout/Header';
-import LeftSidebar from '@/components/layout/LeftSidebar';
-import RightSidebar from '@/components/layout/RightSidebar';
 import CommentSection, { DiscussionComment } from './CommentSection';
+import { Card, PageLayout, PageLayoutPane, PageLayoutContent, Badge } from '@/components/design';
+import LeftSidebar from '@/components/layout/LeftSidebar';
 import LikeButton from './LikeButton';
 import DiscussionReportButton from './DiscussionReportButton';
 import DiscussionBreadcrumb from '@/components/discussion/DiscussionBreadcrumb';
@@ -73,7 +72,7 @@ function renderInlineMarkdown(line: string, lineKey: number): React.ReactNode {
 }
 
 export const metadata: Metadata = {
-  title: '讨论详情 - 代码托管与协作平台',
+  title: '讨论详情 - 文件托管与协作平台',
 };
 
 type Props = { params: Promise<{ id: string }> };
@@ -101,16 +100,18 @@ async function getDiscussion(id: string) {
       where: { id },
       data: { viewCount: { increment: 1 } },
     });
+    // 返回更新后的 viewCount（update 在 findUnique 之后，返回的是旧值）
+    discussion.viewCount += 1;
   }
   return discussion;
 }
 
 const categoryLabels: Record<string, string> = {
-  question: '提问',
-  idea: '奇思妙想',
-  request: '资源求助',
-  team: '项目组队',
-  share: '经验分享',
+  general: '闲聊',
+  qa: '问答',
+  share: '分享',
+  suggestion: '建议',
+  announce: '公告',
 };
 
 export default async function DiscussionDetailPage({ params }: Props) {
@@ -126,15 +127,15 @@ export default async function DiscussionDetailPage({ params }: Props) {
   const isAuthor = currentUserId === discussion.authorId;
 
   return (
-    <div className="home-page">
-      <Header />
-      <div className="home-layout">
+    <PageLayout containerWidth="extraWide">
+      <PageLayoutPane width="sidebar">
         <LeftSidebar />
-        <div className="home-container">
-          <main className="home-main">
-            <div className="discussion-detail-container">
+      </PageLayoutPane>
+      <PageLayoutContent>
+        <div className="bg-[var(--ds-page-bg)]">
+          <div className="px-6 py-6">
               {/* Header */}
-              <div className="discussion-detail-header">
+              <div className="mb-6">
                 {/* 面包屑导航 */}
                 <DiscussionBreadcrumb
                   discussionId={discussion.id}
@@ -142,9 +143,11 @@ export default async function DiscussionDetailPage({ params }: Props) {
                   category={categoryLabels[discussion.category]}
                 />
 
-                <div className="discussion-detail-title">
+                <div className="flex items-center gap-3 mb-4">
                   <MessageSquare size={24} />
-                  <h1>{discussion.title}</h1>
+                  <h1 className="font-display text-2xl font-bold text-[var(--ds-text-primary)] mb-2">
+                    {discussion.title}
+                  </h1>
                   {currentUserId && !isAuthor && (
                     <DiscussionReportButton
                       targetType="discussion"
@@ -153,94 +156,61 @@ export default async function DiscussionDetailPage({ params }: Props) {
                     />
                   )}
                 </div>
+
+                {/* Tags and Wiki badge */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {(discussion as any).isWiki && (
+                    <Badge variant="warning">Wiki 模式</Badge>
+                  )}
+                  {Array.isArray((discussion as any).tags) && (discussion as any).tags.length > 0 && (discussion as any).tags.map((tag: string) => (
+                    <Badge key={tag} variant="default">{tag}</Badge>
+                  ))}
+                </div>
               </div>
 
               {/* Main content */}
-              <div className="discussion-detail-layout">
+              <div className="flex gap-8">
                 {/* Post */}
-                <article className="discussion-post">
-                  <div className="discussion-post-header">
-                    <span className={`category-badge ${discussion.category}`}>
+                <Card as="article" padding="none" className="flex-1 min-w-0 overflow-hidden">
+                  <div className="flex flex-col gap-3 p-4 border-b border-[var(--ds-border-default)] bg-[var(--ds-surface-subtle)]">
+                    <span className={`inline-flex items-center px-1.5 py-px rounded-full text-[11px] bg-[var(--ds-surface-subtle)] text-[var(--ds-text-secondary)] ${discussion.category}`}>
                       {categoryLabels[discussion.category] || discussion.category}
                     </span>
-                    <div className="discussion-post-meta">
-                      <Link href={`/${discussion.author.username}`} className="post-author">
+                    <div className="flex items-center gap-3">
+                      <Link href={`/${discussion.author.username}`} className="flex items-center gap-2 no-underline text-[var(--ds-text-primary)] font-medium">
                         <img
                           src={discussion.author.avatarUrl || '/default-avatar.png'}
                           alt={discussion.author.username}
-                          className="author-avatar"
+                          className="w-8 h-8 rounded-full object-cover"
                         />
                         <span>{discussion.author.username}</span>
                       </Link>
-                      <span className="meta-item">
+                      <span className="flex items-center gap-1 text-[13px] text-[var(--ds-text-secondary)]">
                         <Clock size={14} />
                         {formatTimeAgo(String(discussion.createdAt))}
                       </span>
-                      <span className="meta-item">
+                      <span className="flex items-center gap-1 text-[13px] text-[var(--ds-text-secondary)]">
                         <Eye size={14} />
                         {String((discussion as Record<string, unknown>).viewCount || 0)} 次阅读
                       </span>
                     </div>
                   </div>
 
-                  <div className="discussion-post-content">
+                  <div className="p-5 text-[15px] leading-relaxed">
                     {discussion.content.split('\n').map((line, i) => (
                       <p key={i}>{line ? renderInlineMarkdown(line, i) : <br />}</p>
                     ))}
                   </div>
 
-                  <div className="discussion-post-actions">
+                  <div className="flex items-center gap-3 p-4 border-t border-[var(--ds-border-default)]">
                     <LikeButton
                       discussionId={discussion.id}
                       authorId={discussion.authorId}
                     />
-                    <span className="action-hint">感觉有帮助就点个赞吧</span>
+                    <span className="text-[13px] text-[var(--ds-text-secondary)]">感觉有帮助就点个赞吧</span>
                   </div>
-                </article>
+                </Card>
 
-                {/* Sidebar */}
-                <aside className="discussion-sidebar">
-                  <div className="sidebar-card">
-                    <h3 className="sidebar-card-title">关于作者</h3>
-                    <Link href={`/${discussion.author.username}`} className="sidebar-author">
-                      <img
-                        src={discussion.author.avatarUrl || '/default-avatar.png'}
-                        alt={discussion.author.username}
-                        className="author-avatar-lg"
-                      />
-                      <span className="sidebar-author-name">{discussion.author.username}</span>
-                    </Link>
-                    {discussion.author.bio && (
-                      <p className="sidebar-author-bio">{discussion.author.bio}</p>
-                    )}
-                  </div>
-
-                  <div className="sidebar-card">
-                    <h3 className="sidebar-card-title">讨论信息</h3>
-                    <div className="sidebar-info-list">
-                      <div className="sidebar-info-item">
-                        <span className="sidebar-info-label">分类</span>
-                        <span className={`category-badge ${discussion.category}`}>
-                          {categoryLabels[discussion.category]}
-                        </span>
-                      </div>
-                      <div className="sidebar-info-item">
-                        <span className="sidebar-info-label">回复数</span>
-                        <span className="sidebar-info-value">{discussion.comments?.length || 0}</span>
-                      </div>
-                      <div className="sidebar-info-item">
-                        <span className="sidebar-info-label">浏览</span>
-                        <span className="sidebar-info-value">{String((discussion as Record<string, unknown>).viewCount || 0)}</span>
-                      </div>
-                      <div className="sidebar-info-item">
-                        <span className="sidebar-info-label">发布时间</span>
-                        <span className="sidebar-info-value">
-                          {new Date(discussion.createdAt).toLocaleDateString('zh-CN')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </aside>
               </div>
 
               {/* Comments */}
@@ -253,10 +223,8 @@ export default async function DiscussionDetailPage({ params }: Props) {
                 isAuthor={isAuthor}
               />
             </div>
-          </main>
         </div>
-        <RightSidebar />
-      </div>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   );
 }

@@ -2,24 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import SettingsLayout from '@/components/settings/SettingsLayout';
+import { PageLayoutPane, Modal } from '@/components/design';
+import SettingsNav from '@/components/settings/SettingsNav';
+import { Suspense } from 'react';
+import { PasswordChangeModal, LoginHistoryModal, DeleteAccountModal } from '@/components/settings/modals';
+import { useAuth } from '@/lib/providers';
+import { api } from '@/lib/api/client';
+import toast from 'react-hot-toast';
 import ProfileSettings from '@/components/settings/ProfileSettings';
 import AccountSettings from '@/components/settings/AccountSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
 import RepoManagementSettings from '@/components/settings/RepoManagementSettings';
-import DataExportSettings from '@/components/settings/DataExportSettings';
 import ReportSettings from '@/components/settings/ReportSettings';
 import BlockSettings from '@/components/settings/BlockSettings';
-import { PasswordChangeModal, LoginHistoryModal, DeleteAccountModal } from '@/components/settings/modals';
-import { useAuth } from '@/lib/providers';
-import { tokenManager } from '@/lib/api/client';
-import dynamic from 'next/dynamic';
-
-// 动态导入 MFA 设置组件（避免 SSR 问题）
-const MFASettingsModal = dynamic(() => import('@/components/settings/MFASettings'), {
-  ssr: false,
-  loading: () => <div className="loading-placeholder">加载中...</div>,
-});
+import MFASettingsModal from '@/components/settings/MFASettings';
 
 const UserIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -46,12 +42,6 @@ const RepoIcon = () => (
   </svg>
 );
 
-const DownloadIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-  </svg>
-);
-
 const FlagIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
     <path d="M8 1a.5.5 0 0 1 .5.5v.5h5a.5.5 0 0 1 0 1h-5v.5A1.5 1.5 0 0 1 7 4.5v1A1.5 1.5 0 0 1 8.5 7h2a.5.5 0 0 1 0 1h-2A2.5 2.5 0 0 1 6 5.5v-1A2.5 2.5 0 0 1 7.5 2H8V1.5A.5.5 0 0 1 8 1z" />
@@ -71,20 +61,12 @@ const LogoIcon = () => (
   </svg>
 );
 
-type SettingsTab = 'profile' | 'account' | 'notifications' | 'repositories' | 'export' | 'reports' | 'blocks';
+type SettingsTab = 'profile' | 'account' | 'notifications' | 'repositories' | 'reports' | 'blocks';
 
 export default function SettingsPage() {
   const { user, updateUser, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
-  const [avatar, setAvatar] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-
-  // 初始化表单状态
-  const [username, setUsername] = useState('');
-  const [bio, setBio] = useState('');
-  const [location, setLocation] = useState('');
-  const [website, setWebsite] = useState('');
 
   // Repositories list (loaded from real API)
   interface RepoItem {
@@ -99,11 +81,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (activeTab === 'repositories' && user?.username) {
       setReposLoading(true);
-      const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
-      fetch('/api/v1/me/repos', {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      })
-        .then(r => r.json())
+      api.get<{ items: RepoItem[] }>('/api/v1/me/repos')
         .then(data => {
           if (data.code === 200) {
             setRepos(data.data?.items || []);
@@ -117,31 +95,14 @@ export default function SettingsPage() {
   // Load notification settings when tab switches to notifications
   useEffect(() => {
     if (activeTab === 'notifications' && !notificationSettingsLoaded && user) {
-      const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
-      fetch('/api/v1/users/notifications/settings', {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      })
-        .then(r => r.json())
+      api.get<Record<string, boolean>>('/api/v1/me/notifications/settings')
         .then(data => {
           if (data.code === 200 && data.data) {
-            setNotificationSettings({
-              watchNotifications: data.data.watchNotifications ?? true,
-              forkNotifications: data.data.forkNotifications ?? true,
-              releaseNotifications: data.data.releaseNotifications ?? true,
-              discussionReplies: data.data.discussionReplies ?? true,
-              discussionMentions: data.data.discussionMentions ?? true,
-              issueComments: data.data.issueComments ?? true,
-              issueMentions: data.data.issueMentions ?? true,
-              prReviews: data.data.prReviews ?? true,
-              prComments: data.data.prComments ?? true,
-              prMentions: data.data.prMentions ?? true,
-              securityAlerts: data.data.securityAlerts ?? true,
-              accountAlerts: data.data.accountAlerts ?? true,
-            });
+            setNotificationSettings(prev => ({ ...prev, ...data.data }));
           }
+          setNotificationSettingsLoaded(true);
         })
-        .catch(e => console.error('Load notification settings failed:', e))
-        .finally(() => setNotificationSettingsLoaded(true));
+        .catch(e => console.error('Load notification settings failed:', e));
     }
   }, [activeTab, user]);
 
@@ -169,9 +130,6 @@ export default function SettingsPage() {
   });
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
-
-  // Export loading state
-  const [exporting, setExporting] = useState<'all' | 'repos' | null>(null);
 
   // MFA Modal state
   const [mfaModal, setMfaModal] = useState(false);
@@ -222,16 +180,13 @@ export default function SettingsPage() {
   useEffect(() => {
     if (activeTab === 'reports' && reports.length === 0) {
       setReportsLoading(true);
-      const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
       const statusParam = reportsStatus !== 'all' ? `&status=${reportsStatus}` : '';
-      fetch(`/api/v1/me/reports?page=${reportsPage}&pageSize=10${statusParam}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      })
-        .then(r => r.json())
+      api.get<{ items: typeof reports }>(`/api/v1/me/reports?page=${reportsPage}&pageSize=10${statusParam}`)
         .then(data => {
           if (data.code === 200) {
             setReports(data.data?.items || []);
-            setReportsTotal(data.meta?.total || 0);
+            // V1 标准分页格式：pagination 嵌套在 data 中
+            setReportsTotal((data.data as { pagination?: { total?: number } })?.pagination?.total || 0);
           }
         })
         .catch(e => console.error('Load reports failed:', e))
@@ -243,15 +198,12 @@ export default function SettingsPage() {
   useEffect(() => {
     if (activeTab === 'blocks' && blocks.length === 0) {
       setBlocksLoading(true);
-      const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
-      fetch(`/api/v1/me/blocks?page=${blocksPage}&pageSize=10`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      })
-        .then(r => r.json())
+      api.get<{ items: typeof blocks }>(`/api/v1/me/blocks?page=${blocksPage}&pageSize=10`)
         .then(data => {
           if (data.code === 200) {
             setBlocks(data.data?.items || []);
-            setBlocksTotal(data.meta?.total || 0);
+            // V1 标准分页格式：pagination 嵌套在 data 中
+            setBlocksTotal((data.data as { pagination?: { total?: number } })?.pagination?.total || 0);
           }
         })
         .catch(e => console.error('Load blocks failed:', e))
@@ -262,23 +214,14 @@ export default function SettingsPage() {
   // Block user handler
   const handleBlockUser = async () => {
     if (!blockUserId.trim()) {
-      alert('请输入要屏蔽的用户ID');
+      toast('请输入要屏蔽的用户ID');
       return;
     }
     setIsBlocking(true);
     try {
-      const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
-      const res = await fetch('/api/v1/me/blocks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ userId: blockUserId.trim(), reason: blockReason.trim() }),
-      });
-      const data = await res.json();
+      const data = await api.post('/api/v1/me/blocks', { userId: blockUserId.trim(), reason: blockReason.trim() });
       if (data.code === 200) {
-        alert('已成功屏蔽该用户');
+        toast.success('已成功屏蔽该用户');
         setShowBlockModal(false);
         setBlockUserId('');
         setBlockReason('');
@@ -286,10 +229,10 @@ export default function SettingsPage() {
         setBlocks([]);
         setBlocksPage(1);
       } else {
-        alert(data.message || '屏蔽失败');
+        toast.error(data.message || '屏蔽失败');
       }
     } catch {
-      alert('屏蔽失败，请重试');
+      toast.error('屏蔽失败，请重试');
     } finally {
       setIsBlocking(false);
     }
@@ -297,22 +240,17 @@ export default function SettingsPage() {
 
   // Unblock user handler
   const handleUnblockUser = async (userId: string) => {
-    if (!confirm('确定要取消屏蔽该用户吗？')) return;
+
     try {
-      const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
-      const res = await fetch(`/api/v1/me/blocks?userId=${userId}`, {
-        method: 'DELETE',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
+      const data = await api.delete(`/api/v1/me/blocks?userId=${userId}`);
       if (data.code === 200) {
         setBlocks(blocks.filter(b => b.blockedUser.id !== userId));
         setBlocksTotal(Math.max(0, blocksTotal - 1));
       } else {
-        alert(data.message || '取消屏蔽失败');
+        toast.error(data.message || '取消屏蔽失败');
       }
     } catch {
-      alert('取消屏蔽失败，请重试');
+      toast.error('取消屏蔽失败，请重试');
     }
   };
 
@@ -323,19 +261,15 @@ export default function SettingsPage() {
   const handleConfirmDelete = async () => {
     if (deleteModal.repoId !== null && user?.username) {
       try {
-        const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
-        const res = await fetch(`/api/v1/repos/${user.username}/${deleteModal.repoName}`, {
-          method: 'DELETE',
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-        });
-        const data = await res.json();
+        const data = await api.delete(`/api/v1/repos/${user.username}/${deleteModal.repoName}`);
         if (data.code === 200) {
           setRepos(repos.filter(r => r.id !== deleteModal.repoId));
+          toast.success('仓库已删除');
         } else {
-          alert(data.message || '删除失败');
+          toast.error(data.message || '删除失败');
         }
       } catch (e) {
-        alert('删除失败，请重试');
+        toast.error('删除失败，请重试');
       }
     }
     setDeleteModal({ show: false, repoName: '', repoId: null });
@@ -349,140 +283,52 @@ export default function SettingsPage() {
   const handleSaveNotifications = async () => {
     setIsSavingNotifications(true);
     try {
-      const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
-      const res = await fetch('/api/v1/users/notifications/settings', {
-        method: 'PUT',
+      const res = await fetch('/api/v1/me/notifications/settings', {
+        method: 'PATCH',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(notificationSettings),
       });
       const data = await res.json();
       if (data.code === 200) {
         setNotificationSettingsLoaded(true); // 确保下次进入时重新加载
-        alert('通知设置已保存');
+        toast.success('通知设置已保存');
       } else {
-        alert(data.message || '保存失败');
+        toast.error(data.message || '保存失败');
       }
     } catch (e) {
       console.error('Save notification settings failed:', e);
-      alert('保存失败，请重试');
+      toast.error('保存失败，请重试');
     } finally {
       setIsSavingNotifications(false);
     }
   };
 
-  // Export handlers
-  const handleExport = async (exportType: 'all' | 'repos') => {
-    const confirmMsg = exportType === 'all'
-      ? '确定要申请导出所有数据吗？这可能需要24-48小时处理。'
-      : '确定要申请导出仓库列表吗？';
-
-    if (!confirm(confirmMsg)) return;
-
-    setExporting(exportType);
-    try {
-      const token = typeof window !== 'undefined' ? tokenManager.getAccessToken() : null;
-      const res = await fetch('/api/v1/me/export', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ exportType }),
-      });
-      const data = await res.json();
-
-      if (data.code === 200) {
-        alert('导出申请已提交，我们会在完成后发送邮件通知您');
-      } else {
-        alert(data.message || '申请失败');
-      }
-    } catch {
-      alert('网络错误，请重试');
-    } finally {
-      setExporting(null);
-    }
-  };
-
-  // Additional form state (位置和网站字段已在上方声明)
-
-  // 加载用户信息到表单
-  useEffect(() => {
-    if (user) {
-      setAvatar(user.avatarUrl || null);
-      setBio(user.bio || '');
-      setUsername(user.username || '');
-      setLocation(user.location || '');
-      setWebsite(user.website || '');
-    }
-  }, [user]);
-
   const tabs = [
     { id: 'profile' as const, label: '个人资料', icon: UserIcon },
     { id: 'account' as const, label: '账号安全', icon: KeyIcon },
-    { id: 'notifications' as const, label: '通知设置', icon: BellIcon },
+    { id: 'notifications' as const, label: '通知', icon: BellIcon },
     { id: 'repositories' as const, label: '仓库管理', icon: RepoIcon },
-    { id: 'export' as const, label: '数据导出', icon: DownloadIcon },
     { id: 'reports' as const, label: '我的举报', icon: FlagIcon },
     { id: 'blocks' as const, label: '屏蔽列表', icon: BlockIcon },
   ];
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // 先做本地预览
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        setAvatar(reader.result as string);
-        try {
-          const token = typeof window !== 'undefined' 
-            ? tokenManager.getAccessToken() 
-            : null;
-          
-          if (!token) {
-            alert('请先登录');
-            setAvatar(user?.avatarUrl || null);
-            return;
-          }
-
-          // 创建 FormData 上传文件
-          const formData = new FormData();
-          formData.append('avatar', file);
-
-          // 上传到服务器
-          const res = await fetch('/api/v1/users/avatar', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-            body: formData,
-          });
-
-          const result = await res.json();
-
-          if (result.code === 200 && result.data?.avatarUrl) {
-            setAvatar(result.data.avatarUrl);
-            updateUser({ avatarUrl: result.data.avatarUrl });
-          } else {
-            alert(result.message || '头像上传失败');
-            setAvatar(user?.avatarUrl || null);
-          }
-        } catch (error) {
-          console.error('Upload error:', error);
-          alert('头像上传失败，请重试');
-          setAvatar(user?.avatarUrl || null);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   return (
-    <SettingsLayout tabs={tabs} activeTab={activeTab} onTabChange={(tabId: string) => setActiveTab(tabId as SettingsTab)}>
+    <div className="flex max-w-[1200px] mx-auto border border-[var(--ds-border-default)] rounded-[var(--ds-radius-md)] overflow-hidden bg-[var(--ds-surface)] min-h-[600px] w-full">
+      <PageLayoutPane width="settings">
+        <Suspense fallback={<div className="w-[200px]" />}>
+          <SettingsNav
+            tabs={tabs}
+            activeTab={activeTab}
+            onTabChange={(id) => setActiveTab(id as SettingsTab)}
+          />
+        </Suspense>
+      </PageLayoutPane>
+      <main className="flex-1 min-w-0 p-6">
           {/* Profile Tab */}
-          {activeTab === 'profile' && (
+          {activeTab === 'profile' && user && (
             <ProfileSettings
               user={user}
               onUpdateUser={updateUser}
@@ -510,7 +356,7 @@ export default function SettingsPage() {
           )}
 
           {/* Repositories Tab */}
-          {activeTab === 'repositories' && (
+          {activeTab === 'repositories' && user && (
             <RepoManagementSettings
               repos={repos}
               reposLoading={reposLoading}
@@ -519,14 +365,6 @@ export default function SettingsPage() {
               deleteModal={deleteModal}
               onCancelDelete={handleCancelDelete}
               onConfirmDelete={handleConfirmDelete}
-            />
-          )}
-
-          {/* Export Tab */}
-          {activeTab === 'export' && (
-            <DataExportSettings
-              exporting={exporting}
-              onExport={handleExport}
             />
           )}
 
@@ -581,184 +419,11 @@ export default function SettingsPage() {
         />
 
         {/* MFA Settings Modal */}
-        {mfaModal && (
-          <div className="modal-overlay" onClick={() => setMfaModal(false)}>
-            <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h3 className="modal-title">两步验证设置</h3>
-                <button className="btn btn-ghost btn-sm" onClick={() => setMfaModal(false)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="modal-body">
-                <MFASettingsModal onClose={() => setMfaModal(false)} />
-              </div>
-            </div>
-          </div>
-        )}
+        <Modal isOpen={mfaModal} onClose={() => setMfaModal(false)} title="两步验证设置" maxWidth="672px">
+          <MFASettingsModal onClose={() => setMfaModal(false)} />
+        </Modal>
 
-        {/* Reports and Blocks Styles */}
-        <style jsx>{`
-          .filter-tabs {
-            display: flex;
-            gap: 8px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 12px;
-          }
-          .filter-tab {
-            padding: 6px 12px;
-            border: none;
-            background: none;
-            cursor: pointer;
-            color: var(--color-text-secondary);
-            font-size: 14px;
-            border-radius: 6px;
-          }
-          .filter-tab:hover {
-            background: var(--hover-bg);
-          }
-          .filter-tab.active {
-            background: var(--accent-bg);
-            color: var(--accent-color);
-          }
-          .report-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-          }
-          .report-item {
-            padding: 16px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-          }
-          .report-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-          }
-          .report-status {
-            font-size: 12px;
-            padding: 2px 8px;
-            border-radius: 12px;
-          }
-          .report-status.pending {
-            background: #fff3cd;
-            color: #856404;
-          }
-          .report-status.resolved {
-            background: #d4edda;
-            color: #155724;
-          }
-          .report-status.dismissed {
-            background: #e2e3e5;
-            color: #383d41;
-          }
-          .report-reason {
-            color: var(--color-text);
-            font-size: 14px;
-            margin-bottom: 8px;
-          }
-          .report-handler-note {
-            color: var(--color-text-secondary);
-            font-size: 13px;
-            margin-bottom: 8px;
-            padding: 8px;
-            background: var(--bg-tertiary);
-            border-radius: 4px;
-          }
-          .report-time {
-            color: var(--color-text-secondary);
-            font-size: 12px;
-          }
-          .block-list {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-          }
-          .block-item {
-            padding: 16px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-          }
-          .block-user {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex: 1;
-          }
-          .block-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            object-fit: cover;
-          }
-          .block-user-info {
-            display: flex;
-            flex-direction: column;
-          }
-          .block-username {
-            font-weight: 500;
-            color: var(--color-text);
-            text-decoration: none;
-          }
-          .block-username:hover {
-            text-decoration: underline;
-          }
-          .block-user-bio {
-            color: var(--color-text-secondary);
-            font-size: 13px;
-            margin: 0;
-          }
-          .block-reason {
-            color: var(--color-text-secondary);
-            font-size: 13px;
-          }
-          .block-time {
-            color: var(--color-text-secondary);
-            font-size: 12px;
-          }
-          .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 48px;
-            color: var(--color-text-secondary);
-          }
-          .empty-state svg {
-            width: 48px;
-            height: 48px;
-            opacity: 0.3;
-            margin-bottom: 16px;
-          }
-          .pagination {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 16px;
-            margin-top: 24px;
-          }
-          .pagination-info {
-            color: var(--color-text-secondary);
-            font-size: 14px;
-          }
-          .section-header {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-          }
-          .section-header button {
-            align-self: flex-start;
-          }
-        `}</style>
-    </SettingsLayout>
+      </main>
+    </div>
   );
 }

@@ -3,9 +3,10 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { 
+import { Button, Card  , Field } from '@/components/design';
+import {
   SearchIcon, 
   FilterIcon, 
   DownloadIcon,
@@ -30,6 +31,7 @@ import type {
   ContextMenuData
 } from './AdminTypes';
 import { AdminContextMenu, createUserContextMenu } from './AdminContextMenu';
+import { formatDate } from '@/lib/utils';
 
 interface AdminUsersEnhancedProps {
   // 数据
@@ -202,30 +204,36 @@ export default function AdminUsersEnhanced({
   };
 
   return (
-    <div className="tab-content">
+    <div className="p-4">
       {/* 页面标题和操作栏 */}
-      <div className="page-header">
-        <h1 className="page-title">用户管理</h1>
-        <div className="header-actions">
-          <button 
-            className={`btn btn-secondary btn-sm ${showAdvancedFilter ? 'active' : ''}`}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">用户管理</h1>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<FilterIcon />}
+            className={showAdvancedFilter ? 'ring-2 ring-[var(--ds-accent-default)]' : ''}
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
           >
-            <FilterIcon /> 筛选
-          </button>
-          <button 
-            className="btn btn-secondary btn-sm"
+            筛选
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<DownloadIcon />}
             onClick={() => onExportUsers()}
           >
-            <DownloadIcon /> 导出
-          </button>
-          <button 
-            className="btn btn-secondary btn-sm"
+            导出
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onRefresh}
           >
             刷新
-          </button>
-          <div className="search-box">
+          </Button>
+          <div className="relative">
             <SearchIcon />
             <input
               type="search"
@@ -260,8 +268,8 @@ export default function AdminUsersEnhanced({
       />
 
       {/* 用户列表 */}
-      <div className="admin-table-container">
-        <table className="admin-table">
+      <Card padding="none" className="overflow-hidden">
+        <table className="w-full text-sm">
           <thead>
             <tr>
               <th style={{ width: '40px' }}>
@@ -277,6 +285,7 @@ export default function AdminUsersEnhanced({
                   }}
                 />
               </th>
+              <th>UID</th>
               <th>用户名</th>
               <th>邮箱</th>
               <th>角色</th>
@@ -288,11 +297,11 @@ export default function AdminUsersEnhanced({
           <tbody>
             {usersLoading ? (
               <tr>
-                <td colSpan={7} className="text-center">加载中...</td>
+                <td colSpan={8} className="text-center">加载中...</td>
               </tr>
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center">暂无用户数据</td>
+                <td colSpan={8} className="text-center">暂无用户数据</td>
               </tr>
             ) : (
               users.map(user => (
@@ -308,6 +317,9 @@ export default function AdminUsersEnhanced({
                       checked={selectedUsers.has(user.id)}
                       onChange={() => onToggleSelect(user.id)}
                     />
+                  </td>
+                  <td>
+                    <span className="text-xs font-mono text-[var(--ds-text-tertiary)]">{user.uid || '-'}</span>
                   </td>
                   <td>
                     <div className="user-cell">
@@ -343,44 +355,47 @@ export default function AdminUsersEnhanced({
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* 分页 */}
       {usersTotal > usersPageSize && (
-        <div className="pagination">
-          <div className="pagination-info">
+        <div className="flex items-center justify-between py-3">
+          <div className="text-sm text-[var(--ds-text-secondary)]">
             显示 {((usersPage - 1) * usersPageSize) + 1} - {Math.min(usersPage * usersPageSize, usersTotal)} 条，共 {usersTotal} 条
           </div>
-          <div className="pagination-controls">
-            <button
-              className="btn btn-secondary btn-sm"
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={usersPage <= 1 || usersLoading}
               onClick={() => onPageChange(usersPage - 1)}
             >
               上一页
-            </button>
+            </Button>
             <div className="pagination-pages">
               {getPaginationNumbers(usersPage, totalPages).map((page, i) => (
                 page === '...' ? (
                   <span key={i} className="pagination-ellipsis">...</span>
                 ) : (
-                  <button
+                  <Button
                     key={i}
-                    className={`btn btn-sm ${page === usersPage ? 'btn-primary' : 'btn-ghost'}`}
+                    variant={page === usersPage ? 'primary' : 'ghost'}
+                    size="sm"
                     onClick={() => onPageChange(page as number)}
                   >
                     {page}
-                  </button>
+                  </Button>
                 )
               ))}
             </div>
-            <button
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={usersPage >= totalPages || usersLoading}
               onClick={() => onPageChange(usersPage + 1)}
             >
               下一页
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -482,7 +497,7 @@ function UserDetailPanel({
         width={480}
       >
         <div className="detail-loading">
-          <div className="loading-spinner" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] mb-3" />
           <p>正在加载用户详情...</p>
         </div>
       </SidePanel>
@@ -502,18 +517,14 @@ function UserDetailPanel({
       width={480}
       actions={
         <>
-          <button className="btn btn-secondary" onClick={onEdit}>
-            编辑资料
-          </button>
-          <button className="btn btn-primary" onClick={onSendNotification}>
-            发送通知
-          </button>
+          <Button variant="secondary" onClick={onEdit}>编辑资料</Button>
+          <Button variant="primary" onClick={onSendNotification}>发送通知</Button>
         </>
       }
     >
       {/* 基本信息 */}
       <div className="detail-section">
-        <h3 className="detail-section-title">基本信息</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">基本信息</h3>
         <div className="detail-grid">
           <div className="detail-item">
             <span className="detail-label">用户名</span>
@@ -550,30 +561,30 @@ function UserDetailPanel({
 
       {/* 统计数据 */}
       <div className="detail-section">
-        <h3 className="detail-section-title">统计信息</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">统计信息</h3>
         <div className="stats-grid-4">
-          <div className="mini-stat">
-            <span className="mini-stat-value">{user.stats?.repos || 0}</span>
-            <span className="mini-stat-label">仓库</span>
+          <div className="flex flex-col items-center p-3">
+            <span className="text-xl font-semibold text-[var(--ds-text-primary)]">{user.stats?.repos || 0}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">仓库</span>
           </div>
-          <div className="mini-stat">
-            <span className="mini-stat-value">{user.stats?.discussions || 0}</span>
-            <span className="mini-stat-label">讨论</span>
+          <div className="flex flex-col items-center p-3">
+            <span className="text-xl font-semibold text-[var(--ds-text-primary)]">{user.stats?.discussions || 0}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">讨论</span>
           </div>
-          <div className="mini-stat">
-            <span className="mini-stat-value">{user.stats?.stars || 0}</span>
-            <span className="mini-stat-label">Star</span>
+          <div className="flex flex-col items-center p-3">
+            <span className="text-xl font-semibold text-[var(--ds-text-primary)]">{user.stats?.stars || 0}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">Star</span>
           </div>
-          <div className="mini-stat">
-            <span className="mini-stat-value">{user.stats?.forks || 0}</span>
-            <span className="mini-stat-label">Fork</span>
+          <div className="flex flex-col items-center p-3">
+            <span className="text-xl font-semibold text-[var(--ds-text-primary)]">{user.stats?.forks || 0}</span>
+            <span className="text-xs text-[var(--ds-text-secondary)]">Fork</span>
           </div>
         </div>
       </div>
 
       {/* 活跃度分析 */}
       <div className="detail-section">
-        <h3 className="detail-section-title">活跃度分析</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">活跃度分析</h3>
         <div className="activity-rate">
           <div className="activity-rate-header">
             <span>过去 30 天活跃天数</span>
@@ -591,7 +602,7 @@ function UserDetailPanel({
       {/* 处罚记录 */}
       {user.penalties && user.penalties.length > 0 && (
         <div className="detail-section">
-          <h3 className="detail-section-title">处罚记录</h3>
+          <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">处罚记录</h3>
           <div className="penalty-list">
             {user.penalties.map((penalty) => (
               <div key={penalty.id} className="penalty-item">
@@ -610,23 +621,24 @@ function UserDetailPanel({
 
       {/* 操作按钮 */}
       <div className="detail-section">
-        <h3 className="detail-section-title">管理操作</h3>
+        <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">管理操作</h3>
         <div className="detail-actions">
-          <button className="btn btn-secondary btn-block" onClick={onEdit}>
+          <Button variant="secondary" onClick={onEdit} block>
             编辑资料
-          </button>
-          <button className="btn btn-secondary btn-block" onClick={onSendNotification}>
+          </Button>
+          <Button variant="secondary" onClick={onSendNotification} block>
             发送通知
-          </button>
-          <button 
-            className={`btn ${user.isBanned ? 'btn-primary' : 'btn-warning'} btn-block`}
+          </Button>
+          <Button
+            variant={user.isBanned ? 'primary' : 'danger'}
             onClick={onBan}
+            block
           >
             {user.isBanned ? '解除封禁' : '封禁账号'}
-          </button>
-          <button className="btn btn-danger btn-block" onClick={onDelete}>
+          </Button>
+          <Button variant="danger" onClick={onDelete} block>
             删除账号
-          </button>
+          </Button>
         </div>
       </div>
     </SidePanel>
@@ -653,16 +665,6 @@ function getPenaltyTypeLabel(type: string): string {
     ban: '封禁',
   };
   return labels[type] || type;
-}
-
-function formatDate(dateString: string): string {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
 }
 
 function getPaginationNumbers(current: number, total: number): (number | string)[] {

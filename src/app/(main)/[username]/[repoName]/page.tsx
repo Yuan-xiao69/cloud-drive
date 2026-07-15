@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import Header from '@/components/layout/Header';
-import LeftSidebar from '@/components/layout/LeftSidebar';
-import RightSidebar from '@/components/layout/RightSidebar';
+import { Button, Empty, Input, Field, PageLayout, PageLayoutContent, Modal, ModalFooter, RepoHeader, Tabs } from '@/components/design';
+
 import ChunkedUploadModal from '@/components/repo/ChunkedUploadModal';
 import FileTree from '@/components/repo/FileTree';
 import { useAuth } from '@/lib/providers';
-import { tokenManager } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
+import { buildFilePath } from '@/lib/utils';
 import {
   RepoIcon,
   FileIcon,
@@ -30,6 +30,7 @@ import {
   PullRequestIcon,
   PlusIcon,
   LinkIcon,
+  DownloadIcon,
 } from '@/components/repo/RepoIcons';
 import RepoIssuesTab from '@/components/repo/RepoIssuesTab';
 import RepoPullsTab from '@/components/repo/RepoPullsTab';
@@ -41,8 +42,8 @@ import RepoShareModal from '@/components/repo/RepoShareModal';
 import RepoForkRequestModal from '@/components/repo/RepoForkRequestModal';
 import FileVersionHistoryModal from '@/components/repo/FileVersionHistoryModal';
 import ActionMenu from '@/components/common/ActionMenu';
-import { useRepoNavigation, useRepoFiles } from '@/components/repo/hooks';
-import type { Issue, PullRequest, RepoData, RepoItem, ShareLink } from '@/components/repo/RepoTypes';
+import { useRepoNavigation, useRepoFiles, useRepoData } from '@/components/repo/hooks';
+import type { RepoData, RepoItem, ShareLink } from '@/components/repo/RepoTypes';
 import toast from 'react-hot-toast';
 
 type RepoTab = 'code' | 'issues' | 'pulls' | 'discussions' | 'settings';
@@ -55,15 +56,12 @@ export default function RepoPage() {
   const repoName = params.repoName as string;
   const { user: currentUser } = useAuth();
 
-  const [repo, setRepo] = useState<RepoData | null>(null);
+  const { repo, isLoading, error, isStarred, isWatching, isForked, starCount: hookStarCount, forkCount: hookForkCount, fetchRepo, toggleStar, toggleWatch, toggleFork, repoStats, repoBranches, setRepoBranches } = useRepoData({ username, repoName });
   const [files, setFiles] = useState<RepoItem[]>([]);
   const [readmeContent, setReadmeContent] = useState<string | null>(null);
   const [currentPath, setCurrentPath] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<RepoTab>('code');
-  const [isStarred, setIsStarred] = useState(false);
-  const [isWatched, setIsWatched] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [filesLoading, setFilesLoading] = useState(false);
 
   // 新建文件/文件夹模态框状态
   const [showNewModal, setShowNewModal] = useState(false);
@@ -82,28 +80,12 @@ export default function RepoPage() {
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; show: boolean; targetFile?: { name: string; type: string; fileId?: string } }>({ x: 0, y: 0, show: false });
 
-  // 问题状态
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [issuesTotal, setIssuesTotal] = useState(0);
-  const [issueStatus, setIssueStatus] = useState<'open' | 'closed' | 'all'>('open');
-  const [showIssueModal, setShowIssueModal] = useState(false);
-  const [newIssueTitle, setNewIssueTitle] = useState('');
-  const [newIssueContent, setNewIssueContent] = useState('');
-  const [isCreatingIssue, setIsCreatingIssue] = useState(false);
-
-  // 拉取请求状态
-  const [pulls, setPulls] = useState<PullRequest[]>([]);
-  const [pullsTotal, setPullsTotal] = useState(0);
-  const [pullStatus, setPullStatus] = useState<'open' | 'merged' | 'closed' | 'all'>('open');
-  const [showPRModal, setShowPRModal] = useState(false);
-  const [newPRTitle, setNewPRTitle] = useState('');
-  const [newPRContent, setNewPRContent] = useState('');
-  const [newPRSourceBranch, setNewPRSourceBranch] = useState('');
-  const [newPRTargetBranch, setNewPRTargetBranch] = useState('main');
-  const [isCreatingPR, setIsCreatingPR] = useState(false);
 
   // 从URL下载状态
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+
+  // 仓库ZIP下载状态
+  const [showRepoZipDownload, setShowRepoZipDownload] = useState(false);
 
   // 仓库设置状态
   const [editRepoName, setEditRepoName] = useState('');
@@ -112,9 +94,6 @@ export default function RepoPage() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isDeletingRepo, setIsDeletingRepo] = useState(false);
 
-  // 仓库统计和分支
-  const [repoStats, setRepoStats] = useState<Record<string, unknown> | null>(null);
-  const [repoBranches, setRepoBranches] = useState<{id: string; name: string; isDefault: boolean}[]>([]);
   const [currentBranch, setCurrentBranch] = useState('main');
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
@@ -189,21 +168,18 @@ export default function RepoPage() {
   // 保存仓库设置
   const handleSaveSettings = async () => {
     if (!editRepoName.trim()) {
-      alert('仓库名称不能为空');
+      toast.error('仓库名称不能为空');
       return;
     }
-    if (editRepoName !== repo?.name && !confirm(`确定要将仓库名称从 "${repo?.name}" 改为 "${editRepoName}" 吗？`)) {
-      return;
-    }
+
     
     setIsSavingSettings(true);
     try {
-      const token = tokenManager.getAccessToken();
       const res = await fetch(`/api/v1/repos/${username}/${repoName}`, {
-        method: 'PUT',
+        method: 'PATCH',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
         },
         body: JSON.stringify({
           name: editRepoName,
@@ -213,24 +189,20 @@ export default function RepoPage() {
       });
       const data = await res.json();
       if (data.code === 200) {
-        alert('设置已保存');
+        toast.success('设置已保存');
         // 如果仓库名改变，需要跳转到新页面
         if (editRepoName !== repo?.name) {
           router.push(`/${username}/${editRepoName}`);
         } else {
           // 刷新仓库信息
-          const repoRes = await fetch(`/api/v1/repos/${username}/${repoName}`);
-          const repoData = await repoRes.json();
-          if (repoData.code === 200) {
-            setRepo(repoData.data);
-          }
+          fetchRepo();
         }
       } else {
-        alert(data.message || '保存失败');
+        toast.error(data.message || '保存失败');
       }
     } catch (err) {
       console.error('Failed to save settings:', err);
-      alert('保存失败，请重试');
+      toast.error('保存失败，请重试');
     } finally {
       setIsSavingSettings(false);
     }
@@ -238,39 +210,27 @@ export default function RepoPage() {
 
   // 删除仓库
   const handleDeleteRepo = async () => {
-    if (!confirm(`确定要删除仓库 "${repo?.name}" 吗？此操作不可恢复！`)) {
-      return;
-    }
-    if (!confirm('再次确认：删除后所有内容将被永久删除！')) {
-      return;
-    }
+
+
     
     setIsDeletingRepo(true);
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-      });
-      const data = await res.json();
+      const data = await api.delete(`/api/v1/repos/${username}/${repoName}`);
       if (data.code === 200) {
-        alert('仓库已删除');
+        toast.success('仓库已删除');
         router.push(`/${username}`);
       } else {
-        alert(data.message || '删除失败');
+        toast.error(data.message || '删除失败');
       }
     } catch (err) {
       console.error('Failed to delete repo:', err);
-      alert('删除失败，请重试');
+      toast.error('删除失败，请重试');
     } finally {
       setIsDeletingRepo(false);
     }
   };
 
-  const isOwner = currentUser?.username?.toLowerCase() === username?.toLowerCase();
+  const isOwner = !!(currentUser && repo && currentUser.username === (repo as any).owner?.username);
 
   // 打开分享模态框
   const handleOpenShare = () => {
@@ -290,185 +250,51 @@ export default function RepoPage() {
     setShowVersionHistoryModal(true);
   };
 
-  // 获取 Issues
-  const fetchIssues = async (status: string = 'open') => {
-    try {
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/issues?status=${status}`);
-      const data = await res.json();
-      if (data.code === 200) {
-        setIssues(data.data?.items || []);
-        setIssuesTotal(data.data?.total || 0);
-      }
-    } catch (err) {
-      console.error('Failed to fetch issues:', err);
-    }
-  };
 
-  // 获取 Pull Requests
-  const fetchPulls = async (status: string = 'open') => {
-    try {
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/pulls?status=${status}`);
-      const data = await res.json();
-      if (data.code === 200) {
-        setPulls(data.data?.items || []);
-        setPullsTotal(data.data?.total || 0);
-      }
-    } catch (err) {
-      console.error('Failed to fetch pulls:', err);
-    }
-  };
-
-  // 创建 Issue
-  const handleCreateIssue = async () => {
-    if (!newIssueTitle.trim()) return;
-    setIsCreatingIssue(true);
-    try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/issues`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ title: newIssueTitle, content: newIssueContent }),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setShowIssueModal(false);
-        setNewIssueTitle('');
-        setNewIssueContent('');
-        fetchIssues(issueStatus);
-      } else {
-        alert(data.message || '创建失败');
-      }
-    } catch (err) {
-      alert('创建失败');
-    } finally {
-      setIsCreatingIssue(false);
-    }
-  };
-
-  // 创建 Pull Request
-  const handleCreatePR = async () => {
-    if (!newPRTitle.trim()) return;
-    setIsCreatingPR(true);
-    try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/pulls`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
-          title: newPRTitle,
-          content: newPRContent,
-          sourceBranch: newPRSourceBranch,
-          targetBranch: newPRTargetBranch,
-        }),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setShowPRModal(false);
-        setNewPRTitle('');
-        setNewPRContent('');
-        fetchPulls(pullStatus);
-      } else {
-        alert(data.message || '创建失败');
-      }
-    } catch (err) {
-      alert('创建失败');
-    } finally {
-      setIsCreatingPR(false);
-    }
-  };
-
-  // 获取仓库信息
+  // repo 由 useRepoData hook 加载（含 stats/branches），这里只补充文件/README 数据
   useEffect(() => {
-    async function fetchRepo() {
+    if (!repo || isLoading) return;
+
+    const defaultBranch = repo.defaultBranch || 'main';
+    setCurrentBranch(defaultBranch);
+
+    async function loadExtraData() {
       try {
-        const repoRes = await fetch(`/api/v1/repos/${username}/${repoName}`);
-        const repoData = await repoRes.json();
-        if (repoData.code === 200) {
-          setRepo(repoData.data);
-          const defaultBranch = repoData.data?.defaultBranch || 'main';
-          setNewPRSourceBranch('');
-          setNewPRTargetBranch(defaultBranch);
-          setCurrentBranch(defaultBranch);
-        } else {
-          setError('仓库不存在');
+        const [filesRes, readmeRes] = await Promise.all([
+          fetch(`/api/v1/repos/${username}/${repoName}/tree?branch=${encodeURIComponent(defaultBranch)}`),
+          fetch(`/api/v1/repos/${username}/${repoName}/blob/README.md?branch=${encodeURIComponent(defaultBranch)}`),
+        ]);
+
+        const filesData = await filesRes.json();
+        if (filesData.code === 200) {
+          setFiles(filesData.data?.items || filesData.data?.files || filesData.data || []);
         }
-      } catch (err) {
-        console.error('Failed to fetch repo:', err);
-        setError('加载失败');
-      }
-    }
-    fetchRepo();
-  }, [username, repoName]);
 
-  // 获取仓库统计
-  useEffect(() => {
-    if (!repo) return;
-    async function fetchStats() {
-      try {
-        const res = await fetch(`/api/v1/repos/${username}/${repoName}/stats`);
-        const data = await res.json();
-        if (data.code === 200) setRepoStats(data.data);
+        const readmeData = await readmeRes.json();
+        setReadmeContent(readmeData.code === 200 ? (readmeData.data?.content || null) : null);
       } catch (err) {
-        console.error('Failed to fetch repo stats:', err);
+        console.error('Failed to load extra data:', err);
       }
     }
-    fetchStats();
-  }, [username, repoName, repo]);
-
-  // 获取分支列表
-  useEffect(() => {
-    if (!repo) return;
-    async function fetchBranches() {
-      try {
-        const res = await fetch(`/api/v1/repos/${username}/${repoName}/branches`);
-        const data = await res.json();
-        if (data.code === 200) {
-          setRepoBranches(data.data.branches || []);
-          if (data.data.repository?.defaultBranch) {
-            setCurrentBranch(data.data.repository.defaultBranch);
-          }
-        } else {
-          // 如果分支表为空，使用默认分支
-          setRepoBranches([{ id: '', name: repo?.defaultBranch || 'main', isDefault: true }]);
-        }
-      } catch (err) {
-        console.error('Failed to fetch branches:', err);
-      }
-    }
-    fetchBranches();
-  }, [username, repoName, repo]);
+    loadExtraData();
+  }, [repo, isLoading, username, repoName]);
 
   // 创建分支
   const handleCreateBranch = async () => {
     if (!newBranchName.trim()) return;
     setIsCreatingBranch(true);
     try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/branches`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ name: newBranchName.trim(), sourceBranch: currentBranch }),
-      });
-      const data = await res.json();
+      const data = await api.post<{ id: string; name: string; isDefault: boolean }>(`/api/v1/repos/${username}/${repoName}/branches`, { name: newBranchName.trim(), sourceBranch: currentBranch });
       if (data.code === 200) {
         setRepoBranches(prev => [...prev, data.data]);
         setNewBranchName('');
         setShowBranchDropdown(false);
         setCurrentBranch(newBranchName.trim());
       } else {
-        alert(data.message || '创建失败');
+        toast.error(data.message || '创建失败');
       }
     } catch {
-      alert('创建失败');
+      toast.error('创建失败');
     } finally {
       setIsCreatingBranch(false);
     }
@@ -477,7 +303,7 @@ export default function RepoPage() {
   // 获取文件树（依赖分支和路径）
   const fetchFiles = useCallback(async () => {
     if (!repo) return;
-    setIsLoading(true);
+    setFilesLoading(true);
     try {
       const pathParam = currentPath.length > 0 ? `path=${currentPath.join('/')}&` : '?';
       const treeRes = await fetch(`/api/v1/repos/${username}/${repoName}/tree?${pathParam}branch=${encodeURIComponent(currentBranch)}`);
@@ -496,7 +322,7 @@ export default function RepoPage() {
     } catch (err) {
       console.error('Failed to fetch files:', err);
     } finally {
-      setIsLoading(false);
+      setFilesLoading(false);
     }
   }, [repo, username, repoName, currentPath, currentBranch]);
 
@@ -521,9 +347,13 @@ export default function RepoPage() {
     refreshFiles: fetchFiles,
   });
 
+  // 仅在路径或分支变化时重新获取文件（初始加载已在主请求中完成）
   useEffect(() => {
-    fetchFiles();
-  }, [fetchFiles]);
+    // 跳过初始加载，因为主请求已经获取了文件
+    if (currentPath.length > 0 || currentBranch !== repo?.defaultBranch) {
+      fetchFiles();
+    }
+  }, [currentPath, currentBranch]);
 
   // 全局拖拽上传到浏览器窗口（整个页面）
   useEffect(() => {
@@ -621,73 +451,8 @@ export default function RepoPage() {
     setPendingFiles([]);
   }, []);
 
-  const handleStar = async () => {
-    try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/star`, {
-        method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setIsStarred(!isStarred);
-      } else if (data.code === 401) {
-        router.push('/login');
-      }
-    } catch (err) {
-      console.error('Failed to star:', err);
-    }
-  };
 
-  const handleWatch = async () => {
-    try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/watch`, {
-        method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        setIsWatched(!isWatched);
-      } else if (data.code === 401) {
-        router.push('/login');
-      }
-    } catch (err) {
-      console.error('Failed to watch:', err);
-    }
-  };
 
-  const handleFork = async () => {
-    if (!currentUser) {
-      router.push('/login');
-      return;
-    }
-    
-    // 公开仓库直接 fork
-    try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/fork`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        alert(`成功 fork 到 ${currentUser.username}/${repoName}`);
-        router.push(`/${currentUser.username}/${repoName}`);
-      } else if (data.code === 401) {
-        router.push('/login');
-      } else {
-        alert(data.message || 'Fork 失败');
-      }
-    } catch (err) {
-      console.error('Failed to fork:', err);
-      alert('Fork 失败');
-    }
-  };
 
   // 打开 Fork 申请模态框
   const handleOpenForkRequest = () => {
@@ -702,20 +467,12 @@ export default function RepoPage() {
   const fetchForkRequests = async (status?: string) => {
     setIsLoadingForkRequests(true);
     try {
-      const token = tokenManager.getAccessToken();
       const statusParam = status || forkRequestsStatus;
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/fork-requests?status=${statusParam}&page=${forkRequestPage}&pageSize=10`, {
-        headers: {
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-      });
-      const data = await res.json();
+      const data = await api.get<{ id: string; status: string; message: string | null; note: string | null; expiresAt: string | null; createdAt: string; processedAt: string | null; requester: { id: string; username: string; avatarUrl: string | null } }[]>(`/api/v1/repos/${username}/${repoName}/fork-requests?status=${statusParam}&page=${forkRequestPage}&pageSize=10`);
       if (data.code === 200) {
         setForkRequests(data.data || []);
-        // 从 meta 中获取 total
-        if (data.meta) {
-          setForkRequestsTotal(data.meta.total || 0);
-        }
+        // V1 meta 不含 total，使用返回数组长度
+        setForkRequestsTotal(data.data.length || 0);
       }
     } catch (err) {
       console.error('Failed to fetch fork requests:', err);
@@ -724,34 +481,10 @@ export default function RepoPage() {
     }
   };
 
-  // 批准 Fork 申请
+  // 批准 Fork 申请（子组件已调用 API，此处只刷新父组件状态）
   const handleApproveForkRequest = async (requestId: string) => {
-    if (!confirm('确定要批准这个 Fork 申请吗？')) return;
-    
-    setProcessingRequestId(requestId);
-    try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/fork-requests/${requestId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ action: 'approve' }),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        alert('已批准 Fork 申请');
-        fetchForkRequests();
-      } else {
-        alert(data.message || '操作失败');
-      }
-    } catch (err) {
-      console.error('Failed to approve fork request:', err);
-      alert('操作失败');
-    } finally {
-      setProcessingRequestId(null);
-    }
+    toast.success('已批准 Fork 申请');
+    fetchForkRequests();
   };
 
   // 打开拒绝模态框
@@ -761,35 +494,10 @@ export default function RepoPage() {
     setShowRejectModal(true);
   };
 
-  // 拒绝 Fork 申请
+  // 拒绝 Fork 申请（子组件已调用 API，此处只刷新父组件状态）
   const handleRejectForkRequest = async () => {
-    if (!currentRejectId) return;
-    
-    setProcessingRequestId(currentRejectId);
-    try {
-      const token = tokenManager.getAccessToken();
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/fork-requests/${currentRejectId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ action: 'reject', note: rejectNote }),
-      });
-      const data = await res.json();
-      if (data.code === 200) {
-        alert('已拒绝 Fork 申请');
-        setShowRejectModal(false);
-        fetchForkRequests();
-      } else {
-        alert(data.message || '操作失败');
-      }
-    } catch (err) {
-      console.error('Failed to reject fork request:', err);
-      alert('操作失败');
-    } finally {
-      setProcessingRequestId(null);
-    }
+    toast.success('已拒绝 Fork 申请');
+    fetchForkRequests();
   };
 
   // 切换到 fork-requests 子 Tab 时获取数据
@@ -801,7 +509,7 @@ export default function RepoPage() {
 
   const handleCreate = async () => {
     if (!newItemName.trim()) {
-      alert(`请输入${createType === 'file' ? '文件名' : '文件夹名称'}`);
+      toast.error(`请输入${createType === 'file' ? '文件名' : '文件夹名称'}`);
       return;
     }
 
@@ -809,34 +517,23 @@ export default function RepoPage() {
     
     // 如果创建文件，检查文件名格式
     if (createType === 'file' && !itemName.includes('.')) {
-      alert('文件名需要包含扩展名（如 .txt, .md）');
+      toast.error('文件名需要包含扩展名（如 .txt, .md）');
       return;
     }
 
     setIsCreating(true);
     try {
-      // 获取 token
-      const token = tokenManager.getAccessToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/upload`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          // API 需要 name 字段
-          name: itemName,
-          // 使用当前路径 + 新文件名
-          path: currentPath.length > 0 ? `${currentPath.join('/')}/${itemName}` : itemName,
-          content: newFileContent || '',
-          isDirectory: createType === 'folder',
-          type: createType === 'folder' ? 'dir' : 'file',
-          message: `Create ${itemName}`,
-          branch: currentBranch,
-        })
+      const data = await api.post(`/api/v1/repos/${username}/${repoName}/upload`, {
+        // API 需要 name 字段
+        name: itemName,
+        // 使用当前路径 + 新文件名
+        path: buildFilePath(currentPath, itemName),
+        content: newFileContent || '',
+        isDirectory: createType === 'folder',
+        type: createType === 'folder' ? 'dir' : 'file',
+        message: `Create ${itemName}`,
+        branch: currentBranch,
       });
-
-      const data = await res.json();
       if (data.code === 200) {
         // 显示成功通知
         toast.success(createType === 'folder' ? '文件夹创建成功' : '文件创建成功');
@@ -858,287 +555,82 @@ export default function RepoPage() {
           router.push(`/${username}/${repoName}/blob/${currentPath.length > 0 ? currentPath.join('/') + '/' + itemName : itemName}?branch=${encodeURIComponent(currentBranch)}`);
         }
       } else {
-        alert(data.message || '创建失败');
+        toast.error(data.message || '创建失败');
       }
     } catch (err) {
       console.error('Failed to create:', err);
-      alert('创建失败，请重试');
+      toast.error('创建失败，请重试');
     } finally {
       setIsCreating(false);
     }
   };
 
-  // 快捷键支持
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // 忽略输入框中的按键
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
 
-      // G + 快捷键导航
-      if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        // 设置待处理的 G 命令
-        (window as unknown as { __pendingGCommand: boolean }).__pendingGCommand = true;
-        setTimeout(() => {
-          (window as unknown as { __pendingGCommand: boolean }).__pendingGCommand = false;
-        }, 1000); // 1秒内有效
-        return;
-      }
-
-      // 检查是否有待处理的 G 命令
-      const pendingG = (window as unknown as { __pendingGCommand: boolean }).__pendingGCommand;
-      
-      if (pendingG) {
-        (window as unknown as { __pendingGCommand: boolean }).__pendingGCommand = false;
-        
-        switch (e.key.toLowerCase()) {
-          case 'i': // G + I: Issues
-            e.preventDefault();
-            setActiveTab('issues');
-            break;
-          case 'p': // G + P: Pull Requests
-            e.preventDefault();
-            setActiveTab('pulls');
-            break;
-          case 'd': // G + D: Discussions
-            e.preventDefault();
-            setActiveTab('discussions');
-            break;
-          case 's': // G + S: Settings (仅所有者)
-            e.preventDefault();
-            if (isOwner) {
-              setActiveTab('settings');
-            }
-            break;
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOwner]);
-
-  if (isLoading) {
-    return (
-      <div className="page">
-        <Header />
-        <div className="repo-header">
-          <div className="skeleton h-12 w-full mb-4"></div>
-          <div className="skeleton h-10 w-full"></div>
-        </div>
-        <div className="repo-layout">
-          <main className="repo-main">
-            <div className="skeleton h-48 w-full"></div>
-          </main>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return null;
 
   if (error || !repo) {
-    return (
-      <div className="page">
-        <Header />
-        <div className="page-container py-16 text-center">
-          <h1 className="text-2xl font-bold mb-4">{error || '仓库不存在'}</h1>
-          <a href="/" className="btn btn-primary">返回首页</a>
-        </div>
-      </div>
-    );
+    return <Empty title="此目录为空" />;
   }
 
   return (
-    <div className="page repo-page">
-      <Header />
-      <div className="repo-layout-wrapper">
-        {/* 左侧边栏 */}
-        <LeftSidebar />
+    <PageLayout containerWidth="full" padding="none">
+      <PageLayoutContent>
+        <div className="flex-1 min-w-0">
+          {/* 移动端 Tabs — 对齐样本：文件 | 文件问题 | 设置 */}
+          <Tabs
+            className="md:hidden"
+            items={[
+              { key: 'code', label: '文件', icon: <CodeIcon />, count: files.length },
+              { key: 'issues', label: '文件问题', icon: <IssueIcon />, count: repoStats ? Number((repoStats as Record<string, unknown>).openIssueCount || 0) : 0 },
+              ...(isOwner ? [{ key: 'settings', label: '设置', icon: <SettingsIcon /> }] : []),
+            ]}
+            activeKey={activeTab}
+            onChange={(k) => setActiveTab(k as RepoTab)}
+          />
 
-        {/* 中间主内容 */}
-        <div className="repo-container">
-          {/* 移动端底部导航 */}
-          <nav className="mobile-bottom-nav">
-        <button
-          className={`mobile-nav-item ${activeTab === 'code' ? 'active' : ''}`}
-          onClick={() => setActiveTab('code')}
-        >
-          <CodeIcon />
-          <span>代码</span>
-        </button>
-        <button
-          className={`mobile-nav-item ${activeTab === 'issues' ? 'active' : ''}`}
-          onClick={() => setActiveTab('issues')}
-        >
-          <IssueIcon />
-          <span>Issues</span>
-        </button>
-        <button
-          className={`mobile-nav-item ${activeTab === 'pulls' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pulls')}
-        >
-          <PullRequestIcon />
-          <span>Pull</span>
-        </button>
-        {isOwner && (
-          <button
-            className={`mobile-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <SettingsIcon />
-            <span>设置</span>
-          </button>
-        )}
-      </nav>
-
-      {/* Repo Header */}
-      <div className="repo-header">
-        <div className="repo-header-content">
-          {/* Owner / Repo Name */}
-          <div className="repo-title">
-            <RepoIcon />
-            <Link href={`/${username}`} className="repo-owner">
-              {username}
-            </Link>
-            <span className="repo-sep">/</span>
-            <Link href={`/${username}/${repoName}`} className="repo-name">
-              {repo.name}
-            </Link>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="repo-actions">
-            <button className="btn btn-secondary btn-sm" onClick={handleWatch}>
+      {/* Repo Header — 对齐样本：单一边框，图标+owner/name */}
+      <RepoHeader
+        owner={username}
+        name={repo.name}
+        description={repo.description}
+        visibility={repo.visibility === 1 ? 'public' : 'private'}
+        actions={
+          <>
+            <Button variant="secondary" onClick={toggleWatch}>
               <WatchIcon />
-              {isWatched ? '已关注' : '关注'}
-              <span className="counter">{repo.watchCount}</span>
-            </button>
-            {isOwner && (
-              <button className="btn btn-secondary btn-sm" onClick={handleOpenShare}>
-                <ShareIcon />
-                分享
-              </button>
-            )}
-            <button 
-              className="btn btn-secondary btn-sm" 
-              onClick={repo.visibility === 1 && username !== currentUser?.username ? handleFork : handleOpenForkRequest}
-              title={repo.visibility === 1 && username !== currentUser?.username ? 'Fork 此仓库' : '申请 Fork 此仓库'}
-            >
-              <ForkIcon />
-              {repo.visibility === 1 && username !== currentUser?.username ? '分叉' : '申请Fork'}
-              <span className="counter">{repo.forkCount}</span>
-            </button>
-            <button
-              className={`btn btn-secondary btn-sm ${isStarred ? 'starred' : ''}`}
-              onClick={handleStar}
-            >
+              {isWatching ? '已关注' : '关注'}
+              <span className="ml-1 text-xs px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded-full">{repo.watchCount}</span>
+            </Button>
+            <Button variant="secondary" onClick={toggleStar}>
               <StarIcon />
               {isStarred ? '已收藏' : '收藏'}
-              <span className="counter">{isStarred ? repo.starCount + 1 : repo.starCount}</span>
-            </button>
-            {currentUser && !isOwner && (
-              <ActionMenu
-                type="repository"
-                targetId={repo.id}
-                targetTitle={`${username}/${repoName}`}
-              />
+              <span className="ml-1 text-xs px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded-full">{hookStarCount}</span>
+            </Button>
+            <Button variant="secondary" onClick={() => setShowRepoZipDownload(true)}>
+              <DownloadIcon />
+              下载全部
+            </Button>
+            {isOwner && (
+              <Button variant="secondary" onClick={handleOpenShare}>
+                <ShareIcon />
+                分享
+              </Button>
             )}
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {/* Branch Selector */}
-        <div className="branch-selector-wrap" style={{ position: 'relative' }}>
-          <button
-            className="branch-select-btn"
-            onClick={() => setShowBranchDropdown(!showBranchDropdown)}
-          >
-            <GitBranchIcon />
-            <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {currentBranch}
-            </span>
-            <ChevronDownIcon />
-          </button>
-          {showBranchDropdown && (
-            <div className="branch-dropdown">
-              {repoBranches.map(b => (
-                <div
-                  key={b.id}
-                  className={`branch-dropdown-item ${b.name === currentBranch ? 'current' : ''}`}
-                  onClick={() => {
-                    setCurrentBranch(b.name);
-                    setShowBranchDropdown(false);
-                  }}
-                >
-                  <GitBranchIcon />
-                  <span style={{ flex: 1 }}>{b.name}</span>
-                  {b.isDefault && <span className="default-badge">默认</span>}
-                </div>
-              ))}
-              {isOwner && (
-                <div className="branch-dropdown-create">
-                  <input
-                    type="text"
-                    placeholder="新分支名..."
-                    value={newBranchName}
-                    onChange={e => setNewBranchName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleCreateBranch(); }}
-                  />
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={handleCreateBranch}
-                    disabled={isCreatingBranch || !newBranchName.trim()}
-                  >
-                    {isCreatingBranch ? '...' : '创建'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Tabs */}
-        <nav className="repo-tabs">
-          <button
-            className={`tab-item ${activeTab === 'code' ? 'active' : ''}`}
-            onClick={() => setActiveTab('code')}
-          >
-            <CodeIcon />
-            文件
-          </button>
-          <button
-            className={`tab-item ${activeTab === 'issues' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab('issues');
-              if (issues.length === 0) fetchIssues(issueStatus);
-            }}
-          >
-            <IssueIcon />
-            问题
-            {issuesTotal > 0 && <span className="counter">{issuesTotal}</span>}
-          </button>
-          <button
-            className={`tab-item ${activeTab === 'pulls' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab('pulls');
-              if (pulls.length === 0) fetchPulls(pullStatus);
-            }}
-          >
-            <PullRequestIcon />
-            拉取请求
-            {pullsTotal > 0 && <span className="counter">{pullsTotal}</span>}
-          </button>
-          {isOwner && (
-            <button
-              className={`tab-item ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}
-            >
-              <SettingsIcon />
-              设置
-            </button>
-          )}
-        </nav>
-      </div>
+      {/* Tabs — 对齐样本：文件 (N) | 文件问题 (N) | 设置 */}
+      <Tabs
+        className="px-5"
+        items={[
+          { key: 'code', label: '文件', icon: <CodeIcon />, count: files.length },
+          { key: 'issues', label: '文件问题', icon: <IssueIcon />, count: repoStats ? Number((repoStats as Record<string, unknown>).openIssueCount || 0) : 0 },
+          ...(isOwner ? [{ key: 'settings', label: '设置', icon: <SettingsIcon /> }] : []),
+        ]}
+        activeKey={activeTab}
+        onChange={(k) => setActiveTab(k as RepoTab)}
+      />
 
       {/* Main Content */}
       {activeTab === 'code' && (
@@ -1185,7 +677,7 @@ export default function RepoPage() {
           setSingleMoveTarget={setSingleMoveTarget}
           setIsSingleMoving={setIsSingleMoving}
           setContextMenu={setContextMenu}
-          onOpenNewModal={(type) => { setCreateType(type); setNewItemName(''); setShowNewModal(true); }}
+          onOpenNewModal={(type: 'file' | 'folder') => { setCreateType(type); setNewItemName(''); setShowNewModal(true); }}
           onOpenChunkedUploadModal={() => setShowChunkedUploadModal(true)}
           onOpenDownloadModal={() => setShowDownloadModal(true)}
           onOpenVersionHistory={handleOpenVersionHistory}
@@ -1196,14 +688,6 @@ export default function RepoPage() {
         <RepoIssuesTab
           username={username}
           repoName={repoName}
-          issues={issues}
-          issuesTotal={issuesTotal}
-          issueStatus={issueStatus}
-          onStatusChange={setIssueStatus}
-          showIssueModal={showIssueModal}
-          onShowModalChange={setShowIssueModal}
-          onCreateIssue={handleCreateIssue}
-          onFetchIssues={fetchIssues}
         />
       )}
 
@@ -1211,15 +695,7 @@ export default function RepoPage() {
         <RepoPullsTab
           username={username}
           repoName={repoName}
-          pulls={pulls}
-          pullsTotal={pullsTotal}
-          pullStatus={pullStatus}
           defaultBranch={repo?.defaultBranch}
-          onStatusChange={setPullStatus}
-          showPRModal={showPRModal}
-          onShowModalChange={setShowPRModal}
-          onCreatePR={handleCreatePR}
-          onFetchPulls={fetchPulls}
         />
       )}
 
@@ -1237,77 +713,47 @@ export default function RepoPage() {
       )}
 
       {/* 新建文件/文件夹模态框 */}
-      {showNewModal && (
-        <div className="modal-overlay" onClick={() => setShowNewModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{createType === 'file' ? '创建新文件' : '创建新文件夹'}</h3>
-              <button className="modal-close" onClick={() => setShowNewModal(false)}>
-                <CloseIcon />
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">
-                  {createType === 'file' ? '文件名' : '文件夹名称'}
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder={createType === 'file' ? '例如: README.md, index.js' : '例如: src, components, docs'}
-                  value={newItemName}
-                  onChange={e => setNewItemName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleCreate();
-                    }
-                  }}
-                  autoFocus
-                />
-              </div>
-              {createType === 'file' && (
-                <div className="form-group">
-                  <label className="form-label">文件内容（可选）</label>
-                  <textarea
-                    className="form-input"
-                    rows={10}
-                    placeholder="在此输入文件内容..."
-                    value={newFileContent}
-                    onChange={e => setNewFileContent(e.target.value)}
-                  />
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowNewModal(false)}
-                disabled={isCreating}
-              >
-                取消
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleCreate}
-                disabled={isCreating}
-              >
-                {isCreating ? (
-                  <>
-                    <span className="spinner"></span>
-                    创建中...
-                  </>
-                ) : (
-                  <>
-                    <PlusIcon />
-                    {createType === 'file' ? '创建文件' : '创建文件夹'}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={showNewModal}
+        onClose={() => setShowNewModal(false)}
+        title={createType === 'file' ? '创建新文件' : '创建新文件夹'}
+        maxWidth="480px"
+        footer={
+          <ModalFooter
+            onCancel={() => setShowNewModal(false)}
+            onConfirm={handleCreate}
+            confirmLabel={createType === 'file' ? '创建文件' : '创建文件夹'}
+            confirmLoading={isCreating}
+          />
+        }
+      >
+        <Field label={createType === 'file' ? '文件名' : '文件夹名称'}>
+          <Input
+            type="text"
+            placeholder={createType === 'file' ? '例如: README.md, index.js' : '例如: src, components, docs'}
+            value={newItemName}
+            onChange={e => setNewItemName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleCreate();
+              }
+            }}
+          />
+        </Field>
+        {createType === 'file' && (
+          <Field label="文件内容（可选）">
+            <Input
+              id="repo-create-file-content"
+              multiline
+              rows={10}
+              placeholder="在此输入文件内容..."
+              value={newFileContent}
+              onChange={e => setNewFileContent(e.target.value)}
+            />
+          </Field>
+        )}
+      </Modal>
 
 
       {/* 从URL下载弹窗 */}
@@ -1317,55 +763,70 @@ export default function RepoPage() {
         onDownload={handleDownloadFromUrl}
       />
 
+      {/* 仓库ZIP下载弹窗 */}
+      <RepoDownloadModal
+        mode="repo-zip"
+        isOpen={showRepoZipDownload}
+        onClose={() => setShowRepoZipDownload(false)}
+        ownerName={username}
+        repoName={repoName}
+      />
+
 
       {/* 分片上传模态框 */}
-      {showChunkedUploadModal && (
-        <div className="modal-overlay" onClick={() => !isUploading && (setShowChunkedUploadModal(false), clearPendingFiles())}>
-          <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
-            <ChunkedUploadModal
-              username={username}
-              repoName={repoName}
-              currentPath={currentPath.join('/')}
-              branch={currentBranch}
-              initialFiles={pendingFiles}
-              onClose={() => {
-                setShowChunkedUploadModal(false);
-                clearPendingFiles();
-              }}
-              onUploadComplete={() => {
-                // 刷新文件列表
-                fetchFiles();
-                setShowChunkedUploadModal(false);
-                clearPendingFiles();
-              }}
-            />
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={showChunkedUploadModal}
+        onClose={() => {
+          if (!isUploading) {
+            setShowChunkedUploadModal(false);
+            clearPendingFiles();
+          }
+        }}
+        title="上传文件"
+        maxWidth="700px"
+        closeOnOverlay={!isUploading}
+      >
+        <ChunkedUploadModal
+          username={username}
+          repoName={repoName}
+          currentPath={currentPath.join('/')}
+          branch={currentBranch}
+          initialFiles={pendingFiles}
+          onClose={() => {
+            setShowChunkedUploadModal(false);
+            clearPendingFiles();
+          }}
+          onUploadComplete={() => {
+            fetchFiles();
+            setShowChunkedUploadModal(false);
+            clearPendingFiles();
+          }}
+        />
+      </Modal>
 
       {/* 快捷键提示 */}
-      <div className="shortcuts-hint">
-        <span className="shortcut-key">G</span>
-        <span className="shortcut-sep">+</span>
-        <span className="shortcut-key">I</span>
-        <span className="shortcut-label">Issues</span>
-        <span className="shortcut-sep">·</span>
-        <span className="shortcut-key">G</span>
-        <span className="shortcut-sep">+</span>
-        <span className="shortcut-key">P</span>
-        <span className="shortcut-label">Pull Requests</span>
-        <span className="shortcut-sep">·</span>
-        <span className="shortcut-key">G</span>
-        <span className="shortcut-sep">+</span>
-        <span className="shortcut-key">D</span>
-        <span className="shortcut-label">Discussions</span>
+      <div className="flex items-center justify-center gap-1.5 py-4 text-xs text-[var(--ds-text-secondary)] border-t border-[var(--ds-border-default)] mt-8">
+        <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded font-mono text-xs">G</span>
+        <span>+</span>
+        <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded font-mono text-xs">I</span>
+        <span>Issues</span>
+        <span>·</span>
+        <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded font-mono text-xs">G</span>
+        <span>+</span>
+        <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded font-mono text-xs">P</span>
+        <span>合并请求</span>
+        <span>·</span>
+        <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded font-mono text-xs">G</span>
+        <span>+</span>
+        <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded font-mono text-xs">D</span>
+        <span>Discussions</span>
         {isOwner && (
           <>
-            <span className="shortcut-sep">·</span>
-            <span className="shortcut-key">G</span>
-            <span className="shortcut-sep">+</span>
-            <span className="shortcut-key">S</span>
-            <span className="shortcut-label">Settings</span>
+            <span>·</span>
+            <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded font-mono text-xs">G</span>
+            <span>+</span>
+            <span className="px-1.5 py-0.5 bg-[var(--ds-surface-subtle)] rounded font-mono text-xs">S</span>
+            <span>Settings</span>
           </>
         )}
       </div>
@@ -1376,8 +837,6 @@ export default function RepoPage() {
         onClose={() => setShowShareModal(false)}
         username={username}
         repoName={repoName}
-        onCreateShare={async () => {}}
-        onDeleteShare={async () => {}}
         shareLinks={shareLinks}
         onShareLinksChange={setShareLinks}
       />
@@ -1405,8 +864,7 @@ export default function RepoPage() {
 
       {/* 右侧边栏 - 仓库信息 */}
       </div>
-      <RightSidebar />
-    </div>
-    </div>
+    </PageLayoutContent>
+  </PageLayout>
   );
 }

@@ -5,6 +5,11 @@ export interface Issue {
   title: string;
   content: string;
   status: string;
+  priority?: string;
+  templateType?: string | null;
+  dueDate?: string | null;
+  relatedFileId?: string | null;
+  assigneeId?: string | null;
   commentsCount: number;
   authorUsername: string;
   authorAvatar?: string | null;
@@ -32,6 +37,7 @@ export interface RepoData {
   starCount: number;
   forkCount: number;
   watchCount: number;
+  isStarred?: boolean;
   visibility: number;
   updatedAt: string;
   createdAt: string;
@@ -49,7 +55,9 @@ export interface RepoItem {
   path: string;
   fileId?: string; // 文件版本历史用
   size?: number;
+  sizeFormatted?: string;
   mimeType?: string;
+  updatedAt?: string;
 }
 
 export interface ShareLink {
@@ -81,4 +89,18 @@ export interface ForkRequest {
 
 export type IssueStatus = 'open' | 'closed' | 'all';
 export type PullStatus = 'open' | 'merged' | 'closed' | 'all';
-export type SettingsSubTab = 'general' | 'fork-requests';
+export type SettingsSubTab = 'general' | 'fork-requests' | 'collaborators';
+
+export interface Collaborator {
+  id: string;
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  role: string;
+  invitedBy: {
+    id: string;
+    username: string;
+  };
+  acceptedAt: string | null;
+  createdAt: string;
+}

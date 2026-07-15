@@ -7,45 +7,33 @@ export const dynamic = 'force-dynamic';
  *   action=complete- 完成上传
  *   action=cancel   - 取消上传
  * GET  /api/v1/repos/[username]/[repoName]/upload-chunked - 获取上传状态
+ *
+ * 安全验证由 lib/upload-pipeline.ts 统一处理。
  */
 
 import { NextRequest } from 'next/server';
-import { success, created, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, created, error, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
+import { validateUpload } from '@/lib/upload-pipeline';
+import { checkRepoAccess } from '@/lib/auth/access';
+import { UploadService } from '@/services/upload-service';
+
+const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 
 // POST /api/v1/repos/[username]/[repoName]/upload-chunked
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
-
-    const { username, repoName } = await params;
+export const POST = defineRoute({
+  auth: 'required',
+  handler: async ({ req, user, params }) => {
+    const { username, repoName } = params;
     const { searchParams } = new URL(req.url);
     const action = searchParams.get('action');
 
-    const repo = await prisma.repository.findFirst({
-      where: {
-        owner: { username },
-        name: repoName,
-        deletedAt: null,
-      },
-      select: { id: true, ownerId: true },
-    });
+    const access = await checkRepoAccess(req, { username, repoName }, 'write');
+    if (!access.allowed) return access.error;
 
-    if (!repo) {
-      return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
-    }
-
-    if (repo.ownerId !== auth.userId) {
-      return error(ErrorCodes.FORBIDDEN, { message: '只有仓库所有者可以上传文件' });
-    }
+    const repo = access.repo;
 
     // action=init: 初始化上传
     if (action === 'init') {
@@ -55,6 +43,28 @@ export async function POST(
       if (!fileName || !fileSize || !totalChunks) {
         return errors.badRequest('缺少必要参数: fileName, fileSize, totalChunks');
       }
+
+      // ========== 文件安全验证（统一安全门） ==========
+      const validationResult = await validateUpload(
+        {
+          name: fileName,
+          size: Number(fileSize),
+          type: mimeType || '',
+          arrayBuffer: async () => new ArrayBuffer(0),
+        },
+        { userId: access.userId, repoId: repo.id }
+      );
+
+      if (!validationResult.safe) {
+        return error(ErrorCodes.INVALID_FILE_TYPE, { message: validationResult.reason! });
+      }
+
+      // 路径穿越防护
+      if (filePath && (filePath.includes('..') || filePath.startsWith('/'))) {
+        return error(ErrorCodes.VALIDATION_ERROR, { message: '文件路径包含非法字符' });
+      }
+
+      const chunkSizeNum = Number(chunkSize) || DEFAULT_CHUNK_SIZE;
 
       if (!branch) {
         return errors.badRequest('分支名称不能为空');
@@ -69,10 +79,8 @@ export async function POST(
         return error(ErrorCodes.NOT_FOUND, { message: `分支 ${branch} 不存在` });
       }
 
-      // 生成上传ID
       const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
-      // 查找或创建文件记录
       const fullPath = filePath || `/${fileName}`;
       let fileRecord = await prisma.repoItem.findFirst({
         where: {
@@ -85,7 +93,20 @@ export async function POST(
       });
 
       if (fileRecord) {
-        return errors.conflict('文件已存在');
+        if (fileHash && fileRecord.hash === fileHash) {
+          return success({
+            skipped: true,
+            existingFile: {
+              id: fileRecord.id,
+              name: fileRecord.name,
+              fileSize: Number(fileRecord.fileSize),
+              mimeType: fileRecord.mimeType,
+              path: fileRecord.path,
+            },
+          });
+        }
+        return error(ErrorCodes.FILE_EXISTS,
+          { message: '文件已存在但内容不同，请重命名或删除旧文件后重试' });
       }
 
       fileRecord = await prisma.repoItem.create({
@@ -102,8 +123,7 @@ export async function POST(
         },
       });
 
-      // 创建临时分片记录
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1小时后过期
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
       for (let i = 0; i < Number(totalChunks); i++) {
         await prisma.repoFileChunk.create({
           data: {
@@ -112,14 +132,14 @@ export async function POST(
             uploadId,
             chunkIndex: i,
             chunkSize: i === Number(totalChunks) - 1
-              ? Number(fileSize) - i * Number(chunkSize)
-              : Number(chunkSize),
+              ? Number(fileSize) - i * chunkSizeNum
+              : chunkSizeNum,
             totalChunks: Number(totalChunks),
             fileName,
             parentPath: filePath ? filePath.substring(0, filePath.lastIndexOf('/')) : '',
             totalSize: BigInt(Number(fileSize)),
             mimeType: mimeType || 'application/octet-stream',
-            userId: auth.userId,
+            userId: access.userId,
             status: 'pending',
             expiresAt,
             chunkHash: '',
@@ -133,50 +153,34 @@ export async function POST(
         fileId: fileRecord.id,
         fileName,
         totalChunks: Number(totalChunks),
-        chunkSize: Number(chunkSize),
+        chunkSize: chunkSizeNum,
         branch: branchRecord.name,
       }, '上传已初始化');
     }
 
-    // action=chunk: 上传分片
+    // action=chunk: 上传分片（接收原始二进制数据）
     if (action === 'chunk') {
-      const body = await req.json();
-      const { uploadId, chunkIndex, chunkData, chunkHash } = body;
+      const uploadId = searchParams.get('uploadId');
+      const chunkIndexStr = searchParams.get('chunkIndex');
+      const chunkHash = searchParams.get('chunkHash') || undefined;
 
-      if (!uploadId || chunkIndex === undefined) {
-        return errors.badRequest('缺少参数: uploadId, chunkIndex');
+      if (!uploadId || chunkIndexStr === null) {
+        return errors.badRequest('缺少参数: uploadId, chunkIndex（通过查询参数传递）');
       }
 
-      // 查找分片记录
-      const chunk = await prisma.repoFileChunk.findFirst({
-        where: { uploadId, chunkIndex },
-      });
-
-      if (!chunk) {
-        return error(ErrorCodes.NOT_FOUND, { message: '分片不存在或上传已过期' });
+      const chunkIndex = parseInt(chunkIndexStr, 10);
+      if (isNaN(chunkIndex)) {
+        return errors.badRequest('chunkIndex 必须为整数');
       }
 
-      // 更新分片状态
-      await prisma.repoFileChunk.update({
-        where: { id: chunk.id },
-        data: {
-          status: 'completed',
-          chunkHash: chunkHash || '',
-          chunkData: chunkData || '',
-        },
-      });
+      const chunkData = Buffer.from(await req.arrayBuffer());
 
-      // 检查是否所有分片都上传完成
-      const pendingChunks = await prisma.repoFileChunk.count({
-        where: { uploadId, status: 'pending' },
-      });
-
-      return success({
-        chunkIndex,
-        uploaded: true,
-        pendingChunks,
-        completed: pendingChunks === 0,
-      });
+      try {
+        const result = await UploadService.uploadChunk(uploadId, chunkIndex, chunkData, chunkHash);
+        return success(result);
+      } catch (err) {
+        return error(ErrorCodes.NOT_FOUND, { message: (err as Error).message });
+      }
     }
 
     // action=complete: 完成上传
@@ -188,78 +192,16 @@ export async function POST(
         return errors.badRequest('缺少参数: uploadId');
       }
 
-      // 查找文件记录（通过任意一个分片）
-      const firstChunk = await prisma.repoFileChunk.findFirst({
-        where: { uploadId },
-        select: {
-          repoId: true,
-          branchId: true,
-          fileName: true,
-          totalSize: true,
-          mimeType: true,
-          parentPath: true,
-        },
-      });
-
-      if (!firstChunk) {
-        return error(ErrorCodes.NOT_FOUND, { message: '上传会话不存在' });
-      }
-
-      // 查找文件记录
-      const fileRecord = await prisma.repoItem.findFirst({
-        where: {
-          repoId: firstChunk.repoId,
-          name: firstChunk.fileName,
-          isDeleted: false,
-        },
-      });
-
-      if (!fileRecord) {
-        return error(ErrorCodes.NOT_FOUND, { message: '文件不存在' });
-      }
-
-      // 检查所有分片
-      const pendingChunks = await prisma.repoFileChunk.count({
-        where: { uploadId, status: 'pending' },
-      });
-
-      if (pendingChunks > 0) {
-        return errors.badRequest(`还有 ${pendingChunks} 个分片未上传`);
-      }
-
-      // 获取所有分片数据并合并
-      const allChunks = await prisma.repoFileChunk.findMany({
-        where: { uploadId },
-        orderBy: { chunkIndex: 'asc' },
-        select: { chunkData: true },
-      });
-
-      // 合并分片数据（假设每个 chunkData 是 base64 编码）
-      let combinedContent = '';
-      for (const chunk of allChunks) {
-        if (chunk.chunkData) {
-          // 如果是 base64 数据，直接拼接
-          combinedContent += chunk.chunkData;
+      try {
+        const result = await UploadService.completeUpload(uploadId);
+        return success(result, '文件上传完成');
+      } catch (err) {
+        const msg = (err as Error).message;
+        if (msg.includes('分片未上传')) {
+          return errors.badRequest(msg);
         }
+        return error(ErrorCodes.NOT_FOUND, { message: msg });
       }
-
-      // 将合并后的内容保存到文件记录
-      await prisma.repoItem.update({
-        where: { id: fileRecord.id },
-        data: {
-          content: combinedContent,
-        },
-      });
-
-      // 清理分片记录
-      await prisma.repoFileChunk.deleteMany({ where: { uploadId } });
-
-      return success({
-        id: fileRecord.id,
-        name: fileRecord.name,
-        size: fileRecord.fileSize.toString(),
-        path: fileRecord.path,
-      }, '文件上传完成');
     }
 
     // action=cancel: 取消上传
@@ -271,51 +213,23 @@ export async function POST(
         return errors.badRequest('缺少参数: uploadId');
       }
 
-      // 查找文件ID
-      const firstChunk = await prisma.repoFileChunk.findFirst({
-        where: { uploadId },
-        select: {
-          repoId: true,
-          branchId: true,
-          fileName: true,
-        },
-      });
-
-      if (firstChunk) {
-        // 删除文件记录
-        await prisma.repoItem.deleteMany({
-          where: {
-            repoId: firstChunk.repoId,
-            name: firstChunk.fileName,
-            isDeleted: false,
-          },
-        });
-      }
-
-      // 清理分片记录
-      await prisma.repoFileChunk.deleteMany({ where: { uploadId } });
-
+      await UploadService.cancelUpload(uploadId);
       return success({ uploadId }, '上传已取消');
     }
 
     return errors.badRequest('未知的 action，支持: init, chunk, complete, cancel');
-  } catch (err) {
-    return handlePrismaError(err, '分片上传失败');
-  }
-}
+  },
+});
 
 // GET /api/v1/repos/[username]/[repoName]/upload-chunked - 获取上传状态
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
+export const GET = defineRoute({
+  auth: 'required',
+  handler: async ({ req, params }) => {
+    const { username, repoName } = params;
 
-    const { username, repoName } = await params;
+    const access = await checkRepoAccess(req, { username, repoName }, 'read');
+    if (!access.allowed) return access.error;
+
     const { searchParams } = new URL(req.url);
     const uploadId = searchParams.get('uploadId');
 
@@ -323,23 +237,7 @@ export async function GET(
       return errors.badRequest('缺少参数: uploadId');
     }
 
-    const chunks = await prisma.repoFileChunk.findMany({
-      where: { uploadId },
-      orderBy: { chunkIndex: 'asc' },
-    });
-
-    const uploaded = chunks.filter((c) => c.status === 'completed').length;
-    return success({
-      uploadId,
-      totalChunks: chunks.length,
-      uploadedChunks: uploaded,
-      completed: uploaded === chunks.length && chunks.length > 0,
-      chunks: chunks.map((c) => ({
-        index: c.chunkIndex,
-        uploaded: c.status === 'completed',
-      })),
-    });
-  } catch (err) {
-    return handlePrismaError(err, '获取上传状态失败');
-  }
-}
+    const status = await UploadService.getUploadStatus(uploadId);
+    return success(status);
+  },
+});

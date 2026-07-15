@@ -61,6 +61,16 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000, // 1 分钟
     max: 60, // 60 次请求
   },
+  // 分享链接密码验证
+  share_password: {
+    windowMs: 15 * 60 * 1000, // 15 分钟
+    max: 5, // 5 次尝试
+  },
+  // 严格限制（重置密码等安全敏感操作）
+  strict: {
+    windowMs: 15 * 60 * 1000, // 15 分钟
+    max: 5, // 5 次尝试
+  },
 } as const;
 
 /**
@@ -102,13 +112,27 @@ export const CSRF_WHITELIST = [
   '/api/health',
   '/api/docs',
   '/api/search',
-  '/api/repos/', // GET 请求
-  // 分享链接
-  '/api/share/',
-  // 公开讨论
-  '/api/discussions', // GET 请求
+  // 认证相关（登录/注册等可能携带旧 token）
+  '/api/v1/auth/',
+  '/api/v1/repos/',
+  '/api/v1/share/',
+  '/api/v1/discussions',
   // SSE 通知流
-  '/api/notifications/stream',
+  '/api/v1/notifications/stream',
+  // 个人设置（依赖 Cookie 认证）
+  '/api/v1/me/',
+  // 管理后台（依赖 Cookie 认证）
+  '/api/v1/admin/',
+  // 用户操作（依赖 Cookie 认证）
+  '/api/v1/users/',
+  // 通知操作（标记已读等）
+  '/api/v1/notifications',
+  // API Key / Webhook（依赖 Cookie 认证）
+  '/api/v1/user/',
+  // 系统公告（依赖 Cookie 认证）
+  '/api/v1/announcements/',
+  // 举报
+  '/api/v1/reports/',
 ];
 
 /**
@@ -254,16 +278,9 @@ export const AUDIT_ACTIONS = {
 
 /**
  * 危险文件扩展名（禁止上传）
+ * 从 constants/file-restrictions 重导，单一真相源
  */
-export const FORBIDDEN_FILE_EXTENSIONS = [
-  // 可执行文件
-  'exe', 'bat', 'cmd', 'com', 'msi', 'dll', 'vbs', 'vbe', 'wsf', 'wsh',
-  // 脚本文件
-  'ps1', 'psm1', 'reg', 'sh', 'bash', 'zsh', 'py', 'pyw', 'php', 'phtml',
-  'php3', 'php4', 'php5', 'pl', 'pm', 'cgi', 'rb', 'rake', 'asp', 'aspx',
-  // 其他危险类型
-  'jar', 'war', 'class', 'pif', 'scf', 'lnk', 'inf', 'scr', 'pif',
-];
+export { FORBIDDEN_FILE_EXTENSIONS, FORBIDDEN_MIME_PREFIXES } from './constants/file-restrictions';
 
 /**
  * 允许的文件 MIME 类型

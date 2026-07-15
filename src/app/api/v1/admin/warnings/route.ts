@@ -6,27 +6,28 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/warnings - 获取警告历史
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, created, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // POST /api/v1/admin/warnings - 发送警告
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    userId: z.string(),
+    reportId: z.string().optional(),
+    reason: z.string(),
+    description: z.string().optional(),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { userId, reportId, reason, description } = body;
 
-    if (!userId || !reason) {
-      return errors.badRequest('缺少必填字段：userId, reason');
-    }
-
-    // 检查目标用户
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, username: true, email: true, isSystem: true },
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       return errors.forbidden('不能对系统内置用户发送警告');
     }
 
-    // 创建警告通知
+    // TODO: 迁移到 sendNotificationToUser 或 AsyncJob.enqueue('send_notification', {...})
     const notification = await prisma.notification.create({
       data: {
         userId,
@@ -49,27 +50,26 @@ export async function POST(req: NextRequest): Promise<Response> {
         content: `您收到了一个系统警告：${reason}${description ? '\n\n详情：' + description : ''}`,
         priority: 'high',
         isRead: false,
-        senderId: auth.userId,
+        senderId: user!.id,
       },
     });
 
-    // 如果有关联举报，更新举报处理状态
     if (reportId) {
       await prisma.report.update({
         where: { id: reportId },
         data: {
           status: 'processed',
-          handlerId: auth.userId,
+          handlerId: user!.id,
           handledAt: new Date(),
           handlerNote: `发送警告：${reason}`,
         },
       });
     }
 
-    // 记录审计日志
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
-      userId: auth.userId,
+      adminId: user!.id,
+      userId: user!.id,
       actionType: 'send_warning',
       targetType: 'warning',
       targetId: notification.id,
@@ -83,17 +83,15 @@ export async function POST(req: NextRequest): Promise<Response> {
         username: targetUser.username,
       },
     }, '警告已发送');
-  } catch (err) {
-    return handlePrismaError(err, '发送警告失败');
-  }
-}
+  },
+});
 
 // GET /api/v1/admin/warnings - 获取警告历史
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const { searchParams } = new URL(req.url);
@@ -127,7 +125,6 @@ export async function GET(req: NextRequest): Promise<Response> {
       prisma.notification.count({ where }),
     ]);
 
-    // 获取被警告用户信息
     const userIds = [...new Set(warnings.map(w => w.userId))];
     const users = await prisma.user.findMany({
       where: { id: { in: userIds } },
@@ -156,7 +153,5 @@ export async function GET(req: NextRequest): Promise<Response> {
         totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

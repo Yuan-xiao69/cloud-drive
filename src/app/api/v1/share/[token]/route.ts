@@ -4,18 +4,18 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/share/[token] - 访问分享内容
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, error, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { ErrorCodes } from '@/lib/api/v1';
+import { ShareService } from '@/services/share-service';
 
 // GET /api/v1/share/[token] - 访问分享内容
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-): Promise<Response> {
-  try {
-    const { token } = await params;
+export const GET = defineRoute({
+  auth: 'none',
+  async handler({ req, params }) {
+    const { token } = params;
     const { searchParams } = new URL(req.url);
     const password = searchParams.get('password');
 
@@ -52,17 +52,20 @@ export async function GET(
       return error(ErrorCodes.NOT_FOUND, { message: '分享链接已过期' });
     }
 
-    // 检查查看次数
-    if (shareLink.maxViews && shareLink.viewCount >= shareLink.maxViews) {
-      return error(ErrorCodes.NOT_FOUND, { message: '分享链接已达到最大查看次数' });
-    }
-
-    // 检查密码
+    // 检查密码（在原子递增前验证，避免消耗 viewCount）
     if (shareLink.password) {
       if (!password) {
         return success({
           requiresPassword: true,
           token,
+        });
+      }
+
+      // 密码验证速率限制（5 次/15 分钟/IP）
+      const rateLimitResult = await checkRateLimit(req, 'share_password');
+      if (!rateLimitResult.allowed) {
+        return error(ErrorCodes.RATE_LIMITED, {
+          message: `密码尝试次数过多，请 ${rateLimitResult.retryAfter || 900} 秒后重试`,
         });
       }
 
@@ -73,11 +76,14 @@ export async function GET(
       }
     }
 
-    // 增加查看次数
-    await prisma.shareLink.update({
-      where: { id: shareLink.id },
-      data: { viewCount: { increment: 1 } },
-    });
+    // 原子递增 viewCount，同时校验有效期和最大浏览次数
+    const accessResult = await ShareService.access(token);
+
+    if (!accessResult) {
+      return error(ErrorCodes.NOT_FOUND, { message: '分享链接已失效或已达最大访问次数' });
+    }
+
+    const newViewCount = accessResult.viewCount;
 
     // 如果分享指定了路径，获取该路径下的内容
     if (shareLink.path) {
@@ -94,7 +100,7 @@ export async function GET(
           fileSize: true,
           mimeType: true,
           path: true,
-          content: true,
+          storagePath: true,
         },
       });
 
@@ -107,7 +113,7 @@ export async function GET(
           item,
           repo: shareLink.repo,
           creator: shareLink.creator,
-          viewCount: shareLink.viewCount + 1,
+          viewCount: newViewCount,
           expiresAt: shareLink.expiresAt?.toISOString() ?? null,
         });
       }
@@ -122,10 +128,44 @@ export async function GET(
       permission: shareLink.permission,
       repo: shareLink.repo,
       creator: shareLink.creator,
-      viewCount: shareLink.viewCount + 1,
+      viewCount: newViewCount,
       expiresAt: shareLink.expiresAt?.toISOString() ?? null,
     });
-  } catch (err) {
-    return handlePrismaError(err, '访问分享失败');
-  }
-}
+  },
+});
+
+// PATCH /api/v1/share/[token] - 停用分享链接
+export const PATCH = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    const { token } = params;
+
+    // 先查找链接以进行权限校验
+    const shareLink = await prisma.shareLink.findUnique({
+      where: { token },
+      select: { id: true, creatorId: true, isActive: true },
+    });
+
+    if (!shareLink) {
+      return error(ErrorCodes.NOT_FOUND, { message: '分享链接不存在' });
+    }
+
+    // 仅创建者或管理员可以停用
+    const isAdmin = user!.role === 'admin' || user!.role === 'super_admin';
+    if (shareLink.creatorId !== user!.id && !isAdmin) {
+      return errors.forbidden('无权停用此分享链接');
+    }
+
+    const result = await ShareService.deactivate(token);
+
+    if (!result) {
+      return error(ErrorCodes.NOT_FOUND, { message: '分享链接不存在' });
+    }
+
+    if (result.alreadyInactive) {
+      return error(ErrorCodes.INVALID_PARAMS, { message: '分享链接已停用' });
+    }
+
+    return success({ token, isActive: false }, '分享链接已停用');
+  },
+});

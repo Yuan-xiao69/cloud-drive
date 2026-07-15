@@ -5,34 +5,30 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/penalty-templates/[templateId]/use - 使用模板对用户进行处罚
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // POST /api/v1/admin/penalty-templates/[templateId]/use - 使用模板
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ templateId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    userId: z.string(),
+    duration: z.number().optional(),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 只有超级管理员可以使用模板
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以使用处罚模板');
     }
 
-    const { templateId } = await params;
-    const body = await req.json();
+    const { templateId } = params;
     const { userId, duration } = body;
-
-    if (!userId) {
-      return errors.badRequest('请指定要处罚的用户');
-    }
 
     // 获取模板
     const template = await prisma.penaltyTemplate.findUnique({
@@ -61,7 +57,7 @@ export async function POST(
       return errors.forbidden('不能对系统内置用户添加处罚');
     }
 
-    if (userId === auth.userId) {
+    if (userId === user!.id) {
       return errors.forbidden('不能对自己添加处罚');
     }
 
@@ -76,7 +72,7 @@ export async function POST(
         penaltyType: template.penaltyType,
         reason: template.reason,
         value: expiresDays || 0,
-        appliedBy: auth.userId,
+        appliedBy: user!.id,
         expiresAt,
         isActive: true,
       },
@@ -98,7 +94,6 @@ export async function POST(
       },
     });
 
-    // 增加模板使用次数
     await prisma.penaltyTemplate.update({
       where: { id: templateId },
       data: {
@@ -106,10 +101,10 @@ export async function POST(
       },
     });
 
-    // 记录审计日志
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
-      userId: auth.userId,
+      adminId: user!.id,
+      userId: user!.id,
       actionType: 'create_penalty_from_template',
       targetType: 'penalty',
       targetId: penalty.id,
@@ -123,7 +118,5 @@ export async function POST(
         remainingDays: expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null,
       },
     }, '使用模板处罚成功');
-  } catch (err) {
-    return handlePrismaError(err, '使用模板失败');
-  }
-}
+  },
+});

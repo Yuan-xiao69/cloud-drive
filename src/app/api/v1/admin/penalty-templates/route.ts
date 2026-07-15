@@ -6,17 +6,17 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/penalty-templates - 创建模板
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, created, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
 
 // GET /api/v1/admin/penalty-templates - 获取模板列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const { searchParams } = new URL(req.url);
@@ -33,30 +33,29 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
 
     return success({ templates });
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // POST /api/v1/admin/penalty-templates - 创建模板
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    name: z.string(),
+    penaltyType: z.string(),
+    defaultDuration: z.number().optional().default(7),
+    reason: z.string(),
+    description: z.string().nullable().optional(),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 只有超级管理员可以创建模板
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以创建处罚模板');
     }
 
-    const body = await req.json();
     const { name, penaltyType, defaultDuration, reason, description } = body;
-
-    if (!name || !penaltyType || !reason) {
-      return errors.badRequest('缺少必填字段：name, penaltyType, reason');
-    }
 
     const validTypes = ['mute', 'repo_limit', 'storage_limit', 'download_limit', 'fork_limit', 'star_limit'];
     if (!validTypes.includes(penaltyType)) {
@@ -70,12 +69,10 @@ export async function POST(req: NextRequest): Promise<Response> {
         defaultDuration: defaultDuration || 7,
         reason,
         description: description || null,
-        createdBy: auth.userId,
+        createdBy: user!.id,
       },
     });
 
     return created({ template }, '模板创建成功');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

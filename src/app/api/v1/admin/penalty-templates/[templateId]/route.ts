@@ -6,29 +6,32 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/penalty-templates/[templateId] - 删除模板
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
 
 // PATCH /api/v1/admin/penalty-templates/[templateId] - 更新模板
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ templateId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    name: z.string().optional(),
+    penaltyType: z.string().optional(),
+    defaultDuration: z.number().optional(),
+    reason: z.string().optional(),
+    description: z.string().nullable().optional(),
+    isActive: z.boolean().optional(),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 只有超级管理员可以更新模板
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以修改处罚模板');
     }
 
-    const { templateId } = await params;
-    const body = await req.json();
+    const { templateId } = params;
     const { name, penaltyType, defaultDuration, reason, description, isActive } = body;
 
     const existing = await prisma.penaltyTemplate.findUnique({
@@ -59,28 +62,22 @@ export async function PATCH(
     });
 
     return success({ template }, '模板更新成功');
-  } catch (err) {
-    return handlePrismaError(err, '更新模板失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/penalty-templates/[templateId] - 删除模板
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ templateId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 只有超级管理员可以删除模板
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以删除处罚模板');
     }
 
-    const { templateId } = await params;
+    const { templateId } = params;
 
     const existing = await prisma.penaltyTemplate.findUnique({
       where: { id: templateId },
@@ -95,7 +92,5 @@ export async function DELETE(
     });
 
     return success({ id: templateId }, '模板删除成功');
-  } catch (err) {
-    return handlePrismaError(err, '删除模板失败');
-  }
-}
+  },
+});

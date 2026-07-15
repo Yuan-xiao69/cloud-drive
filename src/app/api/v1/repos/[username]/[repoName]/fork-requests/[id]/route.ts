@@ -7,27 +7,23 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, error, errors } from '@/lib/api/v1';
+import type { ErrorCodeString } from '@/lib/api/v1/response';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
 import { isUserRepoLimited } from '@/lib/user-restrictions';
 import { sendNotificationToUser } from '@/lib/notification-service';
+import { RepoService } from '@/services/repo-service';
+import { BusinessError } from '@/lib/framework';
 
 // GET /api/v1/repos/[username]/[repoName]/fork-requests/[id]
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string; id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
+export const GET = defineRoute({
+  auth: 'required',
+  handler: async ({ user, params }) => {
+    const { username, repoName, id } = params;
 
-    const { username, repoName, id } = await params;
-
-    // 查找仓库
     const repo = await prisma.repository.findFirst({
       where: {
         owner: { username },
@@ -41,7 +37,6 @@ export async function GET(
       return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
     }
 
-    // 查找申请
     const forkRequest = await prisma.forkRequest.findUnique({
       where: { id },
       include: {
@@ -61,8 +56,7 @@ export async function GET(
       return error(ErrorCodes.NOT_FOUND, { message: 'Fork 申请不存在' });
     }
 
-    // 权限检查：仓库所有者或申请人可以查看
-    if (repo.ownerId !== auth.userId && forkRequest.requesterId !== auth.userId) {
+    if (repo.ownerId !== user!.id && forkRequest.requesterId !== user!.id) {
       return errors.forbidden('无权查看此申请');
     }
 
@@ -90,27 +84,22 @@ export async function GET(
       createdAt: forkRequest.createdAt.toISOString(),
       updatedAt: forkRequest.updatedAt.toISOString(),
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取申请详情失败');
-  }
-}
+  },
+});
+
+const approveSchema = z.object({
+  action: z.string().min(1),
+  note: z.string().optional(),
+});
 
 // PATCH /api/v1/repos/[username]/[repoName]/fork-requests/[id] - 审批申请
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string; id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: approveSchema,
+  handler: async ({ req, user, body, params }) => {
+    const { username, repoName, id } = params;
+    const { action, note } = body as z.infer<typeof approveSchema>;
 
-    const { username, repoName, id } = await params;
-    const body = await req.json();
-    const { action, note } = body;
-
-    // 查找仓库
     const repo = await prisma.repository.findFirst({
       where: {
         owner: { username },
@@ -126,12 +115,10 @@ export async function PATCH(
       return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
     }
 
-    // 只有仓库所有者可以审批
-    if (repo.ownerId !== auth.userId) {
+    if (repo.ownerId !== user!.id) {
       return errors.forbidden('只有仓库所有者可以审批 Fork 申请');
     }
 
-    // 查找申请
     const forkRequest = await prisma.forkRequest.findUnique({
       where: { id },
       include: {
@@ -151,7 +138,6 @@ export async function PATCH(
       return error(ErrorCodes.INVALID_PARAMS, { message: '申请已被处理，无法再次审批' });
     }
 
-    // 检查申请人是否有仓库数量限制
     if (action === 'approve') {
       const repoLimited = await isUserRepoLimited(forkRequest.requesterId);
       if (repoLimited.limited) {
@@ -160,42 +146,26 @@ export async function PATCH(
       }
     }
 
-    // 处理审批
     if (action === 'approve') {
-      // 创建 Fork
-      const forkedRepo = await prisma.repository.create({
-        data: {
-          ownerId: forkRequest.requesterId,
-          name: repo.name,
-          description: repo.description,
-          visibility: 1, // Fork 的仓库默认为公开
-          isFork: true,
-          forkedFromId: repo.id,
-          defaultBranch: repo.defaultBranch,
-          language: repo.language,
-        },
+      const forkedRepo = await RepoService.fork({
+        sourceUsername: username,
+        sourceRepoName: repoName,
+        userId: forkRequest.requesterId,
+        username: forkRequest.requester.username,
       });
 
-      // 更新申请状态
       await prisma.forkRequest.update({
         where: { id },
         data: {
           status: 'approved',
-          processedBy: auth.userId,
+          processedBy: user!.id,
           processedAt: new Date(),
           note: note || null,
         },
       });
 
-      // 增加原仓库的 fork 计数
-      await prisma.repository.update({
-        where: { id: repo.id },
-        data: { forkCount: { increment: 1 } },
-      });
-
-      // 发送通知
       sendNotificationToUser(forkRequest.requesterId, {
-        senderId: auth.userId,
+        senderId: user!.id,
         type: 'fork_approved',
         title: 'Fork 申请已批准',
         content: `您的 Fork 申请已获批准，仓库 ${repo.name} 已成功 Fork`,
@@ -209,25 +179,23 @@ export async function PATCH(
         forkedRepo: {
           id: forkedRepo.id,
           name: forkedRepo.name,
-          fullName: `${forkRequest.requester.username}/${forkedRepo.name}`,
-          htmlUrl: `/${forkRequest.requester.username}/${forkedRepo.name}`,
+          fullName: forkedRepo.fullName,
+          htmlUrl: `/${forkedRepo.fullName}`,
         },
       }, 'Fork 申请已批准');
     } else if (action === 'reject') {
-      // 拒绝申请
       await prisma.forkRequest.update({
         where: { id },
         data: {
           status: 'rejected',
-          processedBy: auth.userId,
+          processedBy: user!.id,
           processedAt: new Date(),
           note: note || null,
         },
       });
 
-      // 发送通知
       sendNotificationToUser(forkRequest.requesterId, {
-        senderId: auth.userId,
+        senderId: user!.id,
         type: 'fork_rejected',
         title: 'Fork 申请被拒绝',
         content: `您的 Fork 申请被拒绝：${note || '无备注'}`,
@@ -242,25 +210,15 @@ export async function PATCH(
     } else {
       return error(ErrorCodes.INVALID_PARAMS, { message: 'action 必须是 approve 或 reject' });
     }
-  } catch (err) {
-    return handlePrismaError(err, '审批 Fork 申请失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/repos/[username]/[repoName]/fork-requests/[id] - 取消申请
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string; id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
+export const DELETE = defineRoute({
+  auth: 'required',
+  handler: async ({ user, params }) => {
+    const { username, repoName, id } = params;
 
-    const { username, repoName, id } = await params;
-
-    // 查找仓库
     const repo = await prisma.repository.findFirst({
       where: {
         owner: { username },
@@ -274,7 +232,6 @@ export async function DELETE(
       return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
     }
 
-    // 查找申请
     const forkRequest = await prisma.forkRequest.findUnique({
       where: { id },
     });
@@ -283,12 +240,10 @@ export async function DELETE(
       return error(ErrorCodes.NOT_FOUND, { message: 'Fork 申请不存在' });
     }
 
-    // 权限检查：申请人或仓库所有者可以删除
-    if (forkRequest.requesterId !== auth.userId && repo.ownerId !== auth.userId) {
+    if (forkRequest.requesterId !== user!.id && repo.ownerId !== user!.id) {
       return errors.forbidden('无权删除此申请');
     }
 
-    // 只能删除 pending 状态的申请
     if (forkRequest.status !== 'pending') {
       return error(ErrorCodes.INVALID_PARAMS, { message: '只能删除待处理的申请' });
     }
@@ -296,7 +251,5 @@ export async function DELETE(
     await prisma.forkRequest.delete({ where: { id } });
 
     return success({ id }, '申请已删除');
-  } catch (err) {
-    return handlePrismaError(err, '删除申请失败');
-  }
-}
+  },
+});

@@ -5,26 +5,21 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/bans/[userId] - 删除用户的所有封禁记录
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
 
 // GET /api/v1/admin/bans/[userId] - 获取用户的所有封禁记录
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { userId } = await params;
+    const { userId } = params;
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get('status'); // active | expired | all
+    const status = searchParams.get('status');
 
     const now = new Date();
 
@@ -67,37 +62,28 @@ export async function GET(
     });
 
     return success({ bans: items, total: items.length });
-  } catch (err) {
-    return handlePrismaError(err, '获取封禁记录失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/bans/[userId] - 删除用户的所有封禁记录
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { userId } = await params;
+    const { userId } = params;
 
-    // 解封用户
     await prisma.user.update({
       where: { id: userId },
       data: { isBanned: false },
     });
 
-    // 删除所有封禁记录
     await prisma.userBan.deleteMany({
       where: { userId },
     });
 
     return success({ userId }, '已解除该用户的所有封禁');
-  } catch (err) {
-    return handlePrismaError(err, '删除封禁记录失败');
-  }
-}
+  },
+});

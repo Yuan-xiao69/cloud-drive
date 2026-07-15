@@ -1,102 +1,55 @@
 import React from 'react';
-import Header from '@/components/layout/Header';
+import { prisma } from '@/lib/prisma';
+import { formatTimeAgo } from '@/lib/utils';
 import HomePageContent from './HomePageContent';
 
-interface Repo {
-  id: string;
-  name: string;
-  description: string | null;
-  language: string | null;
-  starCount: number;
-  forkCount: number;
-  owner: { username: string; avatarUrl?: string } | null;
-}
+export const revalidate = 15;
 
-interface Discussion {
-  id: string;
-  title: string;
-  content: string;
-  viewCount: number;
-  commentCount: number;
-  category: string;
-  author: { username: string; avatarUrl?: string } | null;
-  createdAt: string;
-}
-
-interface Stats {
-  repos: number;
-  users: number;
-  discussions: number;
-}
-
-async function fetchSearchData<T>(type: string, page: number, size: number): Promise<T[]> {
+async function fetchHotRepos() {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-    const res = await fetch(
-      `${baseUrl}/api/v1/search?type=${type}&q=&page=${page}&size=${size}`,
-      {
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    
-    const data = await res.json();
-    return data.data?.items || [];
-  } catch (error) {
-    console.error(`Failed to fetch ${type}:`, error);
+    const repos = await prisma.repository.findMany({
+      where: { deletedAt: null, visibility: 1 },
+      select: {
+        id: true, name: true, description: true, language: true,
+        starCount: true, forkCount: true, updatedAt: true,
+        owner: { select: { username: true, avatarUrl: true } },
+      },
+      orderBy: { starCount: 'desc' },
+      take: 6,
+    });
+    return repos.map(r => {
+      const updatedAt = r.updatedAt.toISOString();
+      return {
+        id: r.id, name: r.name, description: r.description, language: r.language,
+        starCount: r.starCount, forkCount: r.forkCount,
+        owner: r.owner ? { username: r.owner.username, avatarUrl: r.owner.avatarUrl ?? undefined } : null,
+        updatedAt,
+        updatedAtFormatted: formatTimeAgo(updatedAt),
+      };
+    });
+  } catch {
     return [];
   }
 }
 
-async function fetchStats(): Promise<Stats> {
+async function fetchStats() {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-    
-    const [reposRes, usersRes, discussionsRes] = await Promise.all([
-      fetch(`${baseUrl}/api/v1/search?type=repos&q=&page=1&size=1`, { cache: 'no-store' }),
-      fetch(`${baseUrl}/api/v1/search?type=users&q=&page=1&size=1`, { cache: 'no-store' }),
-      fetch(`${baseUrl}/api/v1/search?type=discussions&q=&page=1&size=1`, { cache: 'no-store' }),
+    const [repos, users, discussions] = await Promise.all([
+      prisma.repository.count({ where: { deletedAt: null } }),
+      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.discussion.count({ where: { isDeleted: false } }),
     ]);
-    
-    const [reposData, usersData, discussionsData] = await Promise.all([
-      reposRes.json(),
-      usersRes.json(),
-      discussionsRes.json(),
-    ]);
-    
-    return {
-      repos: reposData.data?.pagination?.total || 0,
-      users: usersData.data?.pagination?.total || 0,
-      discussions: discussionsData.data?.pagination?.total || 0,
-    };
-  } catch (error) {
-    console.error('Failed to fetch stats:', error);
+    return { repos, users, discussions };
+  } catch {
     return { repos: 0, users: 0, discussions: 0 };
   }
 }
 
 export default async function Page() {
-  // 并行获取所有数据
-  const [hotRepos, hotDiscussions, stats] = await Promise.all([
-    fetchSearchData<Repo>('repos', 1, 6),
-    fetchSearchData<Discussion>('discussions', 1, 4),
+  const [hotRepos, stats] = await Promise.all([
+    fetchHotRepos(),
     fetchStats(),
   ]);
-  
-  return (
-    <div className="home-page">
-      <Header />
-      <HomePageContent
-        hotRepos={hotRepos}
-        hotDiscussions={hotDiscussions}
-        stats={stats}
-      />
-    </div>
-  );
+
+  return <HomePageContent hotRepos={hotRepos} stats={stats} />;
 }

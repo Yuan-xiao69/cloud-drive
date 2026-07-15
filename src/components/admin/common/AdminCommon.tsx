@@ -4,6 +4,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { Button, Field, Input, Select } from '@/components/design';
 
 // ============ 增强统计卡片 ============
 interface EnhancedStatCardProps {
@@ -30,9 +31,9 @@ export function EnhancedStatCard({
   onClick,
 }: EnhancedStatCardProps) {
   const trendColors = {
-    up: 'var(--color-success-fg)',
-    down: 'var(--color-danger-fg)',
-    neutral: 'var(--color-fg-muted)',
+    up: 'var(--ds-success-default)',
+    down: 'var(--ds-danger-default)',
+    neutral: 'var(--ds-text-secondary)',
   };
 
   const trendIcons = {
@@ -42,22 +43,22 @@ export function EnhancedStatCard({
   };
 
   return (
-    <div
-      className={`enhanced-stat-card ${color}`}
+    <button
+      className={`enhanced-stat-card ${color} border-0 bg-transparent w-full text-left`}
       onClick={onClick}
       style={{ cursor: onClick ? 'pointer' : 'default' }}
     >
-      <div className="stat-card-header">
-        <span className="stat-card-title">{title}</span>
-        {icon && <span className="stat-card-icon">{icon}</span>}
+      <div className="flex justify-between items-start">
+        <span className="text-xs text-[var(--ds-text-secondary)] font-medium">{title}</span>
+        {icon && <span className="text-[var(--ds-text-secondary)] flex items-center">{icon}</span>}
       </div>
-      <div className="stat-card-body">
-        <span className="stat-card-value">
+      <div className="flex items-baseline gap-2">
+        <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">
           {typeof value === 'number' ? value.toLocaleString() : value}
         </span>
         {trend && (
           <span
-            className="stat-card-trend"
+            className="text-xs font-medium"
             style={{ color: trendColors[trend.type] }}
           >
             {trendIcons[trend.type]} {Math.abs(trend.value)}%
@@ -66,11 +67,11 @@ export function EnhancedStatCard({
         )}
       </div>
       {subtitle && (
-        <div className="stat-card-footer">
-          <span className="stat-card-subtitle">{subtitle}</span>
+        <div className="mt-1">
+          <span className="text-xs text-[var(--ds-text-secondary)]">{subtitle}</span>
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -138,15 +139,16 @@ export function SidePanel({
             <h2 className="side-panel-title">{title}</h2>
             {subtitle && <span className="side-panel-subtitle">{subtitle}</span>}
           </div>
-          <button
-            className="side-panel-close"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClose}
             aria-label="关闭"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
             </svg>
-          </button>
+          </Button>
         </div>
         <div className="side-panel-content">
           {children}
@@ -185,17 +187,26 @@ export function ConfirmDialog({
   onCancel,
   options,
 }: ConfirmDialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape' && isOpen) {
         onCancel();
       }
     }
+    function handleClickOutside(event: MouseEvent) {
+      if (dialogRef.current && !dialogRef.current.contains(event.target as Node)) {
+        onCancel();
+      }
+    }
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
+      document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen, onCancel]);
 
@@ -203,7 +214,7 @@ export function ConfirmDialog({
 
   return (
     <div className="dialog-overlay">
-      <div className="dialog" role="dialog" aria-modal="true">
+      <div className="dialog" ref={dialogRef} role="dialog" aria-modal="true">
         <div className="dialog-header">
           <h3 className="dialog-title">{title}</h3>
         </div>
@@ -212,15 +223,16 @@ export function ConfirmDialog({
           {options && <div className="dialog-options">{options}</div>}
         </div>
         <div className="dialog-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>
+          <Button variant="secondary" size="sm" onClick={onCancel}>
             {cancelText}
-          </button>
-          <button
-            className={`btn ${variant === 'danger' ? 'btn-danger' : 'btn-primary'}`}
+          </Button>
+          <Button
+            variant={variant === 'danger' ? 'danger' : 'primary'}
+            size="sm"
             onClick={onConfirm}
           >
             {confirmText}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -273,11 +285,11 @@ export function Toast({
     <div className={`toast toast-${type}`}>
       <span className="toast-icon">{icons[type]}</span>
       <span className="toast-message">{message}</span>
-      <button className="toast-close" onClick={onClose}>
+      <Button variant="ghost" size="sm" onClick={onClose}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
           <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
         </svg>
-      </button>
+      </Button>
     </div>
   );
 }
@@ -314,9 +326,9 @@ export function ActivityTimeline({
   };
 
   const statusColors = {
-    success: 'var(--color-success-fg)',
-    warning: 'var(--color-warning-fg)',
-    danger: 'var(--color-danger-fg)',
+    success: 'var(--ds-success-default)',
+    warning: 'var(--ds-warning-default)',
+    danger: 'var(--ds-danger-default)',
   };
 
   if (displayItems.length === 0) {
@@ -330,9 +342,9 @@ export function ActivityTimeline({
   return (
     <div className="activity-timeline">
       {displayItems.map((item, index) => (
-        <div
+        <button
           key={item.id}
-          className="timeline-item"
+          className="timeline-item border-0 bg-transparent w-full text-left"
           onClick={() => onItemClick?.(item)}
           style={{ cursor: onItemClick ? 'pointer' : 'default' }}
         >
@@ -358,7 +370,7 @@ export function ActivityTimeline({
             </div>
           </div>
           {index < displayItems.length - 1 && <div className="timeline-line" />}
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -393,42 +405,35 @@ export function AdvancedFilter({
 }: AdvancedFilterProps) {
   return (
     <div className="advanced-filter">
-      <div className="filter-fields">
+      <div className="grid grid-cols-3 gap-3">
         {filters.map((filter) => (
-          <div key={filter.name} className="filter-field">
-            <label className="filter-label">{filter.label}</label>
+          <div key={filter.name} className="flex flex-col gap-1">
+            <label htmlFor={`filter-${filter.name}`} className="text-xs text-[var(--ds-text-secondary)]">{filter.label}</label>
             {filter.type === 'select' ? (
-              <select
-                className="filter-select"
+              <Select
                 value={values[filter.name] as string || ''}
                 onChange={(e) => onChange(filter.name, e.target.value)}
-              >
-                <option value="">全部</option>
-                {filter.options?.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: '', label: '全部' },
+                  ...(filter.options?.map((opt) => ({ value: opt.value, label: opt.label })) || []),
+                ]}
+              />
             ) : filter.type === 'date' ? (
-              <input
+              <Input
                 type="date"
-                className="filter-input"
                 value={values[filter.name] as string || ''}
                 onChange={(e) => onChange(filter.name, e.target.value)}
               />
             ) : filter.type === 'number' ? (
-              <input
+              <Input
                 type="number"
-                className="filter-input"
                 placeholder={filter.placeholder}
                 value={values[filter.name] as number || ''}
                 onChange={(e) => onChange(filter.name, parseInt(e.target.value) || null)}
               />
             ) : (
-              <input
+              <Input
                 type="text"
-                className="filter-input"
                 placeholder={filter.placeholder || filter.label}
                 value={values[filter.name] as string || ''}
                 onChange={(e) => onChange(filter.name, e.target.value)}
@@ -437,13 +442,13 @@ export function AdvancedFilter({
           </div>
         ))}
       </div>
-      <div className="filter-actions">
-        <button className="btn btn-primary btn-sm" onClick={onApply}>
+      <div className="flex gap-2 mt-4">
+        <Button variant="primary" size="sm" onClick={onApply}>
           应用筛选
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={onReset}>
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onReset}>
           重置
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -472,282 +477,290 @@ export function BatchActionBar({
     <div className="batch-action-bar">
       <div className="batch-info">
         <span className="batch-count">已选择 {selectedCount} 项</span>
-        <button className="batch-clear" onClick={onClearSelection}>
+        <Button variant="ghost" size="sm" onClick={onClearSelection}>
           清除选择
-        </button>
+        </Button>
       </div>
-      <div className="batch-actions">
+      <div className="flex gap-2 items-center">
         {actions.map((action, index) => (
-          <button
+          <Button
             key={index}
-            className={`btn ${action.variant === 'danger' ? 'btn-danger' : 'btn-secondary'} btn-sm`}
+            variant={action.variant === 'danger' ? 'danger' : 'secondary'}
+            size="sm"
             onClick={action.onClick}
           >
-            {action.icon && <span className="btn-icon">{action.icon}</span>}
+            {action.icon && <span className="inline-flex items-center justify-center">{action.icon}</span>}
             {action.label}
-          </button>
+          </Button>
         ))}
       </div>
     </div>
   );
 }
 
-// ============ 组件样式 ============
-const Styles = () => (
-  <style jsx global>{`
-    /* ===== 增强统计卡片 ===== */
-    .enhanced-stat-card {
-      background: var(--color-canvas-default);
-      border: 1px solid var(--color-border-default);
-      border-radius: 6px;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-    .enhanced-stat-card:hover {
-      border-color: var(--color-border-default);
-    }
-    .enhanced-stat-card.success { border-left: 3px solid var(--color-success-fg); }
-    .enhanced-stat-card.warning { border-left: 3px solid var(--color-attention-fg); }
-    .enhanced-stat-card.danger  { border-left: 3px solid var(--color-danger-fg); }
-    .enhanced-stat-card.info    { border-left: 3px solid var(--color-accent-fg); }
+// ============ 组件样式（模块级注入，确保样式始终生效） ============
+if (typeof document !== 'undefined') {
+  const STYLE_ID = 'admin-common-global-styles';
+  if (!document.getElementById(STYLE_ID)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = STYLE_ID;
+    styleEl.textContent = `
+      /* ===== 增强统计卡片 ===== */
+      .enhanced-stat-card {
+        background: var(--ds-page-bg);
+        border: 1px solid var(--ds-border-default);
+        border-radius: 6px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+      .enhanced-stat-card:hover {
+        border-color: var(--ds-border-default);
+      }
+      .enhanced-stat-card.success { border-left: 3px solid var(--ds-success-default); }
+      .enhanced-stat-card.warning { border-left: 3px solid var(--ds-warning-default); }
+      .enhanced-stat-card.danger  { border-left: 3px solid var(--ds-danger-default); }
+      .enhanced-stat-card.info    { border-left: 3px solid var(--ds-accent-default); }
 
-    .stat-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-    }
-    .stat-card-title {
-      font-size: 13px;
-      color: var(--color-fg-muted);
-      font-weight: 500;
-    }
-    .stat-card-icon {
-      color: var(--color-fg-muted);
-      display: flex;
-      align-items: center;
-    }
-    .stat-card-body {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
-    .stat-card-value {
-      font-size: 24px;
-      font-weight: 600;
-      color: var(--color-fg-default);
-      line-height: 1.2;
-    }
-    .stat-card-trend {
-      font-size: 12px;
-      font-weight: 500;
-    }
-    .trend-label {
-      font-size: 11px;
-      font-weight: 400;
-      color: var(--color-fg-muted);
-    }
-    .stat-card-footer {
-      margin-top: 2px;
-    }
-    .stat-card-subtitle {
-      font-size: 12px;
-      color: var(--color-fg-muted);
-    }
+      /* ===== 侧滑面板 ===== */
+      .side-panel-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(27, 31, 36, 0.5);
+        display: flex;
+        justify-content: flex-end;
+        z-index: 9998;
+      }
+      .side-panel {
+        background: var(--ds-page-bg);
+        border-left: 1px solid var(--ds-border-default);
+        height: 100%;
+        overflow-y: auto;
+        box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+      }
+      .side-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--ds-border-default);
+        position: sticky;
+        top: 0;
+        background: var(--ds-page-bg);
+        z-index: 10;
+      }
+      .side-panel-title-section { display: flex; flex-direction: column; gap: 2px; }
+      .side-panel-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--ds-text-primary);
+        margin: 0;
+      }
+      .side-panel-subtitle {
+        font-size: 12px;
+        color: var(--ds-text-secondary);
+      }
+      .side-panel-content {
+        padding: 20px;
+      }
+      .side-panel-actions {
+        padding: 16px 20px;
+        border-top: 1px solid var(--ds-border-default);
+        display: flex;
+        gap: 8px;
+        position: sticky;
+        bottom: 0;
+        background: var(--ds-page-bg);
+      }
 
-    /* ===== 确认对话框 ===== */
-    .dialog-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(27, 31, 36, 0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      padding: 16px;
-    }
-    .dialog {
-      background: var(--color-canvas-default);
-      border: 1px solid var(--color-border-default);
-      border-radius: 8px;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-    }
-    .dialog-header {
-      padding: 16px 20px 12px;
-      border-bottom: 1px solid var(--color-border-default);
-    }
-    .dialog-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--color-fg-default);
-      margin: 0;
-    }
-    .dialog-body {
-      padding: 16px 20px;
-    }
-    .dialog-message {
-      font-size: 14px;
-      color: var(--color-fg-default);
-      margin: 0 0 12px;
-      line-height: 1.5;
-    }
-    .dialog-options {
-      margin-top: 12px;
-    }
-    .dialog-footer {
-      padding: 12px 20px 16px;
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-    }
+      /* ===== 高级筛选 ===== */
+      .advanced-filter {
+        background: var(--ds-page-bg);
+        border: 1px solid var(--ds-border-default);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
 
-    /* ===== Toast 通知 ===== */
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      background: var(--color-canvas-default);
-      border: 1px solid var(--color-border-default);
-      border-radius: 6px;
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      z-index: 99999;
-      min-width: 280px;
-      max-width: 400px;
-    }
-    .toast-icon { display: flex; align-items: center; flex-shrink: 0; }
-    .toast-success .toast-icon { color: var(--color-success-fg); }
-    .toast-error   .toast-icon { color: var(--color-danger-fg); }
-    .toast-warning .toast-icon { color: var(--color-attention-fg); }
-    .toast-info    .toast-icon { color: var(--color-accent-fg); }
-    .toast-message {
-      flex: 1;
-      font-size: 14px;
-      color: var(--color-fg-default);
-      line-height: 1.4;
-    }
-    .toast-close {
-      background: none;
-      border: none;
-      padding: 2px;
-      cursor: pointer;
-      color: var(--color-fg-muted);
-      display: flex;
-      align-items: center;
-      border-radius: 4px;
-      flex-shrink: 0;
-    }
-    .toast-close:hover { color: var(--color-fg-default); background: var(--color-neutral-subtle); }
+      /* ===== 确认对话框 ===== */
+      .dialog-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(27, 31, 36, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 16px;
+      }
+      .dialog {
+        background: var(--ds-page-bg);
+        border: 1px solid var(--ds-border-default);
+        border-radius: 8px;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+      }
+      .dialog-header {
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid var(--ds-border-default);
+      }
+      .dialog-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--ds-text-primary);
+        margin: 0;
+      }
+      .dialog-body {
+        padding: 16px 20px;
+      }
+      .dialog-message {
+        font-size: 14px;
+        color: var(--ds-text-primary);
+        margin: 0 0 12px;
+        line-height: 1.5;
+      }
+      .dialog-options {
+        margin-top: 12px;
+      }
+      .dialog-footer {
+        padding: 12px 20px 16px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
 
-    /* ===== 活动时间线 ===== */
-    .activity-timeline {
-      display: flex;
-      flex-direction: column;
-    }
-    .activity-timeline-empty {
-      text-align: center;
-      padding: 32px 16px;
-      color: var(--color-fg-muted);
-      font-size: 14px;
-    }
-    .timeline-item {
-      display: flex;
-      gap: 12px;
-      position: relative;
-      padding-bottom: 16px;
-    }
-    .timeline-icon {
-      font-size: 14px;
-      flex-shrink: 0;
-      width: 20px;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding-top: 2px;
-    }
-    .timeline-content {
-      flex: 1;
-      min-width: 0;
-    }
-    .timeline-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 4px;
-    }
-    .timeline-time {
-      font-size: 12px;
-      color: var(--color-fg-muted);
-    }
-    .timeline-status {
-      font-size: 12px;
-      font-weight: 500;
-    }
-    .timeline-body {
-      font-size: 13px;
-      color: var(--color-fg-default);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      line-height: 1.4;
-    }
-    .timeline-user { font-weight: 500; }
-    .timeline-action { color: var(--color-fg-muted); }
-    .timeline-target { color: var(--color-accent-fg); }
-    .timeline-line {
-      position: absolute;
-      left: 9px;
-      top: 24px;
-      bottom: 0;
-      width: 2px;
-      background: var(--color-border-default);
-    }
+      /* ===== Toast 通知 ===== */
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--ds-page-bg);
+        border: 1px solid var(--ds-border-default);
+        border-radius: 6px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        z-index: 99999;
+        min-width: 280px;
+        max-width: 400px;
+      }
+      .toast-icon { display: flex; align-items: center; flex-shrink: 0; }
+      .toast-success .toast-icon { color: var(--ds-success-default); }
+      .toast-error   .toast-icon { color: var(--ds-danger-default); }
+      .toast-warning .toast-icon { color: var(--ds-warning-default); }
+      .toast-info    .toast-icon { color: var(--ds-accent-default); }
+      .toast-message {
+        flex: 1;
+        font-size: 14px;
+        color: var(--ds-text-primary);
+        line-height: 1.4;
+      }
+      .toast-close {
+        background: none;
+        border: none;
+        padding: 2px;
+        cursor: pointer;
+        color: var(--ds-text-secondary);
+        display: flex;
+        align-items: center;
+        border-radius: 4px;
+        flex-shrink: 0;
+      }
+      .toast-close:hover { color: var(--ds-text-primary); background: var(--ds-surface-subtle); }
 
-    /* ===== 批量操作栏 ===== */
-    .batch-action-bar {
-      position: sticky;
-      bottom: 0;
-      background: var(--color-canvas-default);
-      border-top: 1px solid var(--color-border-default);
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      z-index: 100;
-    }
-    .batch-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .batch-count {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--color-fg-default);
-    }
-    .batch-clear {
-      font-size: 12px;
-      color: var(--color-accent-fg);
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 0;
-    }
-    .batch-clear:hover { text-decoration: underline; }
-    .batch-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-  `}</style>
-);
+      /* ===== 活动时间线 ===== */
+      .activity-timeline {
+        display: flex;
+        flex-direction: column;
+      }
+      .activity-timeline-empty {
+        text-align: center;
+        padding: 32px 16px;
+        color: var(--ds-text-secondary);
+        font-size: 14px;
+      }
+      .timeline-item {
+        display: flex;
+        gap: 12px;
+        position: relative;
+        padding-bottom: 16px;
+      }
+      .timeline-icon {
+        font-size: 14px;
+        flex-shrink: 0;
+        width: 20px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 2px;
+      }
+      .timeline-content {
+        flex: 1;
+        min-width: 0;
+      }
+      .timeline-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      .timeline-time {
+        font-size: 12px;
+        color: var(--ds-text-secondary);
+      }
+      .timeline-status {
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .timeline-body {
+        font-size: 13px;
+        color: var(--ds-text-primary);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        line-height: 1.4;
+      }
+      .timeline-user { font-weight: 500; }
+      .timeline-action { color: var(--ds-text-secondary); }
+      .timeline-target { color: var(--ds-accent-default); }
+      .timeline-line {
+        position: absolute;
+        left: 9px;
+        top: 24px;
+        bottom: 0;
+        width: 2px;
+        background: var(--ds-border-default);
+      }
 
-export { Styles as AdminCommonStyles };
+      /* ===== 批量操作栏 ===== */
+      .batch-action-bar {
+        position: sticky;
+        bottom: 0;
+        background: var(--ds-page-bg);
+        border-top: 1px solid var(--ds-border-default);
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        z-index: 100;
+      }
+      .batch-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .batch-count {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ds-text-primary);
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+}

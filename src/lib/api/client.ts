@@ -53,23 +53,57 @@ class TokenManager {
 // 导出单例
 export const tokenManager = new TokenManager();
 
-// API Response 类型
+// API Response 类型（对齐 V1 服务端响应格式）
+// 服务端返回: { code, message, data, meta: { version, timestamp, requestId } }
 export interface ApiResponse<T = unknown> {
   code: number;
   message: string;
   data: T;
+  meta?: {
+    version: string;
+    timestamp: string;
+    requestId: string;
+  };
 }
 
+// 分页响应（对齐 V1 paginated() 函数格式）
+// 服务端返回: { code: 200, message, data: { items, pagination: { page, size, total, totalPages } }, meta }
 export interface PaginatedResponse<T> {
   code: number;
   message: string;
   data: {
     items: T[];
-    total: number;
-    page: number;
-    size: number;
-    totalPages: number;
+    pagination: {
+      page: number;
+      size: number;
+      total: number;
+      totalPages: number;
+    };
   };
+  meta?: {
+    version: string;
+    timestamp: string;
+    requestId: string;
+  };
+}
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+async function parseErrorBody(res: Response): Promise<{ message?: string; code?: string }> {
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
 }
 
 // API Client 类
@@ -80,53 +114,55 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  private getHeaders(): HeadersInit {
-    const token = tokenManager.getAccessToken();
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
+  // 认证通过 HttpOnly cookie 自动携带（同源 fetch），无需手动添加 Authorization header
+  // Content-Type 仅对 JSON body 设置；FormData 由浏览器自动设置 multipart/form-data boundary
+
+  private async request<T>(
+    method: string,
+    url: string,
+    data?: unknown,
+  ): Promise<ApiResponse<T>> {
+    const isFormData = data instanceof FormData;
+    const headers: HeadersInit = {};
+    if (!isFormData && data !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const body = isFormData ? data : (data !== undefined ? JSON.stringify(data) : undefined);
+
+    const res = await fetch(`${this.baseUrl}${url}`, {
+      method,
+      headers,
+      body,
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const errBody = await parseErrorBody(res);
+      throw new ApiError(res.status, errBody.message || errBody.code || '请求失败', errBody.code);
+    }
+    return res.json();
   }
 
   async get<T>(url: string, params?: Record<string, string | number>): Promise<ApiResponse<T>> {
     const queryString = params
       ? '?' + new URLSearchParams(params as Record<string, string>).toString()
       : '';
-    const res = await fetch(`${this.baseUrl}${url}${queryString}`, {
-      method: 'GET',
-      headers: this.getHeaders(),
-      credentials: 'include',
-    });
-    return res.json();
+    return this.request<T>('GET', `${url}${queryString}`);
   }
 
   async post<T>(url: string, data?: unknown): Promise<ApiResponse<T>> {
-    const res = await fetch(`${this.baseUrl}${url}`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: data ? JSON.stringify(data) : undefined,
-      credentials: 'include',
-    });
-    return res.json();
+    return this.request<T>('POST', url, data);
   }
 
   async put<T>(url: string, data?: unknown): Promise<ApiResponse<T>> {
-    const res = await fetch(`${this.baseUrl}${url}`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      body: data ? JSON.stringify(data) : undefined,
-      credentials: 'include',
-    });
-    return res.json();
+    return this.request<T>('PUT', url, data);
+  }
+
+  async patch<T>(url: string, data?: unknown): Promise<ApiResponse<T>> {
+    return this.request<T>('PATCH', url, data);
   }
 
   async delete<T>(url: string): Promise<ApiResponse<T>> {
-    const res = await fetch(`${this.baseUrl}${url}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-      credentials: 'include',
-    });
-    return res.json();
+    return this.request<T>('DELETE', url);
   }
 }
 

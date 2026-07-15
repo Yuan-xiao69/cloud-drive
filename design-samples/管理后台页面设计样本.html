@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台设计样本 — 14 个面板</title>
+<style>
+:root {
+  --ds-accent: #C15F3C; --ds-accent-hover: #D47A4E; --ds-accent-subtle: rgba(193,95,60,0.08);
+  --ds-page-bg: #FAF9F5; --ds-surface: #FFFFFF; --ds-surface-subtle: #F5F2EC; --ds-surface-inset: #F0EDE6;
+  --ds-border: #E8E3DA; --ds-border-muted: #EEE9E2; --ds-border-strong: #D9D2C7;
+  --ds-text: #3B3228; --ds-text-secondary: #7A6E62; --ds-text-tertiary: #A0958B; --ds-text-inverse: #FFFFFF;
+  --ds-success: #4A8B5C; --ds-danger: #C8483C; --ds-warning: #B8862D;
+  --ds-danger-subtle: rgba(200,72,60,0.08); --ds-success-subtle: rgba(74,139,92,0.10); --ds-warning-subtle: rgba(184,134,45,0.12);
+  --ds-radius-sm: 6px; --ds-radius-md: 10px; --ds-shadow-sm: 0 1px 3px rgba(59,50,40,0.04);
+  --ds-space-1:4px; --ds-space-2:8px; --ds-space-3:12px; --ds-space-4:16px; --ds-space-6:24px;
+  --font-display: 'Georgia','Noto Serif SC',serif; --font-body: 'Charter','Georgia','Noto Serif SC',serif;
+  --font-ui: system-ui,-apple-system,'Segoe UI',sans-serif; --font-mono: 'JetBrains Mono','Fira Code',monospace;
+  --ds-content-narrow:440px; --ds-content-medium:800px; --ds-content-wide:1200px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--ds-page-bg);color:var(--ds-text);line-height:1.6;padding:16px 24px}
+
+.topbar{display:flex;justify-content:space-between;margin-bottom:32px}
+.topbar h1{font-family:var(--font-display);font-size:26px;font-weight:700}
+.topbar p{font-size:14px;color:var(--ds-text-secondary);margin-top:4px}
+
+.section-title{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--ds-text);margin:40px 0 20px;padding-bottom:12px;border-bottom:1px solid var(--ds-border-muted)}
+.section-title .num{color:var(--ds-accent);margin-right:8px}
+
+/* Layout: 左导航 + 右内容 */
+.layout{display:flex;border:1px solid var(--ds-border);border-radius:var(--ds-radius-md);overflow:hidden;margin-bottom:16px}
+.nav{width:220px;flex-shrink:0;background:var(--ds-surface-subtle);border-right:1px solid var(--ds-border-muted);padding:12px 10px}
+.nav-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ds-text-tertiary);padding:0 8px;margin-bottom:6px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--ds-radius-sm);font-family:var(--font-ui);font-size:14px;font-weight:500;color:var(--ds-text-secondary);cursor:pointer;transition:all .12s;border:none;background:none;width:100%;text-align:left;margin-bottom:1px}
+.nav-item:hover{background:var(--ds-surface);color:var(--ds-text)}
+.nav-item.active{background:var(--ds-surface-inset);color:var(--ds-text);font-weight:600}
+.content{flex:1;min-width:0;padding:20px 24px;background:var(--ds-page-bg)}
+.content h2{font-family:var(--font-display);font-size:20px;font-weight:700;margin-bottom:2px}
+.content .stitle{font-size:13px;color:var(--ds-text-secondary);margin-bottom:18px}
+
+/* Common elements */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.stat{padding:14px;background:var(--ds-surface);border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm)}
+.stat .v{font-family:var(--font-display);font-size:26px;font-weight:700;color:var(--ds-accent)}
+.stat .l{font-size:11px;color:var(--ds-text-tertiary);font-family:var(--font-ui);margin-top:2px}
+.toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.tin{padding:6px 10px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;color:var(--ds-text);outline:none;min-width:160px}
+.tin:focus{border-color:var(--ds-accent)}
+.tsel{padding:6px 10px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;color:var(--ds-text);outline:none}
+.btn{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;font-family:var(--font-ui);font-size:14px;font-weight:600;border-radius:var(--ds-radius-sm);border:1px solid transparent;cursor:pointer;transition:all .15s}
+.btn-p{background:var(--ds-accent);color:var(--ds-text-inverse);border-color:var(--ds-accent)}
+.btn-s{background:var(--ds-surface);color:var(--ds-text);border-color:var(--ds-border)}
+.btn-d{color:var(--ds-danger);border-color:var(--ds-danger);background:var(--ds-surface)}
+.btn-d:hover{background:var(--ds-danger-subtle)}
+.btn-g{background:transparent;color:var(--ds-text-secondary);border-color:transparent}
+.btn-g:hover{background:var(--ds-surface-subtle);color:var(--ds-text)}
+.tbl{border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);overflow:hidden}
+.tbl-h{display:grid;padding:8px 14px;background:var(--ds-surface-subtle);border-bottom:1px solid var(--ds-border);font-family:var(--font-ui);font-size:12px;font-weight:700;color:var(--ds-text-secondary);text-transform:uppercase;letter-spacing:.03em}
+.tbl-r{display:grid;padding:9px 14px;background:var(--ds-surface);border-bottom:1px solid var(--ds-border-muted);align-items:center;transition:background .15s;font-size:13px}
+.tbl-r:last-child{border-bottom:none}
+.tbl-r:hover{background:var(--ds-surface-subtle)}
+.av{width:26px;height:26px;border-radius:50%;background:var(--ds-accent-subtle);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--ds-accent);font-weight:700;flex-shrink:0}
+.badge{display:inline-flex;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:600;font-family:var(--font-ui)}
+.bg-a{background:var(--ds-accent-subtle);color:var(--ds-accent)}
+.bg-s{background:var(--ds-success-subtle);color:var(--ds-success)}
+.bg-d{background:var(--ds-danger-subtle);color:var(--ds-danger)}
+.bg-w{background:var(--ds-warning-subtle);color:var(--ds-warning)}
+.subtabs{display:flex;gap:3px;border-bottom:1px solid var(--ds-border);padding-bottom:10px;margin-bottom:16px}
+.subtab{padding:5px 12px;font-size:14px;font-weight:500;border-radius:var(--ds-radius-sm);border:1px solid transparent;cursor:pointer;background:transparent;color:var(--ds-text-secondary);font-family:var(--font-ui)}
+.subtab:hover{color:var(--ds-text)}
+.subtab.on{background:var(--ds-accent);color:var(--ds-text-inverse);font-weight:600;border-color:var(--ds-accent)}
+.flex-row{display:flex;align-items:center;gap:10px}
+.muted{font-size:11px;color:var(--ds-text-tertiary)}
+.section-card{border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);padding:16px;background:var(--ds-surface);margin-bottom:12px}
+.section-card h4{font-family:var(--font-ui);font-size:14px;font-weight:700;margin-bottom:8px}
+.form-g{margin-bottom:12px}
+.form-l{display:block;font-family:var(--font-ui);font-size:14px;font-weight:600;color:var(--ds-text);margin-bottom:3px}
+.form-i{padding:7px 10px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;color:var(--ds-text);outline:none;width:100%}
+.form-i:focus{border-color:var(--ds-accent)}
+.form-ta{min-height:80px;resize:vertical}
+.act-btn{padding:3px 8px;font-size:12px;font-weight:600;border-radius:3px;border:1px solid var(--ds-border);background:var(--ds-surface);cursor:pointer;color:var(--ds-text-secondary);font-family:var(--font-ui)}
+.act-btn:hover{background:var(--ds-surface-subtle)}
+.act-btn.da{color:var(--ds-danger);border-color:var(--ds-danger)}
+.note{margin-top:8px;font-size:11px;color:var(--ds-text-tertiary);text-align:center}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div><h1>管理后台设计样本</h1><p>14 个面板 · 仅超级管理员可访问 · 超级管理员账号固化不可删除</p></div>
+</div>
+
+<!-- ===== 1. 仪表盘 ===== -->
+<div class="section-title"><span class="num">01</span>仪表盘</div>
+<div class="layout">
+  <nav class="nav">
+    <div class="nav-title">管理面板</div>
+    <button class="nav-item active">📊 仪表盘</button>
+    <button class="nav-item">👥 用户管理</button>
+    <button class="nav-item">📦 仓库管理</button>
+    <button class="nav-item">💬 讨论管理</button>
+    <button class="nav-item">🚩 举报管理</button>
+    <button class="nav-item">⚖ 用户处置</button>
+    <button class="nav-item">📢 公告管理</button>
+    <button class="nav-item">🛡 安全中心</button>
+    <button class="nav-item">📋 操作日志</button>
+    <button class="nav-item">💾 备份管理</button>
+    <button class="nav-item">📈 系统监控</button>
+    <button class="nav-item">⚙ 系统设置</button>
+    <button class="nav-item">📧 邮件配置</button>
+    <button class="nav-item">🔔 通知管理</button>
+  </nav>
+  <div class="content">
+    <h2>仪表盘</h2><p class="stitle">平台关键指标概览与快捷操作</p>
+    <div class="stats">
+      <div class="stat"><div class="v">5,312</div><div class="l">注册用户</div></div>
+      <div class="stat"><div class="v">2,847</div><div class="l">文件仓库总数</div></div>
+      <div class="stat"><div class="v">18,429</div><div class="l">讨论总数</div></div>
+      <div class="stat"><div class="v">127</div><div class="l">待处理举报</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="section-card"><h4>最新安全事件</h4>
+        <div style="font-size:14px;font-family:var(--font-ui);padding:6px 0;border-bottom:1px solid var(--ds-border-muted)"><span class="badge bg-w">⚠</span> 异常登录 · 192.168.1.100 <span class="muted" style="float:right">10分钟前</span></div>
+        <div style="font-size:14px;font-family:var(--font-ui);padding:6px 0"><span class="badge bg-d">🔴</span> 暴力破解 · 10.0.0.55 <span class="muted" style="float:right">1小时前</span></div>
+      </div>
+      <div class="section-card"><h4>快捷操作</h4>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="btn btn-p">📢 发布公告</button>
+          <button class="btn btn-s">🚩 查看举报</button>
+          <button class="btn btn-s">⚙ 系统配置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 2. 用户管理 ===== -->
+<div class="section-title"><span class="num">02</span>用户管理</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item">📊 仪表盘</button><button class="nav-item active">👥 用户管理</button></nav>
+  <div class="content">
+    <h2>用户管理</h2><p class="stitle">搜索、筛选、管理所有注册用户</p>
+    <div class="toolbar">
+      <input class="tin" placeholder="搜索用户名或邮箱..." />
+      <select class="tsel"><option>全部角色</option><option>管理员</option><option>普通用户</option></select>
+      <select class="tsel"><option>全部状态</option><option>正常</option><option>已封禁</option></select>
+      <button class="btn btn-p" style="margin-left:auto">+ 邀请用户</button>
+    </div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><span>用户</span><span>角色</span><span>状态</span><span>仓库</span><span>操作</span></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><div class="flex-row"><div class="av">O</div>octocat</div><span><span class="badge bg-a">管理员</span></span><span><span class="badge bg-s">正常</span></span><span>128</span><div class="flex-row" style="gap:3px"><button class="act-btn">角色</button><button class="act-btn da">封禁</button></div></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><div class="flex-row"><div class="av">S</div>spam-bot</div><span>普通用户</span><span><span class="badge bg-d">已封禁</span></span><span>3</span><div class="flex-row" style="gap:3px"><button class="act-btn">解封</button><button class="act-btn da">删除</button></div></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><div class="flex-row"><div class="av">D</div>defunkt</div><span>普通用户</span><span><span class="badge bg-s">正常</span></span><span>56</span><div class="flex-row" style="gap:3px"><button class="act-btn">角色</button><button class="act-btn da">封禁</button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 3. 仓库管理 ===== -->
+<div class="section-title"><span class="num">03</span>仓库管理</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item">📦 仓库管理</button></nav>
+  <div class="content">
+    <h2>仓库管理</h2><p class="stitle">查看、搜索、管理所有仓库</p>
+    <div class="toolbar">
+      <input class="tin" placeholder="搜索仓库名..." />
+      <select class="tsel"><option>全部可见性</option><option>公开</option><option>私有</option></select>
+      <select class="tsel"><option>全部状态</option><option>正常</option><option>已归档</option></select>
+      <button class="btn btn-d" style="margin-left:auto">批量删除</button>
+      <button class="btn btn-s">批量归档</button>
+    </div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:1.5fr 0.8fr 1fr 1fr 1fr"><span>仓库</span><span>可见性</span><span>文件类型</span><span>所有者</span><span>操作</span></div>
+      <div class="tbl-r" style="grid-template-columns:1.5fr 0.8fr 1fr 1fr 1fr"><span>octocat/hello-world</span><span><span class="badge bg-a">公开</span></span><span>文件夹</span><span>octocat</span><div class="flex-row" style="gap:3px"><button class="act-btn">详情</button><button class="act-btn da">删除</button></div></div>
+      <div class="tbl-r" style="grid-template-columns:1.5fr 0.8fr 1fr 1fr 1fr"><span>defunkt/private-notes</span><span><span class="badge bg-w">私有</span></span><span>.zip 压缩包</span><span>defunkt</span><div class="flex-row" style="gap:3px"><button class="act-btn">详情</button><button class="act-btn da">删除</button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 4. 讨论管理 ===== -->
+<div class="section-title"><span class="num">04</span>讨论管理</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">💬 讨论管理</button></nav>
+  <div class="content">
+    <h2>讨论管理</h2><p class="stitle">审核、管理、删除讨论及评论</p>
+    <div class="toolbar">
+      <input class="tin" placeholder="搜索讨论..." />
+      <select class="tsel"><option>全部分类</option><option>问答</option><option>分享</option><option>建议</option></select>
+      <select class="tsel"><option>全部状态</option><option>正常</option><option>已删除</option></select>
+    </div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:3fr 1fr 1fr 1.5fr"><span>标题</span><span>分类</span><span>作者</span><span>操作</span></div>
+      <div class="tbl-r" style="grid-template-columns:3fr 1fr 1fr 1.5fr"><span>Rust 和 Go 应该如何选择？</span><span>💬 问答</span><span>张三</span><div class="flex-row" style="gap:3px"><button class="act-btn">查看</button><button class="act-btn da">删除</button></div></div>
+      <div class="tbl-r" style="grid-template-columns:3fr 1fr 1fr 1.5fr"><span>分享一套 CI/CD 方案</span><span>📤 分享</span><span>李四</span><div class="flex-row" style="gap:3px"><button class="act-btn">查看</button><button class="act-btn da">删除</button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 5. 举报管理 ===== -->
+<div class="section-title"><span class="num">05</span>举报管理</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">🚩 举报管理</button></nav>
+  <div class="content">
+    <h2>举报管理</h2><p class="stitle">审核用户提交的内容举报并处理</p>
+    <div class="toolbar">
+      <select class="tsel"><option>全部状态</option><option>待处理</option><option>已处理</option><option>已驳回</option></select>
+      <select class="tsel"><option>全部类型</option><option>仓库</option><option>讨论</option><option>Issue</option></select>
+    </div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><span>举报对象</span><span>类型</span><span>状态</span><span>举报人</span><span>操作</span></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><span>spam-project 仓库</span><span>仓库</span><span><span class="badge bg-w">待处理</span></span><span>octocat</span><div class="flex-row" style="gap:3px"><button class="act-btn">详情</button><button class="act-btn da">处理</button></div></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><span>不当言论讨论</span><span>讨论</span><span><span class="badge bg-s">已处理</span></span><span>defunkt</span><div class="flex-row" style="gap:3px"><button class="act-btn">详情</button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 6. 用户处置 ===== -->
+<div class="section-title"><span class="num">06</span>用户处置 — 封禁 / 处罚 / 申诉</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">⚖ 用户处置</button></nav>
+  <div class="content">
+    <h2>用户处置</h2><p class="stitle">封禁、处罚、申诉处理</p>
+    <div class="subtabs"><button class="subtab on">封禁管理</button><button class="subtab">处罚管理</button><button class="subtab">申诉管理</button></div>
+    <div class="toolbar">
+      <input class="tin" placeholder="搜索用户..." />
+      <select class="tsel"><option>全部状态</option><option>已生效</option><option>已过期</option></select>
+      <button class="btn btn-p" style="margin-left:auto">+ 封禁用户</button>
+    </div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><span>用户</span><span>类型</span><span>原因</span><span>状态</span><span>操作</span></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><div class="flex-row"><div class="av">S</div>spam-bot</div><span>永久</span><span>垃圾广告</span><span><span class="badge bg-d">已生效</span></span><button class="act-btn">解封</button></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1fr 1.5fr"><div class="flex-row"><div class="av">T</div>toxic-user</div><span>30天</span><span>骚扰言论</span><span><span class="badge bg-d">已生效</span></span><button class="act-btn">解封</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 7. 公告管理 ===== -->
+<div class="section-title"><span class="num">07</span>公告管理</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">📢 公告管理</button></nav>
+  <div class="content">
+    <h2>公告管理</h2><p class="stitle">发布、编辑、管理系统公告</p>
+    <div class="toolbar">
+      <select class="tsel"><option>全部类型</option><option>通知</option><option>警告</option><option>重要</option></select>
+      <select class="tsel"><option>全部状态</option><option>已发布</option><option>草稿</option><option>已过期</option></select>
+      <button class="btn btn-p" style="margin-left:auto">+ 新建公告</button>
+    </div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:2.5fr 1fr 1fr 1fr 1.5fr"><span>标题</span><span>类型</span><span>优先级</span><span>状态</span><span>操作</span></div>
+      <div class="tbl-r" style="grid-template-columns:2.5fr 1fr 1fr 1fr 1.5fr"><span>系统维护通知</span><span>通知</span><span>普通</span><span><span class="badge bg-s">已发布</span></span><div class="flex-row" style="gap:3px"><button class="act-btn">编辑</button><button class="act-btn">置顶</button><button class="act-btn da">删除</button></div></div>
+      <div class="tbl-r" style="grid-template-columns:2.5fr 1fr 1fr 1fr 1.5fr"><span>新版本功能上线</span><span>重要</span><span>高</span><span><span class="badge bg-w">草稿</span></span><div class="flex-row" style="gap:3px"><button class="act-btn">编辑</button><button class="act-btn">发布</button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 8. 安全中心 ===== -->
+<div class="section-title"><span class="num">08</span>安全中心 — 安全事件 / IP 黑名单</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">🛡 安全中心</button></nav>
+  <div class="content">
+    <h2>安全中心</h2><p class="stitle">安全事件监控与IP黑名单管理</p>
+    <div class="subtabs"><button class="subtab on">安全事件</button><button class="subtab">IP 黑名单</button></div>
+    <div class="toolbar">
+      <select class="tsel"><option>全部严重度</option><option>严重</option><option>高</option><option>中</option><option>低</option></select>
+      <select class="tsel"><option>全部状态</option><option>待处理</option><option>已处理</option></select>
+    </div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:1.5fr 1fr 1.5fr 1fr 1.5fr"><span>事件类型</span><span>严重度</span><span>IP</span><span>状态</span><span>时间</span></div>
+      <div class="tbl-r" style="grid-template-columns:1.5fr 1fr 1.5fr 1fr 1.5fr"><span>暴力破解</span><span><span class="badge bg-d">严重</span></span><span>10.0.0.55</span><span><span class="badge bg-w">待处理</span></span><span>1小时前</span></div>
+      <div class="tbl-r" style="grid-template-columns:1.5fr 1fr 1.5fr 1fr 1.5fr"><span>可疑IP</span><span><span class="badge bg-s">低</span></span><span>203.0.113.5</span><span><span class="badge bg-s">已处理</span></span><span>3小时前</span></div>
+      <div class="tbl-r" style="grid-template-columns:1.5fr 1fr 1.5fr 1fr 1.5fr"><span>SQL注入尝试</span><span><span class="badge bg-d">严重</span></span><span>198.51.100.7</span><span><span class="badge bg-w">待处理</span></span><span>5小时前</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 9. 操作日志 ===== -->
+<div class="section-title"><span class="num">09</span>操作日志 — 审计日志 / 活动日志</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">📋 操作日志</button></nav>
+  <div class="content">
+    <h2>操作日志</h2><p class="stitle">管理员操作审计与用户活动记录</p>
+    <div class="subtabs"><button class="subtab on">审计日志</button><button class="subtab">活动日志</button></div>
+    <div class="toolbar">
+      <input class="tin" placeholder="搜索操作..." />
+      <button class="btn btn-s" style="margin-left:auto">🔄 刷新</button>
+    </div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:1.5fr 1fr 1.5fr 1fr 1.5fr"><span>操作</span><span>管理员</span><span>目标</span><span>IP</span><span>时间</span></div>
+      <div class="tbl-r" style="grid-template-columns:1.5fr 1fr 1.5fr 1fr 1.5fr"><span>封禁用户</span><span>admin</span><span>spam-bot-123</span><span>192.168.1.1</span><span>2小时前</span></div>
+      <div class="tbl-r" style="grid-template-columns:1.5fr 1fr 1.5fr 1fr 1.5fr"><span>修改仓库可见性</span><span>admin</span><span>octocat/hello</span><span>192.168.1.1</span><span>昨天</span></div>
+      <div class="tbl-r" style="grid-template-columns:1.5fr 1fr 1.5fr 1fr 1.5fr"><span>发布系统公告</span><span>admin</span><span>系统维护通知</span><span>192.168.1.1</span><span>3天前</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 10. 备份管理 ===== -->
+<div class="section-title"><span class="num">10</span>备份管理</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">💾 备份管理</button></nav>
+  <div class="content">
+    <h2>备份管理</h2><p class="stitle">创建、下载、删除数据库备份</p>
+    <div class="toolbar"><button class="btn btn-p">+ 创建备份</button><button class="btn btn-s" style="margin-left:auto">🔄 刷新</button></div>
+    <div class="tbl">
+      <div class="tbl-h" style="grid-template-columns:2fr 1fr 1fr 1.5fr"><span>文件名</span><span>大小</span><span>创建时间</span><span>操作</span></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1.5fr"><span>backup_20260625_120000.sql.gz</span><span>128 MB</span><span>2026-06-25 12:00</span><div class="flex-row" style="gap:3px"><button class="act-btn">下载</button><button class="act-btn da">删除</button></div></div>
+      <div class="tbl-r" style="grid-template-columns:2fr 1fr 1fr 1.5fr"><span>backup_20260624_120000.sql.gz</span><span>126 MB</span><span>2026-06-24 12:00</span><div class="flex-row" style="gap:3px"><button class="act-btn">下载</button><button class="act-btn da">删除</button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 11. 系统监控 ===== -->
+<div class="section-title"><span class="num">11</span>系统监控</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">📈 系统监控</button></nav>
+  <div class="content">
+    <h2>系统监控</h2><p class="stitle">服务器状态、性能指标、资源使用</p>
+    <div class="stats">
+      <div class="stat"><div class="v">42%</div><div class="l">CPU 使用率</div></div>
+      <div class="stat"><div class="v">3.2 GB</div><div class="l">内存使用</div></div>
+      <div class="stat"><div class="v">67 GB</div><div class="l">磁盘剩余</div></div>
+      <div class="stat"><div class="v">1,247</div><div class="l">活跃连接数</div></div>
+    </div>
+    <div class="section-card"><h4>数据库状态</h4>
+      <div style="font-size:13px;font-family:var(--font-ui);line-height:2">PostgreSQL 14.8 · 运行时间 72 小时 · 连接池: 18/50 · 慢查询(>1s): 3</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 12. 系统设置 ===== -->
+<div class="section-title"><span class="num">12</span>系统设置</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">⚙ 系统设置</button></nav>
+  <div class="content">
+    <h2>系统设置</h2><p class="stitle">全局平台参数配置</p>
+    <div class="section-card">
+      <h4>基本配置</h4>
+      <div class="form-g"><label class="form-l">平台名称</label><input class="form-i" value="GitBase 文件托管平台" /></div>
+      <div class="form-g"><label class="form-l">最大上传文件大小 (MB)</label><input class="form-i" value="100" type="number" /></div>
+      <button class="btn btn-p">保存配置</button>
+    </div>
+    <div class="section-card">
+      <h4>注册设置</h4>
+      <div class="form-g"><label class="form-l"><input type="checkbox" checked /> 允许新用户注册</label></div>
+      <div class="form-g"><label class="form-l"><input type="checkbox" checked /> 注册需要邮箱验证</label></div>
+      <button class="btn btn-s">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 13. 邮件配置 ===== -->
+<div class="section-title"><span class="num">13</span>邮件配置</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">📧 邮件配置</button></nav>
+  <div class="content">
+    <h2>邮件配置</h2><p class="stitle">SMTP 服务配置与测试</p>
+    <div class="section-card">
+      <h4>SMTP 配置</h4>
+      <div class="form-g"><label class="form-l">SMTP 服务器</label><input class="form-i" value="smtp.example.com" /></div>
+      <div class="form-g"><label class="form-l">端口</label><input class="form-i" value="587" /></div>
+      <div class="form-g"><label class="form-l">用户名</label><input class="form-i" value="noreply@gitbase.com" /></div>
+      <div class="form-g"><label class="form-l">密码</label><input class="form-i" type="password" value="••••••••" /></div>
+      <div class="flex-row"><button class="btn btn-p">保存</button><button class="btn btn-s">发送测试邮件</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 14. 通知管理 ===== -->
+<div class="section-title"><span class="num">14</span>通知管理</div>
+<div class="layout">
+  <nav class="nav"><button class="nav-item active">🔔 通知管理</button></nav>
+  <div class="content">
+    <h2>通知管理</h2><p class="stitle">向指定用户推送平台通知</p>
+    <div class="section-card">
+      <h4>发送通知</h4>
+      <div class="form-g"><label class="form-l">目标用户</label><input class="form-i" placeholder="输入用户名..." /></div>
+      <div class="form-g"><label class="form-l">通知标题</label><input class="form-i" placeholder="标题" /></div>
+      <div class="form-g"><label class="form-l">通知内容</label><textarea class="form-i form-ta" placeholder="通知正文..."></textarea></div>
+      <div class="form-g"><label class="form-l">优先级</label><select class="tsel"><option>普通</option><option>高</option><option>紧急</option></select></div>
+      <button class="btn btn-p">发送通知</button>
+    </div>
+    <div class="section-card">
+      <h4>最近发送</h4>
+      <div style="font-size:13px;font-family:var(--font-ui);padding:5px 0;border-bottom:1px solid var(--ds-border-muted)">系统维护通知 → 全站用户 <span class="muted" style="float:right">2天前</span></div>
+      <div style="font-size:13px;font-family:var(--font-ui);padding:5px 0">新功能上线 → 全站用户 <span class="muted" style="float:right">1周前</span></div>
+    </div>
+  </div>
+</div>
+
+<p class="note" style="margin-top:40px">14 个面板 · 仅超级管理员可访问 · 超级管理员账号固化不可删除</p>
+
+</body>
+</html>

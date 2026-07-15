@@ -63,8 +63,8 @@ export default function BottomNav({
     <nav
       className={clsx(
         'lg:hidden fixed bottom-0 left-0 right-0 z-40',
-        'bg-[#ffffff] dark:bg-[#161b22]',
-        'border-t border-[#d0d7de] dark:border-[#30363d]',
+        'bg-[var(--ds-surface-default)]',
+        'border-t border-[var(--ds-border-default)]',
         'safe-area-pb', // iOS 安全区域
         className
       )}
@@ -85,15 +85,15 @@ export default function BottomNav({
                     'flex flex-col items-center justify-center gap-0.5 w-full h-full',
                     'transition-colors',
                     isActive
-                      ? 'text-[#0969da]'
-                      : 'text-[#57606a] dark:text-[#8b949e] hover:text-[#1f2328]'
+                      ? 'text-[var(--ds-accent-default)]'
+                      : 'text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)]'
                   )}
                   onClick={() => handleClick(item)}
                 >
                   <div className="relative">
                     {item.icon}
                     {item.badge !== undefined && item.badge > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-medium text-white bg-[#cf222e] rounded-full">
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-medium text-white bg-[var(--ds-danger-default)] rounded-full">
                         {item.badge > 99 ? '99+' : item.badge}
                       </span>
                     )}
@@ -106,15 +106,15 @@ export default function BottomNav({
                     'flex flex-col items-center justify-center gap-0.5 w-full h-full',
                     'transition-colors',
                     isActive
-                      ? 'text-[#0969da]'
-                      : 'text-[#57606a] dark:text-[#8b949e] hover:text-[#1f2328]'
+                      ? 'text-[var(--ds-accent-default)]'
+                      : 'text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)]'
                   )}
                   onClick={() => handleClick(item)}
                 >
                   <div className="relative">
                     {item.icon}
                     {item.badge !== undefined && item.badge > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-medium text-white bg-[#cf222e] rounded-full">
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-medium text-white bg-[var(--ds-danger-default)] rounded-full">
                         {item.badge > 99 ? '99+' : item.badge}
                       </span>
                     )}

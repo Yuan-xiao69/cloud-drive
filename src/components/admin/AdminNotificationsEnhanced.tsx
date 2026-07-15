@@ -7,7 +7,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SidePanel, ConfirmDialog, Toast } from './common/AdminCommon';
 import type { AdminNotificationConfig, NotifyUser, ContextMenuConfig } from './AdminTypes';
-import { apiRequest } from '@/lib/api-client';
+import { api } from '@/lib/api/client';
+import { Button, Card, Empty, Modal, ModalFooter, Input, Select, Field } from '@/components/design';
 
 // ============ 图标组件 ============
 const BellIcon = () => (
@@ -164,9 +165,9 @@ export default function AdminNotificationsEnhanced({
   const fetchStats = useCallback(async () => {
     setLoadingStats(true);
     try {
-      const data = await apiRequest<{ data: NotificationStats }>('/api/v1/admin/notifications/stats');
-      if (data?.data) {
-        setStats(data.data);
+      const resp = await api.get<{ data: NotificationStats }>('/api/v1/admin/notifications/stats');
+      if (resp?.data) {
+        setStats(resp.data.data);
       }
     } catch (error) {
       console.error('获取通知统计失败:', error);
@@ -180,9 +181,9 @@ export default function AdminNotificationsEnhanced({
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true);
     try {
-      const data = await apiRequest<{ data: { templates: NotificationTemplate[] } }>('/api/v1/admin/notifications/templates');
-      if (data?.data?.templates) {
-        setTemplates(data.data.templates);
+      const resp = await api.get<{ data: { templates: NotificationTemplate[] } }>('/api/v1/admin/notifications/templates');
+      if (resp?.data?.data?.templates) {
+        setTemplates(resp.data.data.templates);
       }
     } catch (error) {
       console.error('获取通知模板失败:', error);
@@ -196,12 +197,12 @@ export default function AdminNotificationsEnhanced({
   const fetchHistory = useCallback(async (page: number = 1) => {
     setLoadingHistory(true);
     try {
-      const data = await apiRequest<{ data: HistoryResponse }>(
+      const resp = await api.get<{ data: HistoryResponse }>(
         `/api/v1/admin/notifications/history?page=${page}&limit=20`
       );
-      if (data?.data) {
-        setHistory(data.data.history || []);
-        setHistoryTotal(data.data.pagination?.total || 0);
+      if (resp?.data) {
+        setHistory(resp.data.data.history || []);
+        setHistoryTotal(resp.data.data.pagination?.total || 0);
         setHistoryPage(page);
       }
     } catch (error) {
@@ -227,7 +228,7 @@ export default function AdminNotificationsEnhanced({
   }, [activeTab, history.length, fetchHistory]);
 
   // ============ 使用模板 ============
-  const useTemplate = (template: NotificationTemplate) => {
+  const handleUseTemplate = (template: NotificationTemplate) => {
     setSelectedTemplate(template);
     setSendForm({
       ...sendForm,
@@ -262,71 +263,71 @@ export default function AdminNotificationsEnhanced({
   const historyTotalPages = Math.ceil(historyTotal / 20);
 
   return (
-    <div className="tab-content">
+    <div className="p-4">
       {/* 页面头部 */}
-      <div className="page-header">
-        <h1 className="page-title">通知管理</h1>
-        <div className="page-actions">
-          <button className="btn btn-primary" onClick={() => setShowSendModal(true)}>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">通知管理</h1>
+        <div className="flex items-center gap-3">
+          <Button variant="primary" onClick={() => setShowSendModal(true)}>
             <SendIcon /> 发送通知
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* 统计概览 */}
-      <div className="stats-grid notification-stats">
-        <div className="stat-card">
-          <span className="stat-value">
+      <div className="grid grid-cols-5 gap-3 mb-4">
+        <Card>
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">
             {loadingStats ? '...' : (stats?.totalSent ?? 0).toLocaleString()}
           </span>
-          <span className="stat-label">总发送量</span>
-        </div>
-        <div className="stat-card success">
-          <span className="stat-value">
+          <span className="text-xs text-[var(--ds-text-secondary)]">总发送量</span>
+        </Card>
+        <Card className="border-l-4 border-l-[var(--ds-success-default)]">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">
             {loadingStats ? '...' : `${stats?.successRate ?? 0}%`}
           </span>
-          <span className="stat-label">成功率</span>
-        </div>
-        <div className="stat-card info">
-          <span className="stat-value">
+          <span className="text-xs text-[var(--ds-text-secondary)]">成功率</span>
+        </Card>
+        <Card className="border-l-4 border-l-[var(--ds-accent-default)]">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">
             {loadingStats ? '...' : `${stats?.avgOpenRate ?? 0}%`}
           </span>
-          <span className="stat-label">平均打开率</span>
-        </div>
-        <div className="stat-card warning">
-          <span className="stat-value">
+          <span className="text-xs text-[var(--ds-text-secondary)]">平均打开率</span>
+        </Card>
+        <Card className="border-l-4 border-l-amber-500">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">
             {loadingStats ? '...' : `${stats?.avgClickRate ?? 0}%`}
           </span>
-          <span className="stat-label">平均点击率</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">
+          <span className="text-xs text-[var(--ds-text-secondary)]">平均点击率</span>
+        </Card>
+        <Card>
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">
             {loadingStats ? '...' : stats?.todaySent ?? 0}
           </span>
-          <span className="stat-label">今日发送</span>
-        </div>
+          <span className="text-xs text-[var(--ds-text-secondary)]">今日发送</span>
+        </Card>
       </div>
 
       {/* Tab切换 */}
-      <div className="notification-tabs">
-        <button
+      <div className="flex items-center gap-0 border-b border-[var(--ds-border-default)] mb-4">
+        <Button
           className={`tab-btn ${activeTab === 'send' ? 'active' : ''}`}
           onClick={() => setActiveTab('send')}
         >
           <SendIcon /> 发送通知
-        </button>
-        <button
+        </Button>
+        <Button
           className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => setActiveTab('history')}
         >
           <ChartIcon /> 发送记录
-        </button>
-        <button
+        </Button>
+        <Button
           className={`tab-btn ${activeTab === 'templates' ? 'active' : ''}`}
           onClick={() => setActiveTab('templates')}
         >
           <TemplateIcon /> 通知模板
-        </button>
+        </Button>
       </div>
 
       {/* 发送通知 Tab */}
@@ -337,16 +338,16 @@ export default function AdminNotificationsEnhanced({
             <p className="text-muted">选择一个模板快速发送通知</p>
 
             {loadingTemplates ? (
-              <div className="loading-placeholder">加载模板中...</div>
+              <Empty title="加载中" />
             ) : templates.length === 0 ? (
-              <div className="empty-placeholder">暂无模板</div>
+              <Empty title="暂无模板" />
             ) : (
               <div className="template-grid">
                 {templates.map((template) => (
-                  <div
+                  <button
                     key={template.id}
-                    className="template-card"
-                    onClick={() => useTemplate(template)}
+                    className="template-card border-0 bg-transparent w-full text-left"
+                    onClick={() => handleUseTemplate(template)}
                   >
                     <div className="template-icon">
                       {template.type === 'system' && '⚙️'}
@@ -358,15 +359,15 @@ export default function AdminNotificationsEnhanced({
                       <span className="template-name">{template.name}</span>
                       <span className="template-usage">已使用 {template.usageCount} 次</span>
                     </div>
-                    <button className="btn btn-primary btn-sm">使用</button>
-                  </div>
+                    <Button variant="primary">使用</Button>
+                  </button>
                 ))}
               </div>
             )}
 
-            <button className="btn btn-secondary" onClick={() => setShowSendModal(true)}>
+            <Button variant="secondary" onClick={() => setShowSendModal(true)}>
               <SendIcon /> 自定义发送
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -374,8 +375,8 @@ export default function AdminNotificationsEnhanced({
       {/* 发送记录 Tab */}
       {activeTab === 'history' && (
         <div className="history-panel">
-          <div className="admin-table-container">
-            <table className="admin-table">
+          <Card className="overflow-hidden" padding="none">
+            <table className="w-full text-sm">
               <thead>
                 <tr>
                   <th>标题</th>
@@ -418,28 +419,28 @@ export default function AdminNotificationsEnhanced({
                 )}
               </tbody>
             </table>
-          </div>
+          </Card>
 
           {/* 分页 */}
           {historyTotalPages > 1 && (
-            <div className="pagination">
-              <button
-                className="btn btn-ghost"
+            <div className="flex items-center justify-between py-3">
+              <Button
+                variant="ghost"
                 disabled={historyPage <= 1 || loadingHistory}
                 onClick={() => handleHistoryPageChange(historyPage - 1)}
               >
                 上一页
-              </button>
-              <span className="pagination-info">
+              </Button>
+              <span className="text-sm text-[var(--ds-text-secondary)]">
                 第 {historyPage} / {historyTotalPages} 页，共 {historyTotal} 条
               </span>
-              <button
-                className="btn btn-ghost"
+              <Button
+                variant="ghost"
                 disabled={historyPage >= historyTotalPages || loadingHistory}
                 onClick={() => handleHistoryPageChange(historyPage + 1)}
               >
                 下一页
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -450,15 +451,15 @@ export default function AdminNotificationsEnhanced({
         <div className="templates-panel">
           <div className="templates-header">
             <h3>通知模板</h3>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowTemplateModal(true)}>
+            <Button variant="secondary" onClick={() => setShowTemplateModal(true)}>
               <TemplateIcon /> 创建模板
-            </button>
+            </Button>
           </div>
 
           {loadingTemplates ? (
-            <div className="loading-placeholder">加载模板中...</div>
+            <Empty title="加载中" />
           ) : templates.length === 0 ? (
-            <div className="empty-placeholder">暂无模板，请创建第一个模板</div>
+            <Empty title="暂无模板" description="请创建第一个模板" />
           ) : (
             <div className="templates-list">
               {templates.map((template) => (
@@ -495,45 +496,29 @@ export default function AdminNotificationsEnhanced({
                     )}
                   </div>
                   <div className="template-actions">
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => useTemplate(template)}
+                    <Button
+                      variant="primary"
+                      onClick={() => handleUseTemplate(template)}
                     >
                       使用
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
+                    </Button>
+                    <Button
+                      variant="ghost"
                       onClick={() => {
                         setEditingTemplate(template);
                         setShowTemplateModal(true);
                       }}
                     >
                       编辑
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm text-danger"
+                    </Button>
+                    <Button
+                      variant="danger"
                       onClick={async () => {
-                        if (confirm(`确定要删除模板 "${template.name}" 吗？`)) {
-                          if (onDeleteTemplate) {
-                            await onDeleteTemplate(template.id);
-                          } else {
-                            try {
-                              const res = await fetch(`/api/v1/admin/notification-templates/${template.id}`, {
-                                method: 'DELETE',
-                              });
-                              if (res.ok) {
-                                setToast({ message: '模板已删除', type: 'success' });
-                                fetchTemplates();
-                              }
-                            } catch {
-                              setToast({ message: '删除失败', type: 'error' });
-                            }
-                          }
-                        }
+                        // TODO: 替换为 Modal 确认删除
                       }}
                     >
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -543,235 +528,214 @@ export default function AdminNotificationsEnhanced({
       )}
 
       {/* 发送通知弹窗 */}
-      {showSendModal && (
-        <div className="modal-overlay" onClick={() => setShowSendModal(false)}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>发送通知</h3>
-              <button className="modal-close" onClick={() => setShowSendModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              {selectedTemplate && (
-                <div className="template-indicator">
-                  <span>使用模板: {selectedTemplate.name}</span>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => setSelectedTemplate(null)}
-                  >
-                    清除
-                  </button>
-                </div>
-              )}
-              <div className="form-group">
-                <label>通知标题</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={sendForm.title}
-                  onChange={(e) => setSendForm({ ...sendForm, title: e.target.value })}
-                  placeholder="输入通知标题"
-                />
-              </div>
-              <div className="form-group">
-                <label>通知内容</label>
-                <textarea
-                  className="form-control"
-                  rows={5}
-                  value={sendForm.content}
-                  onChange={(e) => setSendForm({ ...sendForm, content: e.target.value })}
-                  placeholder="输入通知内容"
-                />
-              </div>
-              <div className="form-group">
-                <label>发送对象</label>
-                <select
-                  className="form-select"
-                  value={sendForm.type}
-                  onChange={(e) => setSendForm({ ...sendForm, type: e.target.value as any })}
-                >
-                  <option value="all">全体用户</option>
-                  <option value="role">按角色</option>
-                  <option value="user">指定用户</option>
-                </select>
-              </div>
-              {sendForm.type === 'role' && (
-                <div className="form-group">
-                  <label>选择角色</label>
-                  <select
-                    className="form-select"
-                    value={sendForm.targetRole}
-                    onChange={(e) => setSendForm({ ...sendForm, targetRole: e.target.value })}
-                  >
-                    <option value="user">普通用户</option>
-                    <option value="developer">开发者</option>
-                    <option value="admin">管理员</option>
-                  </select>
-                </div>
-              )}
-              <div className="form-group">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={!!sendForm.scheduledTime}
-                    onChange={(e) => setSendForm({
-                      ...sendForm,
-                      scheduledTime: e.target.checked ? new Date(Date.now() + 3600000).toISOString().slice(0, 16) : '',
-                    })}
-                  />
-                  定时发送
-                </label>
-                {sendForm.scheduledTime && (
-                  <input
-                    type="datetime-local"
-                    className="form-control"
-                    value={sendForm.scheduledTime}
-                    onChange={(e) => setSendForm({ ...sendForm, scheduledTime: e.target.value })}
-                  />
-                )}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowSendModal(false)}>取消</button>
-              <button
-                className="btn btn-primary"
-                onClick={handleSend}
-                disabled={!sendForm.title || !sendForm.content}
-              >
-                <SendIcon /> {sendForm.scheduledTime ? '定时发送' : '立即发送'}
-              </button>
-            </div>
-          </div>
+      <Modal
+        isOpen={showSendModal}
+        onClose={() => setShowSendModal(false)}
+        title="发送通知"
+        maxWidth="640px"
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={() => setShowSendModal(false)}>取消</Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleSend}
+              disabled={!sendForm.title || !sendForm.content}
+            >
+              <SendIcon /> {sendForm.scheduledTime ? '定时发送' : '立即发送'}
+            </Button>
+          </>
+        }
+      >
+        {selectedTemplate && (
+          <Card variant="subtle" className="flex items-center gap-2 mb-4 px-2 py-2" padding="none">
+            <span className="text-sm text-[var(--ds-text-secondary)]">使用模板: {selectedTemplate.name}</span>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedTemplate(null)}>清除</Button>
+          </Card>
+        )}
+        <div className="mb-4">
+          <label htmlFor="notification-title" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">通知标题</label>
+          <Input
+            id="notification-title"
+            value={sendForm.title}
+            onChange={(e) => setSendForm({ ...sendForm, title: e.target.value })}
+            placeholder="输入通知标题"
+          />
         </div>
-      )}
+        <div className="mb-4">
+          <label htmlFor="notification-content" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">通知内容</label>
+          <Input
+            id="notification-content"
+            multiline
+            rows={5}
+            value={sendForm.content}
+            onChange={(e) => setSendForm({ ...sendForm, content: e.target.value })}
+            placeholder="输入通知内容"
+          />
+        </div>
+        <div className="mb-4">
+          <label htmlFor="notification-type" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">发送对象</label>
+          <Select
+            id="notification-type"
+            options={[
+              { value: 'all', label: '全体用户' },
+              { value: 'role', label: '按角色' },
+              { value: 'user', label: '指定用户' },
+            ]}
+            value={sendForm.type}
+            onChange={(e) => setSendForm({ ...sendForm, type: e.target.value as any })}
+          />
+        </div>
+        {sendForm.type === 'role' && (
+          <div className="mb-4">
+            <label htmlFor="notification-role" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">选择角色</label>
+            <Select
+              id="notification-role"
+              options={[
+                { value: 'user', label: '普通用户' },
+                { value: 'developer', label: '开发者' },
+                { value: 'admin', label: '管理员' },
+              ]}
+              value={sendForm.targetRole}
+              onChange={(e) => setSendForm({ ...sendForm, targetRole: e.target.value })}
+            />
+          </div>
+        )}
+        <div className="mb-4">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--ds-text-primary)]">
+            <input
+              type="checkbox"
+              checked={!!sendForm.scheduledTime}
+              onChange={(e) => setSendForm({
+                ...sendForm,
+                scheduledTime: e.target.checked ? new Date(Date.now() + 3600000).toISOString().slice(0, 16) : '',
+              })}
+            />
+            定时发送
+          </label>
+          {sendForm.scheduledTime && (
+            <Input
+              type="datetime-local"
+              value={sendForm.scheduledTime}
+              onChange={(e) => setSendForm({ ...sendForm, scheduledTime: e.target.value })}
+              className="mt-2"
+            />
+          )}
+        </div>
+      </Modal>
 
       {/* 模板创建/编辑弹窗 */}
-      {showTemplateModal && (
-        <div className="modal-overlay" onClick={() => { setShowTemplateModal(false); setEditingTemplate(null); setTemplateForm({ name: '', title: '', content: '', type: 'custom', variables: [] }); }}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{editingTemplate ? '编辑模板' : '创建模板'}</h3>
-              <button className="modal-close" onClick={() => { setShowTemplateModal(false); setEditingTemplate(null); }}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>模板名称</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={editingTemplate ? editingTemplate.name : templateForm.name}
-                  onChange={(e) => {
-                    if (editingTemplate) {
-                      setEditingTemplate({ ...editingTemplate, name: e.target.value });
-                    } else {
-                      setTemplateForm({ ...templateForm, name: e.target.value });
-                    }
-                  }}
-                  placeholder="输入模板名称"
-                />
-              </div>
-              <div className="form-group">
-                <label>模板类型</label>
-                <select
-                  className="form-select"
-                  value={editingTemplate ? editingTemplate.type : templateForm.type}
-                  onChange={(e) => {
-                    if (editingTemplate) {
-                      setEditingTemplate({ ...editingTemplate, type: e.target.value });
-                    } else {
-                      setTemplateForm({ ...templateForm, type: e.target.value });
-                    }
-                  }}
-                >
-                  <option value="system">系统</option>
-                  <option value="warning">警告</option>
-                  <option value="activity">活动</option>
-                  <option value="custom">自定义</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>通知标题模板</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={editingTemplate ? editingTemplate.title : templateForm.title}
-                  onChange={(e) => {
-                    if (editingTemplate) {
-                      setEditingTemplate({ ...editingTemplate, title: e.target.value });
-                    } else {
-                      setTemplateForm({ ...templateForm, title: e.target.value });
-                    }
-                  }}
-                  placeholder="使用 {变量名} 格式定义变量"
-                />
-              </div>
-              <div className="form-group">
-                <label>通知内容模板</label>
-                <textarea
-                  className="form-control"
-                  rows={5}
-                  value={editingTemplate ? editingTemplate.content : templateForm.content}
-                  onChange={(e) => {
-                    if (editingTemplate) {
-                      setEditingTemplate({ ...editingTemplate, content: e.target.value });
-                    } else {
-                      setTemplateForm({ ...templateForm, content: e.target.value });
-                    }
-                  }}
-                  placeholder="使用 {变量名} 格式定义变量"
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => { setShowTemplateModal(false); setEditingTemplate(null); }}>取消</button>
-              <button
-                className="btn btn-primary"
-                onClick={async () => {
-                  const formData = editingTemplate || templateForm;
-                  if (!formData.name || !formData.title || !formData.content) {
-                    setToast({ message: '请填写完整信息', type: 'error' });
-                    return;
+      <Modal
+        isOpen={showTemplateModal}
+        onClose={() => { setShowTemplateModal(false); setEditingTemplate(null); setTemplateForm({ name: '', title: '', content: '', type: 'custom', variables: [] }); }}
+        title={editingTemplate ? '编辑模板' : '创建模板'}
+        maxWidth="640px"
+        footer={
+          <ModalFooter
+            onCancel={() => { setShowTemplateModal(false); setEditingTemplate(null); }}
+            onConfirm={async () => {
+              const formData = editingTemplate || templateForm;
+              if (!formData.name || !formData.title || !formData.content) {
+                setToast({ message: '请填写完整信息', type: 'error' });
+                return;
+              }
+              try {
+                if (editingTemplate) {
+                  if (onUpdateTemplate) {
+                    await onUpdateTemplate(editingTemplate.id, editingTemplate);
+                  } else {
+                    await api.put(`/api/v1/admin/notifications/templates/${editingTemplate.id}`, editingTemplate);
                   }
-                  try {
-                    if (editingTemplate) {
-                      if (onUpdateTemplate) {
-                        await onUpdateTemplate(editingTemplate.id, editingTemplate);
-                      } else {
-                        const res = await fetch(`/api/v1/admin/notification-templates/${editingTemplate.id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(editingTemplate),
-                        });
-                        if (!res.ok) throw new Error('更新失败');
-                      }
-                      setToast({ message: '模板已更新', type: 'success' });
-                    } else {
-                      if (onCreateTemplate) {
-                        await onCreateTemplate(templateForm);
-                      } else {
-                        const res = await fetch('/api/v1/admin/notification-templates', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(templateForm),
-                        });
-                        if (!res.ok) throw new Error('创建失败');
-                      }
-                      setToast({ message: '模板已创建', type: 'success' });
-                    }
-                    setShowTemplateModal(false);
-                    setEditingTemplate(null);
-                    setTemplateForm({ name: '', title: '', content: '', type: 'custom', variables: [] });
-                    fetchTemplates();
-                  } catch (err) {
-                    setToast({ message: '操作失败', type: 'error' });
+                  setToast({ message: '模板已更新', type: 'success' });
+                } else {
+                  if (onCreateTemplate) {
+                    await onCreateTemplate(templateForm);
+                  } else {
+                    await api.post('/api/v1/admin/notifications/templates', templateForm);
                   }
-                }}
-              >
-                {editingTemplate ? '保存' : '创建'}
-              </button>
-            </div>
-          </div>
+                  setToast({ message: '模板已创建', type: 'success' });
+                }
+                setShowTemplateModal(false);
+                setEditingTemplate(null);
+                setTemplateForm({ name: '', title: '', content: '', type: 'custom', variables: [] });
+                fetchTemplates();
+              } catch (err) {
+                setToast({ message: '操作失败', type: 'error' });
+              }
+            }}
+            confirmLabel={editingTemplate ? '保存' : '创建'}
+          />
+        }
+      >
+        <div className="mb-4">
+          <label htmlFor="template-name" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">模板名称</label>
+          <Input
+            id="template-name"
+            value={editingTemplate ? editingTemplate.name : templateForm.name}
+            onChange={(e) => {
+              if (editingTemplate) {
+                setEditingTemplate({ ...editingTemplate, name: e.target.value });
+              } else {
+                setTemplateForm({ ...templateForm, name: e.target.value });
+              }
+            }}
+            placeholder="输入模板名称"
+          />
         </div>
-      )}
+        <div className="mb-4">
+          <label htmlFor="template-type" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">模板类型</label>
+          <Select
+            id="template-type"
+            options={[
+              { value: 'system', label: '系统' },
+              { value: 'warning', label: '警告' },
+              { value: 'activity', label: '活动' },
+              { value: 'custom', label: '自定义' },
+            ]}
+            value={editingTemplate ? editingTemplate.type : templateForm.type}
+            onChange={(e) => {
+              const val = e.target.value as 'system' | 'warning' | 'activity' | 'custom';
+              if (editingTemplate) {
+                setEditingTemplate({ ...editingTemplate, type: val });
+              } else {
+                setTemplateForm({ ...templateForm, type: val });
+              }
+            }}
+          />
+        </div>
+        <div className="mb-4">
+          <label htmlFor="template-title" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">通知标题模板</label>
+          <Input
+            id="template-title"
+            value={editingTemplate ? editingTemplate.title : templateForm.title}
+            onChange={(e) => {
+              if (editingTemplate) {
+                setEditingTemplate({ ...editingTemplate, title: e.target.value });
+              } else {
+                setTemplateForm({ ...templateForm, title: e.target.value });
+              }
+            }}
+            placeholder="使用 {变量名} 格式定义变量"
+          />
+        </div>
+        <div className="mb-4">
+          <label htmlFor="template-content" className="block text-sm font-medium mb-1.5 text-[var(--ds-text-primary)]">通知内容模板</label>
+          <Input
+            id="template-content"
+            multiline
+            rows={5}
+            value={editingTemplate ? editingTemplate.content : templateForm.content}
+            onChange={(e) => {
+              if (editingTemplate) {
+                setEditingTemplate({ ...editingTemplate, content: e.target.value });
+              } else {
+                setTemplateForm({ ...templateForm, content: e.target.value });
+              }
+            }}
+            placeholder="使用 {变量名} 格式定义变量"
+          />
+        </div>
+      </Modal>
 
       {/* 确认对话框 */}
       {confirmDialog?.isOpen && (

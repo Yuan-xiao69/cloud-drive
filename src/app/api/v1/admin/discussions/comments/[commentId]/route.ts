@@ -5,19 +5,15 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/discussions/comments/[commentId] - 删除评论
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
 
 // GET /api/v1/admin/discussions/comments/[commentId] - 获取单个评论
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ commentId: string }> }
-): Promise<Response> {
-  try {
-    const { commentId } = await params;
+export const GET = defineRoute({
+  auth: 'none',
+  async handler({ params }) {
+    const { commentId } = params;
 
     const comment = await prisma.discussionComment.findUnique({
       where: { id: commentId, isDeleted: false },
@@ -28,7 +24,7 @@ export async function GET(
     });
 
     if (!comment) {
-      return error(ErrorCodes.NOT_FOUND, { message: '评论不存在' });
+      return errors.notFound('评论');
     }
 
     return success({
@@ -40,30 +36,25 @@ export async function GET(
       createdAt: comment.createdAt.toISOString(),
       updatedAt: comment.updatedAt.toISOString(),
     });
-  } catch (err) {
-    return handlePrismaError(err, '获取评论失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/discussions/comments/[commentId] - 删除评论
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ commentId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { commentId } = await params;
+    const { commentId } = params;
 
     const existing = await prisma.discussionComment.findUnique({
       where: { id: commentId, isDeleted: false },
     });
 
     if (!existing) {
-      return error(ErrorCodes.NOT_FOUND, { message: '评论不存在' });
+      return errors.notFound('评论');
     }
 
     await prisma.discussionComment.update({
@@ -72,7 +63,5 @@ export async function DELETE(
     });
 
     return success({ id: commentId }, '评论已删除');
-  } catch (err) {
-    return handlePrismaError(err, '删除评论失败');
-  }
-}
+  },
+});

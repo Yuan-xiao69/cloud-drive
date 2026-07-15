@@ -1,23 +1,16 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { X, AlertTriangle, Info, AlertCircle } from 'lucide-react';
-
-interface Announcement {
-  id: string;
-  title: string;
-  content: string;
-  type: 'info' | 'warning' | 'critical';
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  isPinned: boolean;
-}
+import { useAnnouncements } from '@/lib/hooks/use-announcements';
+import { Button } from '@/components/design';
 
 const STORAGE_KEY = 'dismissed_announcements';
 
 export default function AnnouncementBanner() {
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const { announcements: allAnnouncements, loading } = useAnnouncements();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  const [dismissedLoaded, setDismissedLoaded] = useState(false);
 
   // 从 localStorage 加载已关闭的公告
   useEffect(() => {
@@ -30,33 +23,15 @@ export default function AnnouncementBanner() {
     } catch {
       // ignore
     }
-    setLoading(false);
+    setDismissedLoaded(true);
   }, []);
 
-  // 获取活跃公告
-  const fetchAnnouncements = useCallback(async () => {
-    try {
-      const res = await fetch('/api/v1/announcements');
-      if (res.ok) {
-        const data = await res.json();
-        // 只显示 high/urgent 优先级的公告
-        const filtered = (data.data?.announcements || []).filter(
-          (a: Announcement) =>
-            (a.priority === 'high' || a.priority === 'urgent') &&
-            !dismissedIds.has(a.id)
-        );
-        setAnnouncements(filtered);
-      }
-    } catch {
-      // ignore
-    }
-  }, [dismissedIds]);
-
-  useEffect(() => {
-    if (!loading) {
-      fetchAnnouncements();
-    }
-  }, [loading, fetchAnnouncements]);
+  // 只显示 high/urgent 优先级且未被关闭的公告
+  const announcements = allAnnouncements.filter(
+    (a) =>
+      (a.priority === 'high' || a.priority === 'urgent') &&
+      !dismissedIds.has(a.id)
+  );
 
   // 关闭公告
   const handleDismiss = (id: string) => {
@@ -64,7 +39,6 @@ export default function AnnouncementBanner() {
     newDismissed.add(id);
     setDismissedIds(newDismissed);
     localStorage.setItem(STORAGE_KEY, JSON.stringify([...newDismissed]));
-    setAnnouncements(prev => prev.filter(a => a.id !== id));
   };
 
   // 按优先级和类型排序
@@ -76,7 +50,7 @@ export default function AnnouncementBanner() {
     return 0;
   });
 
-  if (loading || sortedAnnouncements.length === 0) {
+  if (loading || !dismissedLoaded || sortedAnnouncements.length === 0) {
     return null;
   }
 
@@ -85,21 +59,21 @@ export default function AnnouncementBanner() {
 
   const typeStyles = {
     info: {
-      bg: 'bg-blue-50 dark:bg-blue-950/30',
-      border: 'border-blue-200 dark:border-blue-800',
-      text: 'text-blue-800 dark:text-blue-200',
+      bg: 'bg-[var(--ds-surface-subtle)]',
+      border: 'border-[var(--ds-border-default)]',
+      text: 'text-[var(--ds-text-primary)]',
       icon: <Info className="w-4 h-4" />,
     },
     warning: {
-      bg: 'bg-yellow-50 dark:bg-yellow-950/30',
-      border: 'border-yellow-200 dark:border-yellow-800',
-      text: 'text-yellow-800 dark:text-yellow-200',
+      bg: 'bg-[var(--ds-warning-subtle)]',
+      border: 'border-[var(--ds-warning-default)]',
+      text: 'text-[var(--ds-warning-default)]',
       icon: <AlertTriangle className="w-4 h-4" />,
     },
     critical: {
-      bg: 'bg-red-50 dark:bg-red-950/30',
-      border: 'border-red-200 dark:border-red-800',
-      text: 'text-red-800 dark:text-red-200',
+      bg: 'bg-[var(--ds-danger-subtle)]',
+      border: 'border-[var(--ds-danger-default)]',
+      text: 'text-[var(--ds-danger-default)]',
       icon: <AlertCircle className="w-4 h-4" />,
     },
   };
@@ -132,13 +106,15 @@ export default function AnnouncementBanner() {
             )}
           </div>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => handleDismiss(topAnnouncement.id)}
-          className={`flex-shrink-0 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors ${style.text}`}
+          className={`flex-shrink-0 ${style.text}`}
           aria-label="关闭公告"
         >
           <X className="w-4 h-4" />
-        </button>
+        </Button>
       </div>
     </div>
   );

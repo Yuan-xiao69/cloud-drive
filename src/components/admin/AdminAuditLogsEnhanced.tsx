@@ -8,6 +8,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { SidePanel, Toast } from './common/AdminCommon';
 import { LineChart, PieChart } from './charts/AdminCharts';
 import type { AuditLogEntry, AuditLogFilters, ContextMenuConfig } from './AdminTypes';
+import { Button, Card, Modal, Field } from '@/components/design';
 
 // ============ 图标组件 ============
 const FileTextIcon = () => (
@@ -87,9 +88,9 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
     }
 
     return (
-      <div
+      <button
         key={index}
-        className={`context-menu-item ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
+        className={`context-menu-item border-0 bg-transparent w-full text-left ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
         onClick={() => !item.disabled && !item.submenu && item.action?.()}
       >
         <div className="context-menu-item-content">
@@ -97,7 +98,7 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
           <span className="context-menu-label">{item.label}</span>
           {item.shortcut && <span className="context-menu-shortcut">{item.shortcut}</span>}
         </div>
-      </div>
+      </button>
     );
   };
 
@@ -123,21 +124,21 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
 
 // ============ 操作类型配置 ============
 const ACTION_TYPES: Record<string, { label: string; icon: string; color: string }> = {
-  ban_user: { label: '封禁用户', icon: '🚫', color: '#cf222e' },
-  unban_user: { label: '解封用户', icon: '✅', color: '#1a7f37' },
-  delete_user: { label: '删除用户', icon: '🗑️', color: '#cf222e' },
-  update_user: { label: '更新用户', icon: '✏️', color: '#0969da' },
-  delete_repo: { label: '删除仓库', icon: '🗑️', color: '#cf222e' },
-  update_repo: { label: '更新仓库', icon: '✏️', color: '#1a7f37' },
-  batch_delete_users: { label: '批量删除用户', icon: '🗑️', color: '#cf222e' },
-  batch_delete_repos: { label: '批量删除仓库', icon: '🗑️', color: '#cf222e' },
-  delete_discussion: { label: '删除帖子', icon: '🗑️', color: '#cf222e' },
-  delete_comment: { label: '删除评论', icon: '🗑️', color: '#cf222e' },
-  handle_report: { label: '处理举报', icon: '📋', color: '#bf8700' },
+  ban_user: { label: '封禁用户', icon: '🚫', color: 'var(--ds-danger-default)' },
+  unban_user: { label: '解封用户', icon: '✅', color: 'var(--ds-success-default)' },
+  delete_user: { label: '删除用户', icon: '🗑️', color: 'var(--ds-danger-default)' },
+  update_user: { label: '更新用户', icon: '✏️', color: 'var(--ds-accent-default)' },
+  delete_repo: { label: '删除仓库', icon: '🗑️', color: 'var(--ds-danger-default)' },
+  update_repo: { label: '更新仓库', icon: '✏️', color: 'var(--ds-success-default)' },
+  batch_delete_users: { label: '批量删除用户', icon: '🗑️', color: 'var(--ds-danger-default)' },
+  batch_delete_repos: { label: '批量删除仓库', icon: '🗑️', color: 'var(--ds-danger-default)' },
+  delete_discussion: { label: '删除帖子', icon: '🗑️', color: 'var(--ds-danger-default)' },
+  delete_comment: { label: '删除评论', icon: '🗑️', color: 'var(--ds-danger-default)' },
+  handle_report: { label: '处理举报', icon: '📋', color: 'var(--ds-warning-default)' },
 };
 
 // ============ 主组件 ============
-interface AdminAuditLogsEnhancedProps {
+export interface AdminAuditLogsEnhancedProps {
   logs: AuditLogEntry[];
   logsTotal: number;
   logsPage: number;
@@ -209,17 +210,17 @@ export default function AdminAuditLogsEnhanced({
 
     // 按类型分组
     const typeColorMap: Record<string, string> = {
-      update_user: '#0969da', delete_user: '#cf222e', batch_delete_users: '#cf222e',
-      ban_user: '#cf222e', unban_user: '#1a7f37',
-      delete_repo: '#cf222e', update_repo: '#1a7f37', batch_delete_repos: '#cf222e',
-      delete_discussion: '#cf222e', delete_comment: '#cf222e',
-      handle_report: '#bf8700',
+      update_user: 'var(--ds-accent-default)', delete_user: 'var(--ds-danger-default)', batch_delete_users: 'var(--ds-danger-default)',
+      ban_user: 'var(--ds-danger-default)', unban_user: 'var(--ds-success-default)',
+      delete_repo: 'var(--ds-danger-default)', update_repo: 'var(--ds-success-default)', batch_delete_repos: 'var(--ds-danger-default)',
+      delete_discussion: 'var(--ds-danger-default)', delete_comment: 'var(--ds-danger-default)',
+      handle_report: 'var(--ds-warning-default)',
     };
 
     const actionsByType = Object.entries(typeCounts).map(([type, count]) => ({
       type: ACTION_TYPES[type]?.label || type,
       count,
-      color: typeColorMap[type] || '#656d76',
+      color: typeColorMap[type] || 'var(--ds-text-secondary)',
     }));
 
     return {
@@ -232,12 +233,21 @@ export default function AdminAuditLogsEnhanced({
     };
   }, [logs, logsTotal]);
 
+  // ============ 加载关联日志 ============
+  const loadRelatedLogs = useCallback((log: AuditLogEntry) => {
+    // 从当前日志列表中查找同操作者的其他日志作为关联日志
+    const related = logs
+      .filter((l) => l.id !== log.id && l.adminUsername === log.adminUsername)
+      .slice(0, 5);
+    setRelatedLogs(related);
+  }, [logs]);
+
   // ============ 右键菜单处理 ============
   const handleContextMenu = useCallback((e: React.MouseEvent, log: AuditLogEntry) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const actionConfig = ACTION_TYPES[log.actionType] || { label: log.actionLabel || log.actionType, icon: '📋', color: '#656d76' };
+    const actionConfig = ACTION_TYPES[log.actionType] || { label: log.actionLabel || log.actionType, icon: '📋', color: 'var(--ds-text-secondary)' };
 
     const menuConfig: ContextMenuConfig = {
       x: e.clientX,
@@ -256,7 +266,7 @@ export default function AdminAuditLogsEnhanced({
             setContextMenu(null);
           },
         },
-        { divider: true, label: '', action: () => {}, icon: undefined },
+        { divider: true },
         {
           label: '查看操作者',
           icon: '👤',
@@ -273,23 +283,22 @@ export default function AdminAuditLogsEnhanced({
             setContextMenu(null);
           },
         },
-        { divider: true, label: '', action: () => {}, icon: undefined },
+        { divider: true },
         {
           label: '导出此条',
           icon: '📤',
           action: () => {
             const logData = [
-              ['日志ID', '时间', '用户', '操作', '目标类型', '目标ID', '详情', 'IP', 'UserAgent'].join(','),
+              ['日志ID', '时间', '用户', '操作', '目标类型', '目标ID', '详情', 'IP'].join(','),
               [
                 log.id,
                 log.createdAt,
-                log.user?.username || 'System',
-                log.action,
+                log.adminUsername || 'System',
+                log.actionLabel || log.actionType,
                 log.targetType || '',
                 log.targetId || '',
-                log.details || '',
+                log.detailsText || '',
                 log.ipAddress || '',
-                (log.userAgent || '').replace(/,/g, ';'),
               ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','),
             ].join('\n');
             const blob = new Blob([logData], { type: 'text/csv;charset=utf-8;' });
@@ -313,7 +322,7 @@ export default function AdminAuditLogsEnhanced({
             setContextMenu(null);
           },
         },
-        { divider: true, label: '', action: () => {}, icon: undefined },
+        { divider: true },
         {
           label: '查看相关日志',
           icon: '🔍',
@@ -328,16 +337,7 @@ export default function AdminAuditLogsEnhanced({
     };
 
     setContextMenu(menuConfig);
-  }, []);
-
-  // ============ 加载关联日志 ============
-  const loadRelatedLogs = useCallback((log: AuditLogEntry) => {
-    // 从当前日志列表中查找同操作者的其他日志作为关联日志
-    const related = logs
-      .filter((l) => l.id !== log.id && l.adminUsername === log.adminUsername)
-      .slice(0, 5);
-    setRelatedLogs(related);
-  }, [logs]);
+  }, [loadRelatedLogs]);
 
   // ============ 导出日志 ============
   const handleExport = (format: 'csv' | 'json' | 'excel') => {
@@ -376,61 +376,69 @@ export default function AdminAuditLogsEnhanced({
   const totalPages = Math.ceil(logsTotal / 20);
 
   return (
-    <div className="tab-content">
+    <div className="p-4">
       {/* 页面头部 */}
-      <div className="page-header">
-        <h1 className="page-title">审计日志</h1>
-        <div className="page-actions">
-          <div className="time-range-selector">
-            <button
-              className={`range-btn ${timeRange === 'today' ? 'active' : ''}`}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">审计日志</h1>
+        <div className="flex items-center gap-3">
+          <div className="time-range-selector flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={timeRange === 'today' ? 'active' : ''}
               onClick={() => applyTimeRange('today')}
             >
               今天
-            </button>
-            <button
-              className={`range-btn ${timeRange === '7d' ? 'active' : ''}`}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={timeRange === '7d' ? 'active' : ''}
               onClick={() => applyTimeRange('7d')}
             >
               7天
-            </button>
-            <button
-              className={`range-btn ${timeRange === '30d' ? 'active' : ''}`}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={timeRange === '30d' ? 'active' : ''}
               onClick={() => applyTimeRange('30d')}
             >
               30天
-            </button>
-            <button
-              className={`range-btn ${timeRange === 'custom' ? 'active' : ''}`}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={timeRange === 'custom' ? 'active' : ''}
               onClick={() => setShowAdvancedFilter(true)}
             >
               自定义
-            </button>
+            </Button>
           </div>
-          <button className="btn btn-secondary" onClick={() => setShowExportModal(true)}>
+          <Button variant="secondary" onClick={() => setShowExportModal(true)}>
             <DownloadIcon /> 导出日志
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* 统计概览 */}
       <div className="stats-grid audit-stats">
-        <div className="stat-card">
-          <span className="stat-value">{stats.totalLogs.toLocaleString()}</span>
-          <span className="stat-label">总日志数</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{stats.todayLogs}</span>
-          <span className="stat-label">今日日志</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{stats.userActions}</span>
-          <span className="stat-label">用户操作</span>
-        </div>
-        <div className="stat-card danger">
-          <span className="stat-value">{stats.adminActions}</span>
-          <span className="stat-label">管理操作</span>
-        </div>
+        <Card padding="none" className="p-4">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{stats.totalLogs.toLocaleString()}</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">总日志数</span>
+        </Card>
+        <Card padding="none" className="p-4">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{stats.todayLogs}</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">今日日志</span>
+        </Card>
+        <Card padding="none" className="p-4">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{stats.userActions}</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">用户操作</span>
+        </Card>
+        <Card padding="none" className="p-4 border-l-4 border-l-[var(--ds-danger-default)]">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{stats.adminActions}</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">管理操作</span>
+        </Card>
       </div>
 
       {/* 图表区域 */}
@@ -444,7 +452,7 @@ export default function AdminAuditLogsEnhanced({
               data={stats.actionsByDay.map(d => ({ label: d.date, value: d.count }))}
               width={400}
               height={180}
-              color="#0969da"
+              color="var(--ds-accent-default)"
             />
           </div>
         </div>
@@ -471,27 +479,30 @@ export default function AdminAuditLogsEnhanced({
         <div className="advanced-filter-panel">
           <div className="filter-row">
             <div className="filter-item">
-              <label>开始日期</label>
+              <label htmlFor="audit-date-from">开始日期</label>
               <input
+                id="audit-date-from"
                 type="date"
-                className="form-control"
+                className="w-full px-3 py-2 rounded-[var(--ds-radius-md)] border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent-subtle)]"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
               />
             </div>
             <div className="filter-item">
-              <label>结束日期</label>
+              <label htmlFor="audit-date-to">结束日期</label>
               <input
+                id="audit-date-to"
                 type="date"
-                className="form-control"
+                className="w-full px-3 py-2 rounded-[var(--ds-radius-md)] border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent-subtle)]"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
               />
             </div>
             <div className="filter-item">
-              <label>操作类型</label>
+              <label htmlFor="audit-action">操作类型</label>
               <select
-                className="form-select"
+                id="audit-action"
+                className="w-full px-3 py-2 rounded-[var(--ds-radius-md)] border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] text-sm"
                 value={filters.action || ''}
                 onChange={(e) => onFiltersChange({ ...filters, action: e.target.value || undefined })}
               >
@@ -503,9 +514,10 @@ export default function AdminAuditLogsEnhanced({
               </select>
             </div>
             <div className="filter-item">
-              <label>目标类型</label>
+              <label htmlFor="audit-target-type">目标类型</label>
               <select
-                className="form-select"
+                id="audit-target-type"
+                className="w-full px-3 py-2 rounded-[var(--ds-radius-md)] border border-[var(--ds-border-default)] bg-[var(--ds-page-bg)] text-[var(--ds-text-primary)] text-sm"
                 value={filters.targetType || ''}
                 onChange={(e) => onFiltersChange({ ...filters, targetType: e.target.value || undefined })}
               >
@@ -516,9 +528,9 @@ export default function AdminAuditLogsEnhanced({
               </select>
             </div>
           </div>
-          <div className="filter-actions">
-            <button
-              className="btn btn-primary"
+          <div className="flex gap-2 mt-4">
+            <Button
+              variant="primary"
               onClick={() => {
                 onFiltersChange({
                   ...filters,
@@ -530,9 +542,9 @@ export default function AdminAuditLogsEnhanced({
               }}
             >
               应用筛选
-            </button>
-            <button
-              className="btn btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => {
                 onResetFilters();
                 setDateFrom('');
@@ -541,20 +553,20 @@ export default function AdminAuditLogsEnhanced({
               }}
             >
               重置
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* 日志列表 */}
-      <div className="admin-table-container">
+      <Card padding="none" className="overflow-hidden">
         {logsLoading ? (
-          <div className="loading-state">
-            <div className="loading-spinner" />
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] mb-3" />
             <p>加载中...</p>
           </div>
         ) : logs.length === 0 ? (
-          <div className="empty-state">
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
             <FileTextIcon />
             <p>暂无日志记录</p>
           </div>
@@ -563,17 +575,17 @@ export default function AdminAuditLogsEnhanced({
             <table className="data-table audit-table">
               <thead>
                 <tr>
-                  <th style={{ width: '160px' }}>时间</th>
-                  <th style={{ width: '100px' }}>操作者</th>
-                  <th style={{ width: '120px' }}>操作类型</th>
+                  <th className="w-40">时间</th>
+                  <th className="w-[100px]">操作者</th>
+                  <th className="w-[120px]">操作类型</th>
                   <th>详情</th>
-                  <th style={{ width: '100px' }}>目标</th>
-                  <th style={{ width: '80px' }}>IP</th>
+                  <th className="w-[100px]">目标</th>
+                  <th className="w-20">IP</th>
                 </tr>
               </thead>
               <tbody>
                 {logs.map((log: AuditLogEntry) => {
-                  const actionConfig = ACTION_TYPES[log.actionType] || { label: log.actionLabel || log.actionType, icon: '📋', color: '#656d76' };
+                  const actionConfig = ACTION_TYPES[log.actionType] || { label: log.actionLabel || log.actionType, icon: '📋', color: 'var(--ds-text-secondary)' };
 
                   return (
                     <tr
@@ -612,29 +624,29 @@ export default function AdminAuditLogsEnhanced({
             </table>
 
             {totalPages > 1 && (
-              <div className="pagination">
-                <button
-                  className="btn btn-default btn-sm"
+              <div className="flex items-center justify-between py-3">
+                <Button
+                  variant="secondary"
                   disabled={logsPage <= 1}
                   onClick={() => onPageChange(logsPage - 1)}
                 >
                   上一页
-                </button>
-                <span className="page-info">
+                </Button>
+                <span className="text-sm text-[var(--ds-text-secondary)]">
                   第 {logsPage} / {totalPages} 页，共 {logsTotal} 条
                 </span>
-                <button
-                  className="btn btn-default btn-sm"
+                <Button
+                  variant="secondary"
                   disabled={logsPage >= totalPages}
                   onClick={() => onPageChange(logsPage + 1)}
                 >
                   下一页
-                </button>
+                </Button>
               </div>
             )}
           </>
         )}
-      </div>
+      </Card>
 
       {/* 右键菜单 */}
       {contextMenu && (
@@ -652,7 +664,7 @@ export default function AdminAuditLogsEnhanced({
         {selectedLog && (
           <div className="log-detail-content">
             <section className="detail-section">
-              <h3 className="section-title">基本信息</h3>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">基本信息</h3>
               <div className="info-grid">
                 <div className="info-item">
                   <span className="info-label">日志ID</span>
@@ -678,7 +690,7 @@ export default function AdminAuditLogsEnhanced({
             </section>
 
             <section className="detail-section">
-              <h3 className="section-title">
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">
                 <LinkIcon /> 目标信息
               </h3>
               <div className="target-info-card">
@@ -688,14 +700,14 @@ export default function AdminAuditLogsEnhanced({
             </section>
 
             <section className="detail-section">
-              <h3 className="section-title">操作详情</h3>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">操作详情</h3>
               <div className="detail-content-box">
                 <pre>{selectedLog.detailsText || '无详细描述'}</pre>
               </div>
             </section>
 
             <section className="detail-section">
-              <h3 className="section-title">请求信息</h3>
+              <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">请求信息</h3>
               <div className="request-info">
                 <div className="request-item">
                   <span className="request-label">IP地址</span>
@@ -706,7 +718,7 @@ export default function AdminAuditLogsEnhanced({
 
             {relatedLogs.length > 0 && (
               <section className="detail-section">
-                <h3 className="section-title">关联日志</h3>
+                <h3 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">关联日志</h3>
                 <div className="related-logs">
                   {relatedLogs.map((related) => (
                     <div key={related.id} className="related-log-item">
@@ -726,37 +738,32 @@ export default function AdminAuditLogsEnhanced({
       </SidePanel>
 
       {/* 导出弹窗 */}
-      {showExportModal && (
-        <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>导出审计日志</h3>
-              <button className="modal-close" onClick={() => setShowExportModal(false)}>×</button>
+      <Modal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="导出审计日志"
+        maxWidth="480px"
+        footer={
+          <Button variant="secondary" size="sm" onClick={() => setShowExportModal(false)}>取消</Button>
+        }
+      >
+        <div className="export-options">
+          <button className="export-option border-0 bg-transparent w-full text-left" onClick={() => handleExport('csv')}>
+            <div className="option-icon">📊</div>
+            <div className="option-info">
+              <span className="option-title">CSV 格式</span>
+              <span className="option-desc">适合Excel打开和数据分析</span>
             </div>
-            <div className="modal-body">
-              <div className="export-options">
-                <div className="export-option" onClick={() => handleExport('csv')}>
-                  <div className="option-icon">📊</div>
-                  <div className="option-info">
-                    <span className="option-title">CSV 格式</span>
-                    <span className="option-desc">适合Excel打开和数据分析</span>
-                  </div>
-                </div>
-                <div className="export-option" onClick={() => handleExport('json')}>
-                  <div className="option-icon">💻</div>
-                  <div className="option-info">
-                    <span className="option-title">JSON 格式</span>
-                    <span className="option-desc">适合程序接口和备份</span>
-                  </div>
-                </div>
-              </div>
+          </button>
+          <button className="export-option border-0 bg-transparent w-full text-left" onClick={() => handleExport('json')}>
+            <div className="option-icon">💻</div>
+            <div className="option-info">
+              <span className="option-title">JSON 格式</span>
+              <span className="option-desc">适合程序接口和备份</span>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowExportModal(false)}>取消</button>
-            </div>
-          </div>
+          </button>
         </div>
-      )}
+      </Modal>
 
       {/* Toast通知 */}
       {toast && (

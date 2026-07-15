@@ -5,23 +5,28 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/discussions - 创建讨论
  */
 
-import { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
 import { success, created, paginated } from '@/lib/api/v1/response';
-import { errors } from '@/lib/api/v1/response';
-import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logActivity } from '@/lib/activity-log';
-import { isUserMuted } from '@/lib/user-restrictions';
-import { sanitizeText } from '@/lib/security';
-import { checkRateLimit, createRateLimitHeaders } from '@/lib/rate-limit';
+import { DiscussionService } from '@/services/discussion-service';
 import { parsePagination, buildPaginationMeta } from '@/lib/api/v1/pagination';
 import type { Prisma } from '@prisma/client';
 
-const VALID_CATEGORIES = ['question', 'idea', 'request', 'team', 'share'];
+const VALID_CATEGORIES = ['general', 'qa', 'share', 'suggestion', 'announce'] as const;
+
+const createDiscussionSchema = z.object({
+  title: z.string().min(1, '标题不能为空'),
+  content: z.string().min(1, '内容不能为空'),
+  category: z.enum(VALID_CATEGORIES),
+  tags: z.array(z.string()).max(10).optional().default([]),
+});
 
 // GET /api/v1/discussions - 获取讨论列表
-export async function GET(req: NextRequest) {
-  try {
+export const GET = defineRoute({
+  auth: 'none',
+  handler: async ({ req }) => {
     const { searchParams } = new URL(req.url);
     const { page, size, skip } = parsePagination(searchParams);
     const category = searchParams.get('category') || undefined;
@@ -29,7 +34,7 @@ export async function GET(req: NextRequest) {
     const keyword = searchParams.get('keyword') || undefined;
 
     const where: Prisma.DiscussionWhereInput = { isDeleted: false };
-    if (category && VALID_CATEGORIES.includes(category)) {
+    if (category && VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
       where.category = category;
     }
     if (keyword) {
@@ -62,6 +67,10 @@ export async function GET(req: NextRequest) {
         where,
         include: {
           author: { select: { id: true, username: true, avatarUrl: true } },
+          comments: {
+            where: { isDeleted: false, isAccepted: true },
+            select: { id: true },
+          },
           _count: { select: { comments: { where: { isDeleted: false } } } },
         },
         orderBy,
@@ -83,6 +92,9 @@ export async function GET(req: NextRequest) {
       content: d.content.slice(0, 200), // 列表只返回摘要
       category: d.category,
       status: d.status,
+      tags: d.tags,
+      isWiki: d.isWiki,
+      hasAccepted: d.comments.length > 0,
       viewCount: d.viewCount,
       commentsCount: d._count.comments,
       createdAt: d.createdAt.toISOString(),
@@ -90,65 +102,28 @@ export async function GET(req: NextRequest) {
     }));
 
     return paginated(items, buildPaginationMeta(total, page, size));
-  } catch (error) {
-    console.error('[v1/Discussions] GET Error:', error);
-    return errors.internal('获取讨论列表失败');
-  }
-}
+  },
+});
 
 // POST /api/v1/discussions - 创建讨论
-export async function POST(req: NextRequest) {
-  try {
-    // 速率限制检查
-    const rateLimit = await checkRateLimit(req, 'api');
-    if (!rateLimit.allowed) {
-      const headers = createRateLimitHeaders(rateLimit);
-      return new Response(
-        JSON.stringify({ success: false, message: `请求过于频繁，请 ${rateLimit.retryAfter} 秒后重试` }),
-        { status: 429, headers: { 'Content-Type': 'application/json', ...Object.fromEntries(headers) } }
-      );
-    }
+export const POST = defineRoute({
+  auth: 'required',
+  rateLimit: 'default',
+  validation: createDiscussionSchema,
+  handler: async ({ req, user, body }) => {
+    const { title, content, category, tags } = body;
 
-    const auth = await requireAuth(req);
-    if ('error' in auth) return auth.error;
-
-    // 检查用户是否被禁言
-    const muteCheck = await isUserMuted(auth.userId);
-    if (muteCheck.muted && muteCheck.penalty) {
-      const endStr = muteCheck.penalty.endDate
-        ? `，将于 ${muteCheck.penalty.endDate.toLocaleDateString('zh-CN')} 解除`
-        : '，永久禁言';
-      return errors.forbidden(`您已被禁言：${muteCheck.penalty.reason}${endStr}`);
-    }
-
-    const body = await req.json();
-    const { title, content, category } = body;
-
-    if (!title?.trim()) return errors.badRequest('标题不能为空');
-    if (!content?.trim()) return errors.badRequest('内容不能为空');
-    if (!category || !VALID_CATEGORIES.includes(category)) {
-      return errors.badRequest(`分类无效，必须为: ${VALID_CATEGORIES.join(', ')}`);
-    }
-
-    // XSS 防护：净化用户输入
-    const sanitizedTitle = sanitizeText(title.trim());
-    const sanitizedContent = sanitizeText(content.trim());
-
-    const discussion = await prisma.discussion.create({
-      data: {
-        authorId: auth.userId,
-        title: sanitizedTitle,
-        content: sanitizedContent,
-        category,
-      },
-      include: {
-        author: { select: { id: true, username: true, avatarUrl: true } },
-      },
+    const discussion = await DiscussionService.create({
+      userId: user!.id,
+      title,
+      content,
+      category,
+      tags,
     });
 
     // 记录讨论创建日志
     await logActivity({
-      userId: auth.userId,
+      userId: user!.id,
       action: 'create_discussion',
       targetType: 'discussion',
       targetId: discussion.id,
@@ -157,25 +132,6 @@ export async function POST(req: NextRequest) {
       req,
     });
 
-    return created({
-      id: discussion.id,
-      authorId: discussion.authorId,
-      author: {
-        id: discussion.author.id,
-        username: discussion.author.username,
-        avatarUrl: discussion.author.avatarUrl ?? undefined,
-      },
-      title: discussion.title,
-      content: discussion.content,
-      category: discussion.category,
-      status: discussion.status,
-      viewCount: discussion.viewCount,
-      commentsCount: 0,
-      createdAt: discussion.createdAt.toISOString(),
-      updatedAt: discussion.updatedAt.toISOString(),
-    }, '讨论发布成功');
-  } catch (error) {
-    console.error('[v1/Discussions] POST Error:', error);
-    return errors.internal('创建讨论失败');
-  }
-}
+    return created(discussion, '讨论发布成功');
+  },
+});

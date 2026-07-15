@@ -20,7 +20,7 @@ export function LineChart({
   data,
   width = 400,
   height = 200,
-  color = '#0969da',
+  color = 'var(--ds-accent-default)',
   showArea = true,
   showPoints = true,
   formatValue = (v) => v.toLocaleString(),
@@ -69,7 +69,7 @@ export function LineChart({
             y1={tick.y}
             x2={width - padding.right}
             y2={tick.y}
-            stroke="var(--color-border-muted)"
+            stroke="var(--ds-border-muted)"
             strokeDasharray="4,4"
           />
           <text
@@ -77,7 +77,7 @@ export function LineChart({
             y={tick.y}
             textAnchor="end"
             dominantBaseline="middle"
-            fill="var(--color-fg-muted)"
+            fill="var(--ds-text-secondary)"
             fontSize="11"
           >
             {formatValue(tick.value)}
@@ -111,7 +111,7 @@ export function LineChart({
             cx={getX(i)}
             cy={getY(d.value)}
             r={4}
-            fill="var(--color-bg-default)"
+            fill="var(--ds-surface-default)"
             stroke={color}
             strokeWidth={2}
           />
@@ -127,7 +127,7 @@ export function LineChart({
           x={getX(i)}
           y={height - 8}
           textAnchor="middle"
-          fill="var(--color-fg-muted)"
+          fill="var(--ds-text-secondary)"
           fontSize="11"
         >
           {d.label}
@@ -189,7 +189,7 @@ export function BarChart({
             y1={tick.y}
             x2={width - padding.right}
             y2={tick.y}
-            stroke="var(--color-border-muted)"
+            stroke="var(--ds-border-muted)"
             strokeDasharray="4,4"
           />
           <text
@@ -197,7 +197,7 @@ export function BarChart({
             y={tick.y}
             textAnchor="end"
             dominantBaseline="middle"
-            fill="var(--color-fg-muted)"
+            fill="var(--ds-text-secondary)"
             fontSize="11"
           >
             {formatValue(tick.value)}
@@ -210,7 +210,7 @@ export function BarChart({
         const barHeight = getBarHeight(d.value);
         const x = getX(i);
         const y = padding.top + chartHeight - barHeight;
-        const barColor = d.color || 'var(--color-accent-fg)';
+        const barColor = d.color || 'var(--ds-accent-default)';
 
         return (
           <g key={i}>
@@ -228,7 +228,7 @@ export function BarChart({
               x={x + barWidth / 2}
               y={y - 6}
               textAnchor="middle"
-              fill="var(--color-fg-default)"
+              fill="var(--ds-text-primary)"
               fontSize="11"
               fontWeight="500"
             >
@@ -239,7 +239,7 @@ export function BarChart({
               x={x + barWidth / 2}
               y={height - 10}
               textAnchor="middle"
-              fill="var(--color-fg-muted)"
+              fill="var(--ds-text-secondary)"
               fontSize="10"
             >
               {d.label.length > 8 ? d.label.slice(0, 8) + '...' : d.label}
@@ -261,14 +261,14 @@ interface PieChartProps {
 }
 
 const DEFAULT_COLORS = [
-  '#0969da', // 蓝色
-  '#1a7f37', // 绿色
-  '#bf8700', // 黄色
-  '#cf222e', // 红色
-  '#8250df', // 紫色
-  '#fd8c73', // 橙色
-  '#0969da', // 蓝色
-  '#656d76', // 灰色
+  'var(--ds-accent-default)', // 蓝色
+  'var(--ds-success-default)', // 绿色
+  'var(--ds-warning-default)', // 黄色
+  'var(--ds-danger-default)', // 红色
+  'var(--ds-accent-default)', // 紫色
+  'var(--ds-accent-hover)', // 橙色
+  'var(--ds-accent-default)', // 蓝色
+  'var(--ds-text-tertiary)', // 灰色
 ];
 
 export function PieChart({
@@ -322,7 +322,7 @@ export function PieChart({
             key={i}
             d={slice.path}
             fill={slice.color}
-            stroke="var(--color-bg-default)"
+            stroke="var(--ds-surface-default)"
             strokeWidth={2}
           >
             <title>{`${slice.label}: ${formatValue(slice.value)} (${(slice.percentage * 100).toFixed(1)}%)`}</title>
@@ -333,14 +333,14 @@ export function PieChart({
           cx={centerX}
           cy={centerY}
           r={radius * 0.6}
-          fill="var(--color-bg-default)"
+          fill="var(--ds-surface-default)"
         />
         {/* 中心文字 */}
         <text
           x={centerX}
           y={centerY - 5}
           textAnchor="middle"
-          fill="var(--color-fg-default)"
+          fill="var(--ds-text-primary)"
           fontSize="16"
           fontWeight="600"
         >
@@ -350,7 +350,7 @@ export function PieChart({
           x={centerX}
           y={centerY + 12}
           textAnchor="middle"
-          fill="var(--color-fg-muted)"
+          fill="var(--ds-text-secondary)"
           fontSize="11"
         >
           总计
@@ -390,7 +390,7 @@ export function RingProgress({
   max = 100,
   size = 80,
   strokeWidth = 8,
-  color = 'var(--color-success-fg)',
+  color = 'var(--ds-success-default)',
   label,
   sublabel,
 }: RingProgressProps) {
@@ -408,7 +408,7 @@ export function RingProgress({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="var(--color-border-muted)"
+          stroke="var(--ds-border-muted)"
           strokeWidth={strokeWidth}
         />
         {/* 进度圆环 */}
@@ -467,7 +467,7 @@ export function MiniTrend({
     return `${x},${y}`;
   });
 
-  const trendColor = color || (trend === 'up' ? 'var(--color-success-fg)' : trend === 'down' ? 'var(--color-danger-fg)' : 'var(--color-fg-muted)');
+  const trendColor = color || (trend === 'up' ? 'var(--ds-success-default)' : trend === 'down' ? 'var(--ds-danger-default)' : 'var(--ds-text-secondary)');
 
   return (
     <svg width={width} height={height} className="mini-trend">
@@ -490,10 +490,10 @@ const Styles = () => (
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--color-fg-muted);
+      color: var(--ds-text-secondary);
       font-size: 13px;
-      background: var(--color-canvas-subtle);
-      border: 1px dashed var(--color-border-default);
+      background: var(--ds-surface-subtle);
+      border: 1px dashed var(--ds-border-default);
       border-radius: 6px;
     }
     .admin-chart {
@@ -526,7 +526,7 @@ const Styles = () => (
     }
     .legend-label {
       flex: 1;
-      color: var(--color-fg-default);
+      color: var(--ds-text-primary);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -534,7 +534,7 @@ const Styles = () => (
     }
     .legend-value {
       font-weight: 500;
-      color: var(--color-fg-default);
+      color: var(--ds-text-primary);
       font-size: 11px;
       min-width: 40px;
       text-align: right;
@@ -556,17 +556,17 @@ const Styles = () => (
     .ring-progress-label {
       font-size: 11px;
       font-weight: 600;
-      color: var(--color-fg-default);
+      color: var(--ds-text-primary);
       line-height: 1.2;
     }
     .ring-progress-sublabel {
       font-size: 9px;
-      color: var(--color-fg-muted);
+      color: var(--ds-text-secondary);
     }
     .ring-progress-value {
       font-size: 13px;
       font-weight: 600;
-      color: var(--color-fg-default);
+      color: var(--ds-text-primary);
     }
     .mini-trend {
       display: block;

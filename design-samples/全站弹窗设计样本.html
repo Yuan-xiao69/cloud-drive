@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全站弹窗设计样本 — 全部弹窗类型</title>
+<style>
+:root {
+  --ds-accent: #C15F3C; --ds-accent-hover: #D47A4E; --ds-accent-subtle: rgba(193,95,60,0.08);
+  --ds-page-bg: #FAF9F5; --ds-surface: #FFFFFF; --ds-surface-subtle: #F5F2EC; --ds-surface-inset: #F0EDE6;
+  --ds-border: #E8E3DA; --ds-border-muted: #EEE9E2; --ds-text: #3B3228; --ds-text-secondary: #7A6E62; --ds-text-tertiary: #A0958B; --ds-text-inverse: #FFFFFF;
+  --ds-success: #4A8B5C; --ds-danger: #C8483C; --ds-warning: #B8862D;
+  --ds-danger-subtle: rgba(200,72,60,0.08); --ds-success-subtle: rgba(74,139,92,0.10); --ds-warning-subtle: rgba(184,134,45,0.12);
+  --ds-radius-sm: 6px; --ds-radius-lg: 14px; --ds-shadow-lg: 0 8px 32px rgba(59,50,40,0.10);
+  --ds-space-2:8px; --ds-space-4:16px; --ds-space-5:20px; --ds-space-6:24px;
+  --font-display: 'Georgia','Noto Serif SC',serif; --font-body: 'Charter','Georgia','Noto Serif SC',serif;
+  --font-ui: system-ui,-apple-system,'Segoe UI',sans-serif; --font-mono: 'JetBrains Mono','Fira Code',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--ds-page-bg);color:var(--ds-text);line-height:1.6;padding:20px 28px}
+.topbar{display:flex;justify-content:space-between;margin-bottom:20px}
+.topbar h1{font-family:var(--font-display);font-size:26px;font-weight:700}
+.topbar p{font-size:13px;color:var(--ds-text-secondary);margin-top:4px}
+.cat-title{font-family:var(--font-display);font-size:18px;font-weight:700;margin:36px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--ds-border-muted);display:flex;align-items:center;gap:8px}
+.cat-title .ico{font-size:20px}
+.cat-title .cnt{font-size:11px;color:var(--ds-text-tertiary);font-weight:400;margin-left:8px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-bottom:20px}
+.card{border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);overflow:hidden;background:var(--ds-surface)}
+.card-h{padding:6px 10px;background:var(--ds-surface-subtle);border-bottom:1px solid var(--ds-border);font-family:var(--font-ui);font-size:11px;font-weight:700;color:var(--ds-text-secondary);display:flex;align-items:center;justify-content:space-between}
+.card-h .tag{font-size:11px;padding:1px 5px;border-radius:4px;font-weight:600;letter-spacing:.03em}
+.tag-s{background:var(--ds-accent-subtle);color:var(--ds-accent)}
+.tag-d{background:var(--ds-danger-subtle);color:var(--ds-danger)}
+.tag-w{background:var(--ds-warning-subtle);color:var(--ds-warning)}
+.card-b{padding:12px;display:flex;align-items:flex-start;justify-content:center}
+
+.modal{width:100%;max-width:420px;background:var(--ds-surface);border:1px solid var(--ds-border);border-radius:var(--ds-radius-lg);box-shadow:var(--ds-shadow-lg);overflow:hidden}
+.modal-w{max-width:520px}
+.modal-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--ds-border-muted)}
+.modal-h h3{font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--ds-text)}
+.modal-x{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--ds-text-tertiary);cursor:pointer;border-radius:var(--ds-radius-sm);font-size:16px}
+.modal-x:hover{background:var(--ds-surface-subtle)}
+.modal-b{padding:14px 18px}
+.modal-b p{font-size:12px;color:var(--ds-text-secondary);line-height:1.6;margin-bottom:10px}
+.modal-f{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:10px 18px;border-top:1px solid var(--ds-border-muted)}
+
+.f-g{margin-bottom:10px}.f-g:last-child{margin-bottom:0}
+.f-l{display:block;font-family:var(--font-ui);font-size:11px;font-weight:600;color:var(--ds-text);margin-bottom:3px}
+.f-i{padding:6px 9px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:12px;color:var(--ds-text);outline:none;width:100%}
+.f-i:focus{border-color:var(--ds-accent)}.f-i::placeholder{color:var(--ds-text-tertiary)}
+.f-ta{min-height:60px;resize:vertical}.f-sel{padding:6px 9px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);font-family:var(--font-ui);font-size:12px;color:var(--ds-text);outline:none;width:100%}
+
+.btn{display:inline-flex;align-items:center;gap:3px;padding:5px 12px;font-family:var(--font-ui);font-size:12px;font-weight:600;border-radius:var(--ds-radius-sm);border:1px solid transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-p{background:var(--ds-accent);color:var(--ds-text-inverse);border-color:var(--ds-accent)}
+.btn-s{background:var(--ds-surface);color:var(--ds-text);border-color:var(--ds-border)}.btn-s:hover{background:var(--ds-surface-subtle)}
+.btn-d{background:var(--ds-danger);color:var(--ds-text-inverse);border-color:var(--ds-danger)}
+.btn-g{background:transparent;color:var(--ds-text-secondary);border-color:transparent}.btn-g:hover{background:var(--ds-surface-subtle);color:var(--ds-text)}
+
+.alert{padding:8px 12px;border-radius:var(--ds-radius-sm);font-family:var(--font-ui);font-size:11px;margin-bottom:10px;line-height:1.4}
+.al-d{background:var(--ds-danger-subtle);color:var(--ds-danger);border:1px solid rgba(200,72,60,0.15)}
+.al-w{background:var(--ds-warning-subtle);color:var(--ds-warning);border:1px solid rgba(184,134,45,0.2)}
+.al-i{background:var(--ds-accent-subtle);color:var(--ds-accent);border:1px solid rgba(193,95,60,0.15)}
+.muted{font-size:11px;color:var(--ds-text-tertiary);margin-top:2px}
+.code{background:var(--ds-surface-subtle);padding:8px 12px;border-radius:var(--ds-radius-sm);font-family:var(--font-mono);font-size:11px;overflow-x:auto;white-space:pre;margin-bottom:8px}
+.row{display:flex;align-items:center;gap:8px}.row-b{justify-content:space-between}.flex1{flex:1}
+.avatar-sm{width:28px;height:28px;border-radius:50%;background:var(--ds-accent-subtle);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--ds-accent);font-weight:700;flex-shrink:0}
+.badge{display:inline-flex;padding:1px 6px;border-radius:6px;font-size:11px;font-weight:600;font-family:var(--font-ui)}.bg-a{background:var(--ds-accent-subtle);color:var(--ds-accent)}.bg-d{background:var(--ds-danger-subtle);color:var(--ds-danger)}.bg-s{background:var(--ds-success-subtle);color:var(--ds-success)}
+.share-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);margin-bottom:6px;font-size:11px}
+.share-row .url{flex:1;font-family:var(--font-mono);font-size:11px;color:var(--ds-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.version-row{display:flex;align-items:center;justify-content:space-between;padding:8px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);margin-bottom:4px;font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div><h1>全站弹窗设计样本</h1><p>设置(5) + 仓库(6) + 通用(1) + 布局(1) + 管理后台(15) = 28 种</p></div>
+</div>
+
+<!-- ====== 一、设置相关 ====== -->
+<div class="cat-title"><span class="ico">⚙</span>设置相关弹窗<span class="cnt">5 种</span></div>
+<div class="grid">
+
+  <!-- 1. 修改密码 -->
+  <div class="card">
+    <div class="card-h"><span>修改密码</span><span class="tag tag-s">设置</span></div>
+    <div class="card-b">
+      <div class="modal">
+        <div class="modal-h"><h3>修改密码</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div class="f-g"><label class="f-l">当前密码</label><input class="f-i" type="password" placeholder="输入当前密码" /></div>
+          <div class="f-g"><label class="f-l">新密码</label><input class="f-i" type="password" placeholder="至少 6 个字符" /></div>
+          <div class="f-g"><label class="f-l">确认新密码</label><input class="f-i" type="password" placeholder="再次输入" /></div>
+          <p class="muted">修改后所有设备需要重新登录</p>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">确认修改</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 删除账号 -->
+  <div class="card">
+    <div class="card-h"><span>删除账号</span><span class="tag tag-d">危险</span></div>
+    <div class="card-b">
+      <div class="modal">
+        <div class="modal-h"><h3>删除账号</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div class="alert al-d">此操作不可撤销。你的所有仓库、讨论、数据将被永久删除。</div>
+          <p>请输入 <strong>octocat/delete</strong> 以确认：</p>
+          <input class="f-i" placeholder="octocat/delete" />
+        </div>
+        <div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-d">确认删除我的账号</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 登录历史 -->
+  <div class="card">
+    <div class="card-h"><span>登录历史</span><span class="tag tag-s">设置</span></div>
+    <div class="card-b">
+      <div class="modal modal-w">
+        <div class="modal-h"><h3>登录历史</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div style="font-size:11px;font-family:var(--font-ui);line-height:2">
+            <div class="row row-b"><span>📍 San Francisco, US</span><span>2026-06-25 14:30</span></div>
+            <div class="row row-b"><span>📍 Beijing, CN</span><span>2026-06-24 09:15</span></div>
+            <div class="row row-b"><span>📍 Tokyo, JP</span><span style="color:var(--ds-danger)">⚠ 登录失败</span><span>2026-06-23 22:00</span></div>
+          </div>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">关闭</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 屏蔽用户 -->
+  <div class="card">
+    <div class="card-h"><span>屏蔽用户</span><span class="tag tag-s">设置</span></div>
+    <div class="card-b">
+      <div class="modal">
+        <div class="modal-h"><h3>屏蔽用户</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div class="f-g"><label class="f-l">用户名</label><input class="f-i" placeholder="输入要屏蔽的用户名" /></div>
+          <div class="f-g"><label class="f-l">原因（可选）</label><input class="f-i" placeholder="屏蔽原因..." /></div>
+          <p class="muted">屏蔽后该用户无法关注你、评论你的内容</p>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-d">确认屏蔽</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. 删除仓库 -->
+  <div class="card">
+    <div class="card-h"><span>删除仓库</span><span class="tag tag-d">危险</span></div>
+    <div class="card-b">
+      <div class="modal">
+        <div class="modal-h"><h3>删除仓库</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div class="alert al-d">此操作不可撤销。所有文件、数据和历史记录将被永久删除。</div>
+          <p>请输入仓库名 <strong>octocat/hello-world</strong> 以确认：</p>
+          <input class="f-i" placeholder="octocat/hello-world" />
+        </div>
+        <div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-d">确认删除仓库</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 二、仓库相关 ====== -->
+<div class="cat-title"><span class="ico">📦</span>仓库相关弹窗<span class="cnt">6 种</span></div>
+<div class="grid">
+
+  <!-- 6. 分片上传 -->
+  <div class="card">
+    <div class="card-h"><span>分片上传</span><span class="tag tag-s">仓库</span></div>
+    <div class="card-b">
+      <div class="modal modal-w">
+        <div class="modal-h"><h3>上传文件到 octocat/hello-world</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div style="border:2px dashed var(--ds-border);border-radius:var(--ds-radius-sm);padding:20px;text-align:center;margin-bottom:10px">
+            <p style="font-size:12px;color:var(--ds-text-secondary)">拖拽文件到此处，或点击选择</p>
+            <button class="btn btn-s" style="margin-top:8px">选择文件</button>
+          </div>
+          <div style="font-size:11px;font-family:var(--font-ui)">
+            <div class="row row-b"><span>📄 logo.png</span><span class="badge bg-s">完成</span><span>45 KB</span></div>
+            <div class="row row-b"><span>📄 README.md</span><span class="badge bg-a">上传中 67%</span><span>2.3 MB</span></div>
+          </div>
+          <div style="height:3px;background:var(--ds-border);border-radius:2px;margin-top:4px"><div style="height:100%;width:67%;background:var(--ds-accent);border-radius:2px"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. 文件版本历史 -->
+  <div class="card">
+    <div class="card-h"><span>文件版本历史</span><span class="tag tag-s">仓库</span></div>
+    <div class="card-b">
+      <div class="modal modal-w">
+        <div class="modal-h"><h3>版本历史 — README.md</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div class="version-row"><span><strong>版本 3</strong> <span class="badge bg-a">当前</span></span><span style="color:var(--ds-text-secondary)">更新说明文字</span><span>2.3 KB</span><span style="color:var(--ds-text-tertiary)">今天 14:30</span></div>
+          <div class="version-row"><span><strong>版本 2</strong></span><span style="color:var(--ds-text-secondary)">添加安装步骤</span><span>2.1 KB</span><span style="color:var(--ds-text-tertiary)">昨天 09:15</span></div>
+          <div class="version-row"><span><strong>版本 1</strong></span><span style="color:var(--ds-text-secondary)">初始版本</span><span>1.8 KB</span><span style="color:var(--ds-text-tertiary)">3天前</span></div>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">关闭</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. 下载仓库 -->
+  <div class="card">
+    <div class="card-h"><span>下载仓库 ZIP</span><span class="tag tag-s">仓库</span></div>
+    <div class="card-b">
+      <div class="modal">
+        <div class="modal-h"><h3>下载仓库</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div style="text-align:center;padding:8px 0">
+            <p style="font-size:13px;font-weight:600">octocat / hello-world</p>
+            <p style="font-size:11px;color:var(--ds-text-tertiary)">分支: main · 预估大小: 45.3 MB</p>
+          </div>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">下载 ZIP</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. 分享链接 -->
+  <div class="card">
+    <div class="card-h"><span>生成分享链接</span><span class="tag tag-s">仓库</span></div>
+    <div class="card-b">
+      <div class="modal modal-w">
+        <div class="modal-h"><h3>分享仓库</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div class="f-g"><label class="f-l">有效期</label><select class="f-sel"><option>永久有效</option><option>7天</option><option>30天</option></select></div>
+          <div class="f-g"><label class="f-l">最大浏览次数（可选）</label><input class="f-i" type="number" placeholder="留空则不限" /></div>
+          <div class="share-row"><span>🔗</span><span class="url">https://gitbase.com/share/abc123def</span><button class="btn btn-g" style="font-size:11px;padding:2px 6px">复制</button></div>
+          <button class="btn btn-s" style="width:100%;margin-top:6px">+ 生成新链接</button>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">关闭</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. Fork申请 -->
+  <div class="card">
+    <div class="card-h"><span>Fork 申请</span><span class="tag tag-s">仓库</span></div>
+    <div class="card-b">
+      <div class="modal">
+        <div class="modal-h"><h3>申请 Fork 仓库</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <p>你正在申请 Fork <strong>defunkt/private-notes</strong></p>
+          <div class="f-g"><label class="f-l">申请说明</label><textarea class="f-i f-ta" placeholder="简要说明 Fork 用途..."></textarea></div>
+          <p class="muted">仓库所有者将审核你的申请</p>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">提交申请</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 11. 分享到讨论区 -->
+  <div class="card">
+    <div class="card-h"><span>分享到讨论区</span><span class="tag tag-s">仓库</span></div>
+    <div class="card-b">
+      <div class="modal modal-w">
+        <div class="modal-h"><h3>分享到讨论区</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div class="f-g"><label class="f-l">分享内容</label>
+            <div class="share-row" style="background:var(--ds-accent-subtle);border-color:rgba(193,95,60,0.2)">
+              <span>📄</span><span class="url">品牌规范手册.pdf</span><span style="font-size:11px;color:var(--ds-text-tertiary)">8.4 MB</span>
+            </div>
+          </div>
+          <div class="f-g"><label class="f-l">分享方式</label>
+            <div style="display:flex;gap:8px;margin-bottom:6px">
+              <label style="font-size:11px;font-family:var(--font-ui);cursor:pointer;display:flex;align-items:center;gap:3px"><input type="radio" name="st1" checked style="accent-color:var(--ds-accent)"> 具体文件</label>
+              <label style="font-size:11px;font-family:var(--font-ui);cursor:pointer;display:flex;align-items:center;gap:3px"><input type="radio" name="st1" style="accent-color:var(--ds-accent)"> 仓库链接</label>
+            </div>
+          </div>
+          <div class="f-g"><label class="f-l">说明文字</label><textarea class="f-i f-ta" placeholder="给这个分享写点说明..."></textarea></div>
+          <p class="muted">分享后将作为新话题发布到讨论区，附带文件链接</p>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">分享到讨论区</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 三、通用 + 布局 ====== -->
+<div class="cat-title"><span class="ico">🔧</span>通用与布局弹窗<span class="cnt">2 种</span></div>
+<div class="grid">
+
+  <!-- 11. 举报 -->
+  <div class="card">
+    <div class="card-h"><span>举报内容</span><span class="tag tag-d">通用</span></div>
+    <div class="card-b">
+      <div class="modal">
+        <div class="modal-h"><h3>举报内容</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <p>正在举报 <strong>spam-project</strong>（仓库）</p>
+          <div class="f-g"><label class="f-l">举报原因 *</label><select class="f-sel"><option>垃圾内容</option><option>违规内容</option><option>侵权内容</option><option>其他</option></select></div>
+          <div class="f-g"><label class="f-l">详细说明</label><textarea class="f-i f-ta" placeholder="请详细描述问题..."></textarea></div>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-d">提交举报</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12. 快捷键帮助 -->
+  <div class="card">
+    <div class="card-h"><span>键盘快捷键</span><span class="tag tag-s">布局</span></div>
+    <div class="card-b">
+      <div class="modal modal-w">
+        <div class="modal-h"><h3>键盘快捷键</h3><button class="modal-x">×</button></div>
+        <div class="modal-b">
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:4px 16px;font-size:11px;font-family:var(--font-ui);line-height:2">
+            <kbd style="background:var(--ds-surface-subtle);padding:1px 6px;border-radius:3px;text-align:center;font-family:var(--font-mono);font-size:10px">G I</kbd><span>文件问题</span>
+            <kbd style="background:var(--ds-surface-subtle);padding:1px 6px;border-radius:3px;text-align:center;font-family:var(--font-mono);font-size:10px">G D</kbd><span>跳转到讨论</span>
+            <kbd style="background:var(--ds-surface-subtle);padding:1px 6px;border-radius:3px;text-align:center;font-family:var(--font-mono);font-size:10px">G S</kbd><span>跳转到搜索</span>
+            <kbd style="background:var(--ds-surface-subtle);padding:1px 6px;border-radius:3px;text-align:center;font-family:var(--font-mono);font-size:10px">G N</kbd><span>跳转到通知</span>
+            <kbd style="background:var(--ds-surface-subtle);padding:1px 6px;border-radius:3px;text-align:center;font-family:var(--font-mono);font-size:10px">Esc</kbd><span>关闭弹窗</span>
+          </div>
+        </div>
+        <div class="modal-f"><button class="btn btn-s">关闭</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 四、管理后台（精选15种） ====== -->
+<div class="cat-title"><span class="ico">🛡</span>管理后台弹窗<span class="cnt">15 种</span></div>
+<div class="grid">
+
+  <!-- 封禁用户 --><div class="card"><div class="card-h"><span>封禁用户</span><span class="tag tag-d">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>封禁用户</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="f-g"><label class="f-l">用户名</label><input class="f-i" value="spam-bot" /></div><div class="f-g"><label class="f-l">类型</label><select class="f-sel"><option>永久封禁</option><option>临时封禁</option></select></div><div class="f-g"><label class="f-l">原因</label><textarea class="f-i f-ta">发布大量垃圾广告</textarea></div></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-d">确认封禁</button></div></div></div></div>
+  <!-- 解封用户 --><div class="card"><div class="card-h"><span>解封用户</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>解封用户 — spam-bot</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="alert al-i">该用户当前处于封禁状态。解封后将恢复正常权限。</div><div class="f-g"><label class="f-l">解封原因</label><textarea class="f-i f-ta" placeholder="选填"></textarea></div></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">确认解封</button></div></div></div></div>
+  <!-- 删除确认 --><div class="card"><div class="card-h"><span>删除确认（管理）</span><span class="tag tag-d">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>确认删除备份</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="alert al-d">此操作不可撤销。</div><p>确定要删除 <strong>backup_20260625.sql.gz</strong>？</p></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-d">确认删除</button></div></div></div></div>
+  <!-- 批量操作 --><div class="card"><div class="card-h"><span>批量删除确认</span><span class="tag tag-d">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>批量删除仓库</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="alert al-w">已选中 3 个仓库。删除后所有文件将永久丢失。</div><p>请输入 <strong>DELETE</strong> 以确认：</p><input class="f-i" placeholder="DELETE" /></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-d">确认删除 3 个仓库</button></div></div></div></div>
+  <!-- 新建公告 --><div class="card"><div class="card-h"><span>新建公告</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>新建公告</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="f-g"><label class="f-l">标题</label><input class="f-i" placeholder="公告标题" /></div><div class="f-g"><label class="f-l">内容</label><textarea class="f-i f-ta" placeholder="Markdown 格式..."></textarea></div><div class="row"><div class="f-g flex1"><label class="f-l">类型</label><select class="f-sel"><option>通知</option><option>警告</option></select></div><div class="f-g flex1"><label class="f-l">优先级</label><select class="f-sel"><option>普通</option><option>高</option></select></div></div></div><div class="modal-f"><button class="btn btn-s">草稿</button><button class="btn btn-p">发布</button></div></div></div></div>
+  <!-- 处罚用户 --><div class="card"><div class="card-h"><span>处罚用户</span><span class="tag tag-w">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>处罚用户</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="f-g"><label class="f-l">类型</label><select class="f-sel"><option>禁言</option><option>仓库限制</option></select></div><div class="f-g"><label class="f-l">天数</label><input class="f-i" type="number" value="7" /></div><div class="f-g"><label class="f-l">原因</label><textarea class="f-i f-ta" placeholder="处罚原因"></textarea></div></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">确认处罚</button></div></div></div></div>
+  <!-- 申诉处理 --><div class="card"><div class="card-h"><span>申诉处理</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal modal-w"><div class="modal-h"><h3>申诉处理 — #AP-001</h3><button class="modal-x">×</button></div><div class="modal-b"><div><span style="font-size:11px;color:var(--ds-text-tertiary)">申诉人</span><span style="font-size:12px;margin-left:8px">spam-bot</span></div><div><span style="font-size:11px;color:var(--ds-text-tertiary)">原处罚</span><span style="font-size:12px;margin-left:8px">永久封禁 · 发布垃圾广告</span></div><div style="margin:8px 0;padding:8px;background:var(--ds-surface-subtle);border-radius:var(--ds-radius-sm);font-size:11px">我的账号被盗用了，申请解封并恢复。</div><div class="f-g"><label class="f-l">审核备注</label><textarea class="f-i f-ta"></textarea></div></div><div class="modal-f"><button class="btn btn-d">驳回</button><button class="btn btn-p">批准申诉</button></div></div></div></div>
+  <!-- IP黑名单 --><div class="card"><div class="card-h"><span>添加IP黑名单</span><span class="tag tag-d">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>添加 IP 黑名单</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="f-g"><label class="f-l">IP 地址 *</label><input class="f-i" placeholder="192.168.1.100 或 10.0.0.0/24" /></div><div class="f-g"><label class="f-l">原因</label><textarea class="f-i f-ta"></textarea></div><div class="f-g"><label class="f-l">过期</label><select class="f-sel"><option>永久</option><option>24h</option><option>7天</option></select></div></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-d">添加</button></div></div></div></div>
+  <!-- 用户详情 --><div class="card"><div class="card-h"><span>用户详情</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>用户详情</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="row" style="margin-bottom:10px"><div class="avatar-sm">O</div><div><strong>octocat</strong><div style="font-size:11px;color:var(--ds-text-tertiary)">UID: 000000001</div></div></div><div style="font-size:11px;line-height:2">邮箱: octocat@github.com · 角色: 管理员 · 状态: 正常 · 仓库: 128 · 注册: 2026-01-15</div></div><div class="modal-f"><button class="btn btn-s">关闭</button></div></div></div></div>
+  <!-- 仓库详情 --><div class="card"><div class="card-h"><span>仓库详情</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>仓库详情</h3><button class="modal-x">×</button></div><div class="modal-b"><p><strong>octocat / hello-world</strong></p><div style="font-size:11px;line-height:2">可见性: 公开 · 文件: 45 · ⭐ 1,234 · ⑂ 89 · 创建: 2025-12-01</div></div><div class="modal-f"><button class="btn btn-s">关闭</button></div></div></div></div>
+  <!-- 安全事件 --><div class="card"><div class="card-h"><span>安全事件详情</span><span class="tag tag-d">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>安全事件详情</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="alert al-d">🔴 暴力破解攻击</div><div style="font-size:11px;line-height:2">严重度: 严重 · IP: 10.0.0.55 · 目标: admin · 尝试: 247次 · 时间: 2026-06-25 14:30</div></div><div class="modal-f"><button class="btn btn-s">关闭</button><button class="btn btn-d">封禁此 IP</button></div></div></div></div>
+  <!-- 创建备份 --><div class="card"><div class="card-h"><span>创建备份</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>创建数据库备份</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="f-g"><label class="f-l">备份描述（可选）</label><input class="f-i" placeholder="备份备注..." /></div><p class="muted">备份将在后台生成，完成后可通过备份列表下载</p></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">开始备份</button></div></div></div></div>
+  <!-- 导出日志 --><div class="card"><div class="card-h"><span>导出审计日志</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>导出审计日志</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="f-g"><label class="f-l">时间范围</label><select class="f-sel"><option>最近7天</option><option>最近30天</option></select></div><div class="f-g"><label class="f-l">格式</label><select class="f-sel"><option>CSV</option><option>JSON</option></select></div><p class="muted">通过邮件发送下载链接</p></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">开始导出</button></div></div></div></div>
+  <!-- 发送通知 --><div class="card"><div class="card-h"><span>发送通知</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>发送通知</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="f-g"><label class="f-l">目标用户</label><input class="f-i" placeholder="用户名" /></div><div class="f-g"><label class="f-l">标题</label><input class="f-i" placeholder="通知标题" /></div><div class="f-g"><label class="f-l">内容</label><textarea class="f-i f-ta"></textarea></div><div class="f-g"><label class="f-l">优先级</label><select class="f-sel"><option>普通</option><option>高</option><option>紧急</option></select></div></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">发送</button></div></div></div></div>
+  <!-- 邮件测试 --><div class="card"><div class="card-h"><span>发送测试邮件</span><span class="tag tag-s">管理</span></div><div class="card-b"><div class="modal"><div class="modal-h"><h3>发送测试邮件</h3><button class="modal-x">×</button></div><div class="modal-b"><div class="f-g"><label class="f-l">收件邮箱</label><input class="f-i" placeholder="test@example.com" /></div><p class="muted">使用当前 SMTP 配置发送测试邮件</p></div><div class="modal-f"><button class="btn btn-s">取消</button><button class="btn btn-p">发送测试</button></div></div></div></div>
+
+</div>
+
+<!-- ===== 规范速查 ===== -->
+<div style="padding:20px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);background:var(--ds-surface);margin-top:30px">
+  <h3 style="font-family:var(--font-display);font-size:14px;font-weight:700;margin-bottom:14px">弹窗全站规范</h3>
+  <table style="width:100%;border-collapse:collapse;font-family:var(--font-ui);font-size:11px">
+    <thead><tr style="border-bottom:1px solid var(--ds-border)"><th style="text-align:left;padding:5px 8px;color:var(--ds-text-secondary)">类型</th><th style="text-align:left;padding:5px 8px;color:var(--ds-text-secondary)">宽度</th><th style="text-align:left;padding:5px 8px;color:var(--ds-text-secondary)">Footer</th><th style="text-align:left;padding:5px 8px;color:var(--ds-text-secondary)">示例</th></tr></thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--ds-border-muted)"><td style="padding:5px 8px">确认型</td><td style="padding:5px 8px"><code>384px</code></td><td style="padding:5px 8px">取消 + 确认</td><td style="padding:5px 8px">删除确认、解封、屏蔽</td></tr>
+      <tr style="border-bottom:1px solid var(--ds-border-muted)"><td style="padding:5px 8px">表单型</td><td style="padding:5px 8px"><code>448px</code></td><td style="padding:5px 8px">取消 + 提交</td><td style="padding:5px 8px">修改密码、封禁、新建公告、举报</td></tr>
+      <tr style="border-bottom:1px solid var(--ds-border-muted)"><td style="padding:5px 8px">详情型</td><td style="padding:5px 8px"><code>448px</code></td><td style="padding:5px 8px">关闭</td><td style="padding:5px 8px">用户详情、仓库详情、版本历史</td></tr>
+      <tr style="border-bottom:1px solid var(--ds-border-muted)"><td style="padding:5px 8px">大型</td><td style="padding:5px 8px"><code>520-672px</code></td><td style="padding:5px 8px">多按钮</td><td style="padding:5px 8px">登录历史、上传、分享、快捷键、申诉</td></tr>
+      <tr><td style="padding:5px 8px">危险操作</td><td style="padding:5px 8px"><code>384px</code></td><td style="padding:5px 8px">取消 + 红色确认</td><td style="padding:5px 8px">删除账号（需输入用户名确认）、删除仓库</td></tr>
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:10px">全部弹窗使用 <code>&lt;Modal isOpen onClose title&gt;</code> + <code>&lt;ModalFooter onCancel onConfirm&gt;</code> · 禁止手写弹窗外壳</p>
+</div>
+
+</body>
+</html>

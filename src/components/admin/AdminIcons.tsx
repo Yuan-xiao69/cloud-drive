@@ -422,9 +422,6 @@ export const BarChart = ({ size = 16 }: IconProps) => (
   </svg>
 );
 
-// Batch 操作栏（占位组件）
-export const BatchActionBar = () => null;
-
 // TimeIcon - 缺失的图标
 export const TimeIcon = ({ size = 16 }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

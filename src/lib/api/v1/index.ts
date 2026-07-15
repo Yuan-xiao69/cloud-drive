@@ -33,6 +33,7 @@ export {
   handlePrismaError,
   getRequestId,
   type PaginationMeta,
+  type ErrorContext,
 } from './response';
 
 // 导出分页工具

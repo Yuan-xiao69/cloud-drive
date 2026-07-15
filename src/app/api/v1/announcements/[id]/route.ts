@@ -6,25 +6,21 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/announcements/[id] - 删除公告（仅管理员）
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, error } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, getAuthUser, isAuthError } from '@/lib/auth';
 import { ErrorCodes } from '@/lib/api/v1';
 
 // GET /api/v1/announcements/[id] - 获取单条公告
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const { id } = await params;
+export const GET = defineRoute({
+  auth: 'optional',
+  async handler({ user, params }) {
+    const { id } = params;
 
     if (!id) {
       return error(ErrorCodes.VALIDATION_ERROR, { message: '公告 ID 不能为空' });
     }
-
-    const user = await getAuthUser(req);
 
     // 管理员可查看任意状态公告，普通用户只能查看活跃公告
     const isAdmin = user && (user.role === 'admin' || user.role === 'super_admin');
@@ -47,23 +43,29 @@ export async function GET(
     }
 
     return success(announcement);
-  } catch (err) {
-    return handlePrismaError(err, '获取公告失败');
-  }
-}
+  },
+});
 
 // PATCH /api/v1/announcements/[id] - 更新公告（仅管理员）
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PATCH = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    title: z.string().optional(),
+    content: z.string().optional(),
+    type: z.string().optional(),
+    priority: z.string().optional(),
+    isActive: z.boolean().optional(),
+    isPinned: z.boolean().optional(),
+    publishedAt: z.string().optional(),
+    expiresAt: z.string().optional(),
+  }),
+  async handler({ user, body, params }) {
+    // 管理员权限检查
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return error(ErrorCodes.FORBIDDEN, { message: '无权限访问管理面板' });
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     if (!id) {
       return error(ErrorCodes.VALIDATION_ERROR, { message: '公告 ID 不能为空' });
@@ -78,7 +80,6 @@ export async function PATCH(
       return error(ErrorCodes.NOT_FOUND, { message: '公告不存在' });
     }
 
-    const body = await req.json();
     const { title, content, type, priority, isActive, isPinned, publishedAt, expiresAt } = body;
 
     // 构建更新数据（只更新传入的字段）
@@ -145,23 +146,19 @@ export async function PATCH(
     });
 
     return success(updated, '公告更新成功');
-  } catch (err) {
-    return handlePrismaError(err, '更新公告失败');
-  }
-}
+  },
+});
 
 // DELETE /api/v1/announcements/[id] - 删除公告（仅管理员）
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    // 管理员权限检查
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return error(ErrorCodes.FORBIDDEN, { message: '无权限访问管理面板' });
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     if (!id) {
       return error(ErrorCodes.VALIDATION_ERROR, { message: '公告 ID 不能为空' });
@@ -181,7 +178,5 @@ export async function DELETE(
     });
 
     return success({ id }, '公告删除成功');
-  } catch (err) {
-    return handlePrismaError(err, '删除公告失败');
-  }
-}
+  },
+});

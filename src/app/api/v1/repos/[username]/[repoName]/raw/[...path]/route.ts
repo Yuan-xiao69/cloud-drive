@@ -5,47 +5,25 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest } from 'next/server';
-import { error, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { error, ErrorCodes } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { ErrorCodes } from '@/lib/api/v1';
-import { getAuthUser } from '@/lib/auth';
+import { getFileStream } from '@/lib/storage';
+import { checkRepoAccess } from '@/lib/auth/access';
 
 // GET /api/v1/repos/[username]/[repoName]/raw/[...path] - 获取原始文件内容
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string; repoName: string; path: string[] }> }
-): Promise<Response> {
-  try {
-    const { username, repoName, path: pathSegments } = await params;
+export const GET = defineRoute({
+  auth: 'optional',
+  handler: async ({ req, params }) => {
+    const { username, repoName } = params;
+    const pathSegments = params.path as unknown as string[];
     const { searchParams } = new URL(req.url);
     const branch = searchParams.get('branch') || undefined;
 
-    // 查找仓库
-    const repo = await prisma.repository.findFirst({
-      where: {
-        owner: { username },
-        name: repoName,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        ownerId: true,
-        visibility: true,
-        defaultBranch: true,
-      },
-    });
+    const access = await checkRepoAccess(req, { username, repoName }, 'read');
+    if (!access.allowed) return access.error;
 
-    if (!repo) {
-      return error(ErrorCodes.NOT_FOUND, { message: '仓库不存在' });
-    }
-
-    // 私有仓库需要认证
-    if (repo.visibility !== 1) {
-      const auth = await getAuthUser(req);
-      if (!auth) {
-        return errors.unauthorized('私有仓库需要登录');
-      }
-    }
+    const repo = access.repo;
 
     // 查找分支
     let branchId: string | null = null;
@@ -104,7 +82,6 @@ export async function GET(
       });
       if (mainBranch) {
         where.branchId = mainBranch.id;
-        // 重新查找父目录
         if (parentName) {
           const parentWithBranch = await prisma.repoItem.findFirst({
             where: {
@@ -125,7 +102,7 @@ export async function GET(
       where,
       select: {
         id: true,
-        content: true,
+        storagePath: true,
         mimeType: true,
         fileSize: true,
         name: true,
@@ -136,17 +113,21 @@ export async function GET(
       return error(ErrorCodes.NOT_FOUND, { message: '文件不存在' });
     }
 
-    // 直接返回原始内容
-    return new Response(file.content || '', {
-      headers: {
-        'Content-Type': file.mimeType || 'text/plain',
-        'Content-Length': String(file.content?.length || 0),
-        'Content-Disposition': `inline; filename="${file.name}"`,
-        'Cache-Control': 'public, max-age=3600',
-      },
-    });
-  } catch (err) {
-    console.error('[v1/raw] Error:', err);
-    return error(ErrorCodes.INTERNAL_ERROR, { message: '获取文件失败' });
-  }
-}
+    // 从 MinIO 流式读取
+    if (file.storagePath) {
+      const streamResult = await getFileStream(file.storagePath);
+      if (streamResult) {
+        return new Response(streamResult.stream as unknown as ReadableStream, {
+          headers: {
+            'Content-Type': streamResult.contentType,
+            'Content-Length': String(streamResult.contentLength),
+            'Content-Disposition': `inline; filename="${file.name}"`,
+            'Cache-Control': 'public, max-age=3600',
+          },
+        });
+      }
+    }
+
+    return error(ErrorCodes.NOT_FOUND, { message: '文件内容不可用' });
+  },
+});

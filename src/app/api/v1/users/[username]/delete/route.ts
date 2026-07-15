@@ -4,39 +4,28 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/users/[username]/delete - 删除当前用户账号
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { z } from 'zod';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, error, errors, ErrorCodes } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
 import { validateSensitiveOperation } from '@/lib/csrf';
 import { recordActivityLog } from '@/lib/activity-log';
 import { deleteCache, deleteCachePattern, CacheKeys } from '@/lib/cache';
 
+const deleteAccountSchema = z.object({
+  password: z.string().optional(),
+  confirmText: z.string().optional(),
+}).optional();
+
 // DELETE /api/v1/users/[username]/delete
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string }> }
-): Promise<Response> {
-  try {
-    const auth = await getAuthUser(req);
-    if (!auth) {
-      return errors.unauthorized();
-    }
+export const DELETE = defineRoute({
+  auth: 'required',
+  validation: deleteAccountSchema,
+  async handler({ user, body, params, req }) {
+    const { username } = params;
+    const { password, confirmText } = body || {};
 
-    const { username } = await params;
-
-    // 解析请求体
-    let body: { password?: string; confirmText?: string };
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
-
-    const { password, confirmText } = body;
-
-    // 验证敏感操作
+    // 验证敏感操作（密码验证 + 确认文本检查，CSRF 由管道处理）
     const validation = await validateSensitiveOperation(req, 'deleteAccount', {
       password,
       confirmText,
@@ -47,22 +36,22 @@ export async function DELETE(
     }
 
     // 获取用户
-    const user = await prisma.user.findFirst({
+    const targetUser = await prisma.user.findFirst({
       where: { username, isSystem: false },
       select: { id: true, username: true, role: true },
     });
 
-    if (!user) {
+    if (!targetUser) {
       return error(ErrorCodes.NOT_FOUND, { message: '用户不存在' });
     }
 
     // 只能删除自己的账号
-    if (user.id !== auth.userId) {
+    if (targetUser.id !== user!.id) {
       return error(ErrorCodes.FORBIDDEN, { message: '只能删除自己的账号' });
     }
 
     // 禁止删除管理员账号
-    if (user.role === 'admin' || user.role === 'super_admin') {
+    if (targetUser.role === 'admin' || targetUser.role === 'super_admin') {
       return error(ErrorCodes.FORBIDDEN, { message: '管理员账号不能通过此方式删除' });
     }
 
@@ -70,7 +59,7 @@ export async function DELETE(
     await prisma.$transaction(async (tx) => {
       // 1. 删除用户的仓库（级联删除相关数据）
       const userRepos = await tx.repository.findMany({
-        where: { ownerId: user.id },
+        where: { ownerId: targetUser.id },
         select: { id: true },
       });
 
@@ -87,95 +76,95 @@ export async function DELETE(
 
       // 2. 删除用户的讨论和评论
       const userDiscussions = await tx.discussion.findMany({
-        where: { authorId: user.id },
+        where: { authorId: targetUser.id },
         select: { id: true },
       });
 
       for (const discussion of userDiscussions) {
         await tx.discussionComment.deleteMany({ where: { discussionId: discussion.id } });
       }
-      await tx.discussion.deleteMany({ where: { authorId: user.id } });
+      await tx.discussion.deleteMany({ where: { authorId: targetUser.id } });
 
       // 3. 删除用户的 Issues 和评论
       const userIssues = await tx.issue.findMany({
-        where: { authorId: user.id },
+        where: { authorId: targetUser.id },
         select: { id: true },
       });
 
       for (const issue of userIssues) {
         await tx.issueComment.deleteMany({ where: { issueId: issue.id } });
       }
-      await tx.issue.deleteMany({ where: { authorId: user.id } });
+      await tx.issue.deleteMany({ where: { authorId: targetUser.id } });
 
-      // 4. 删除用户的 Pull Requests 和评论
+      // 4. 删除用户的合并请求和评论
       const userPullRequests = await tx.pullRequest.findMany({
-        where: { authorId: user.id },
+        where: { authorId: targetUser.id },
         select: { id: true },
       });
 
       for (const pr of userPullRequests) {
         await tx.pullRequestComment.deleteMany({ where: { pullRequestId: pr.id } });
       }
-      await tx.pullRequest.deleteMany({ where: { authorId: user.id } });
+      await tx.pullRequest.deleteMany({ where: { authorId: targetUser.id } });
 
       // 5. 删除用户的关注关系
       await tx.userFollow.deleteMany({
         where: {
           OR: [
-            { followerId: user.id },
-            { followingId: user.id },
+            { followerId: targetUser.id },
+            { followingId: targetUser.id },
           ],
         },
       });
 
       // 6. 删除用户的 Star
-      await tx.star.deleteMany({ where: { userId: user.id } });
+      await tx.star.deleteMany({ where: { userId: targetUser.id } });
 
       // 7. 删除用户的 Watch
-      await tx.watcher.deleteMany({ where: { userId: user.id } });
+      await tx.watcher.deleteMany({ where: { userId: targetUser.id } });
 
       // 8. 删除用户的通知
-      await tx.notification.deleteMany({ where: { userId: user.id } });
+      await tx.notification.deleteMany({ where: { userId: targetUser.id } });
 
       // 9. 删除用户的举报
-      await tx.report.deleteMany({ where: { reporterId: user.id } });
+      await tx.report.deleteMany({ where: { reporterId: targetUser.id } });
 
       // 10. 删除用户的 API Keys
-      await tx.apiKey.deleteMany({ where: { userId: user.id } });
+      await tx.apiKey.deleteMany({ where: { userId: targetUser.id } });
 
       // 11. 删除用户的 Webhooks
-      await tx.webhook.deleteMany({ where: { userId: user.id } });
+      await tx.webhook.deleteMany({ where: { userId: targetUser.id } });
 
       // 12. 删除用户的活动日志
-      await tx.userActivityLog.deleteMany({ where: { userId: user.id } });
+      await tx.userActivityLog.deleteMany({ where: { userId: targetUser.id } });
 
       // 14. 删除用户屏蔽记录
       await tx.userBlock.deleteMany({
         where: {
           OR: [
-            { blockerId: user.id },
-            { blockedId: user.id },
+            { blockerId: targetUser.id },
+            { blockedId: targetUser.id },
           ],
         },
       });
 
       // 15. 删除用户
-      await tx.user.delete({ where: { id: user.id } });
+      await tx.user.delete({ where: { id: targetUser.id } });
     });
 
     // 清除用户缓存
-    await deleteCache(CacheKeys.user(user.id));
-    await deleteCache(CacheKeys.userByUsername(user.username));
-    await deleteCachePattern(`user:${user.id}:*`);
-    await deleteCachePattern(`notification:${user.id}:*`);
+    await deleteCache(CacheKeys.user(targetUser.id));
+    await deleteCache(CacheKeys.userByUsername(targetUser.username));
+    await deleteCachePattern(`user:${targetUser.id}:*`);
+    await deleteCachePattern(`notification:${targetUser.id}:*`);
 
     // 记录活动日志（在事务外）
     await recordActivityLog({
-      userId: user.id,
+      userId: targetUser.id,
       action: 'delete_account',
       targetType: 'user',
-      targetId: user.id,
-      targetName: user.username,
+      targetId: targetUser.id,
+      targetName: targetUser.username,
       details: {
         message: '用户主动删除账号',
       },
@@ -183,7 +172,7 @@ export async function DELETE(
 
     // 清除登录状态
     const response = success({
-      username: user.username,
+      username: targetUser.username,
     }, '账号已成功删除');
 
     // 添加清除 Cookie 的响应头
@@ -192,7 +181,5 @@ export async function DELETE(
     nextResponse.headers.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax');
 
     return nextResponse;
-  } catch (err) {
-    return handlePrismaError(err, '删除账号失败');
-  }
-}
+  },
+});

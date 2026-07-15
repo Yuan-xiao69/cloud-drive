@@ -4,6 +4,7 @@
  * 使用 DOMPurify 进行 XSS 防护（业界标准库）
  */
 import DOMPurify from 'isomorphic-dompurify';
+import { FORBIDDEN_FILE_EXTENSIONS } from './constants/file-restrictions';
 
 /**
  * XSS 防护：转义 HTML 特殊字符
@@ -62,7 +63,7 @@ export function escapeJsString(str: string): string {
     '\u2029': '\\u2029',
   };
 
-  return str.replace(/[\\"'\\n\\r\\t\\0\\u2028\\u2029]/g, (char) => jsEscapes[char] || char);
+  return str.replace(/["'\\\n\r\t\0\u2028\u2029]/g, (char) => jsEscapes[char] || char);
 }
 
 /**
@@ -176,7 +177,7 @@ export function validateFileName(fileName: string): { valid: boolean; error?: st
   }
 
   // 移除控制字符
-  if (/[\\x00-\\x1F]/.test(fileName)) {
+  if (/[\x00-\x1F]/.test(fileName)) {
     return { valid: false, error: '文件名包含非法字符' };
   }
 
@@ -313,7 +314,7 @@ export function validateEmail(email: string): { valid: boolean; error?: string }
     return { valid: false, error: '邮箱不能为空' };
   }
 
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(email)) {
     return { valid: false, error: '邮箱格式不正确' };
   }
@@ -449,14 +450,8 @@ export function validateFileExtension(
     return { valid: false, error: `不支持的文件扩展名: .${ext}` };
   }
 
-  // 禁止危险扩展名
-  const dangerousExtensions = [
-    'exe', 'bat', 'cmd', 'com', 'msi', 'dll', 'vbs', 'vbe', 'js', 'jse',
-    'wsf', 'wsh', 'ps1', 'psm1', 'reg', 'sh', 'bash', 'zsh', 'py', 'pyw',
-    'php', 'phtml', 'php3', 'php4', 'php5', 'pl', 'pm', 'cgi', 'rb', 'rake',
-    'jar', 'war', 'class', 'pif', 'scf', 'lnk', 'inf', 'reg',
-  ];
-  if (dangerousExtensions.includes(ext)) {
+  // 禁止危险扩展名（单一定义源：lib/constants/file-restrictions）
+  if (FORBIDDEN_FILE_EXTENSIONS.includes(ext)) {
     return { valid: false, error: `禁止上传 .${ext} 类型的文件` };
   }
 
@@ -542,15 +537,39 @@ export function maskSensitiveData(
       return `${maskedName}@${domain}`;
     }
     case 'phone': {
-      return data.replace(/(\\d{3})\\d{4}(\\d{4})/, '$1****$2');
+      return data.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
     }
     case 'idCard': {
-      return data.replace(/(\\d{4})\\d{10}(\\d{4})/, '$1**********$2');
+      return data.replace(/(\d{4})\d{10}(\d{4})/, '$1**********$2');
     }
     case 'bankCard': {
-      return data.replace(/(\\d{4})\\d+(\\d{4})/, '$1 **** **** $2');
+      return data.replace(/(\d{4})\d+(\d{4})/, '$1 **** **** $2');
     }
     default:
       return data;
+  }
+}
+
+/**
+ * 检查 IP 是否在黑名单中
+ * 统一入口，所有 API 路由只需调用此函数
+ */
+export async function checkIpBlacklist(ip: string): Promise<boolean> {
+  try {
+    const { prisma } = await import('@/lib/prisma');
+    const entry = await prisma.iPBlacklist.findFirst({
+      where: {
+        ipAddress: ip,
+        isActive: true,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } },
+        ],
+      },
+      select: { id: true },
+    });
+    return !!entry;
+  } catch {
+    return false; // 数据库不可用时放行
   }
 }

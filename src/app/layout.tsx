@@ -1,16 +1,39 @@
 import type { Metadata, Viewport } from 'next';
 import { ThemeProvider, AuthProvider } from '@/lib/providers';
+import { AnnouncementProvider } from '@/lib/hooks/use-announcements';
 import AnnouncementBanner from '@/components/AnnouncementBanner';
+import { AppShell } from '@/components/design';
 import '@/app/globals.css';
+import '@/components/design/tokens.css';
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: '#C15F3C',
 };
 
 export const metadata: Metadata = {
-  title: '文件托管平台',
-  description: '一个类似 GitHub 的仓库式知识托管与交流平台',
+  title: {
+    template: '%s - 知识托管平台',
+    default: '知识托管平台 — 类 GitHub 文件托管与协作',
+  },
+  description: '类 GitHub 风格的个人/团队文件托管与协作平台。支持仓库管理、文件上传预览、Issue/PR、讨论区、权限控制、SSE 实时通知。',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  openGraph: {
+    type: 'website',
+    siteName: '知识托管平台',
+    locale: 'zh_CN',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    title: '知识托管平台',
+    statusBarStyle: 'default',
+  },
   icons: {
     icon: [
       {
@@ -29,10 +52,19 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();
+            `,
+          }}
+        />
         <ThemeProvider>
           <AuthProvider>
-            <AnnouncementBanner />
-            {children}
+            <AnnouncementProvider>
+              <AnnouncementBanner />
+              <AppShell>{children}</AppShell>
+            </AnnouncementProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

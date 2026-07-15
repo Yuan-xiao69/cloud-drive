@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback } from 'react';
+import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
-import { tokenManager } from '@/lib/api/client';
+import { api } from '@/lib/api/client';
 import type { RepoItem } from '../RepoTypes';
 
 interface UseRepoSelectionParams {
@@ -105,7 +106,7 @@ export function useRepoSelection({
       return;
     }
     if (!isOwner) {
-      alert('只有仓库所有者才能创建文件夹');
+      toast.error('只有仓库所有者才能创建文件夹');
       return;
     }
     onOpenNewModal('folder');
@@ -118,7 +119,7 @@ export function useRepoSelection({
       return;
     }
     if (!isOwner) {
-      alert('只有仓库所有者才能上传文件');
+      toast.error('只有仓库所有者才能上传文件');
       return;
     }
     onOpenChunkedUploadModal();
@@ -131,7 +132,7 @@ export function useRepoSelection({
       return;
     }
     if (!isOwner) {
-      alert('只有仓库所有者才能从URL下载');
+      toast.error('只有仓库所有者才能从URL下载');
       return;
     }
     onOpenDownloadModal();
@@ -143,33 +144,28 @@ export function useRepoSelection({
     if (!targetFile) return;
 
     const itemType = targetFile.type === 'dir' ? '文件夹' : '文件';
-    if (!confirm(`确定要删除 ${itemType} "${targetFile.name}" 吗？`)) {
-      return;
-    }
+
 
     try {
-      const token = tokenManager.getAccessToken();
       const fullPath = currentPath.length > 0 ? `${currentPath.join('/')}/${targetFile.name}` : targetFile.name;
 
       const res = await fetch(`/api/v1/repos/${username}/${repoName}/tree`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: fullPath, type: targetFile.type, branch: currentBranch }),
       });
 
       const data = await res.json();
       if (data.code === 200) {
-        alert('删除成功');
+        toast.success('删除成功');
         await refreshFiles();
       } else {
-        alert(data.message || '删除失败');
+        toast.error(data.message || '删除失败');
       }
     } catch (err) {
       console.error('Failed to delete:', err);
-      alert('删除失败，请重试');
+      toast.error('删除失败，请重试');
     }
   }, [contextMenu.targetFile, currentPath, username, repoName, currentBranch, closeContextMenu, refreshFiles]);
 
@@ -203,13 +199,10 @@ export function useRepoSelection({
     if (selectedFiles.size === 0) return;
 
     const count = selectedFiles.size;
-    if (!confirm(`确定要删除选中的 ${count} 个项目吗？`)) {
-      return;
-    }
+
 
     setIsBatchOperating(true);
     try {
-      const token = tokenManager.getAccessToken();
       const operations = Array.from(selectedFiles).map(name => {
         const fullPath = currentPath.length > 0 ? `${currentPath.join('/')}/${name}` : name;
         return {
@@ -220,28 +213,20 @@ export function useRepoSelection({
         };
       });
 
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/batch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ operations }),
-      });
+      const data = await api.post<{ summary: { success: number; failed: number } }>(`/api/v1/repos/${username}/${repoName}/batch`, { operations });
 
-      const data = await res.json();
       if (data.code === 200) {
         const { success, failed } = data.data.summary;
-        alert(`批量删除完成：成功 ${success}，失败 ${failed}`);
+        toast.success(`批量删除完成：成功 ${success}，失败 ${failed}`);
         setSelectedFiles(new Set());
         setBatchOperation(null);
         await refreshFiles();
       } else {
-        alert(data.message || '批量删除失败');
+        toast.error(data.message || '批量删除失败');
       }
     } catch (err) {
       console.error('Failed to batch delete:', err);
-      alert('批量删除失败，请重试');
+      toast.error('批量删除失败，请重试');
     } finally {
       setIsBatchOperating(false);
     }
@@ -252,7 +237,6 @@ export function useRepoSelection({
 
     setIsBatchOperating(true);
     try {
-      const token = tokenManager.getAccessToken();
       const operations = Array.from(selectedFiles).map(name => {
         const fullPath = currentPath.length > 0 ? `${currentPath.join('/')}/${name}` : name;
         const targetPath = moveTargetPath.startsWith('/')
@@ -268,29 +252,21 @@ export function useRepoSelection({
         };
       });
 
-      const res = await fetch(`/api/v1/repos/${username}/${repoName}/batch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ operations }),
-      });
+      const data = await api.post<{ summary: { success: number; failed: number } }>(`/api/v1/repos/${username}/${repoName}/batch`, { operations });
 
-      const data = await res.json();
       if (data.code === 200) {
         const { success, failed } = data.data.summary;
-        alert(`批量移动完成：成功 ${success}，失败 ${failed}`);
+        toast.success(`批量移动完成：成功 ${success}，失败 ${failed}`);
         setSelectedFiles(new Set());
         setBatchOperation(null);
         setMoveTargetPath('');
         await refreshFiles();
       } else {
-        alert(data.message || '批量移动失败');
+        toast.error(data.message || '批量移动失败');
       }
     } catch (err) {
       console.error('Failed to batch move:', err);
-      alert('批量移动失败，请重试');
+      toast.error('批量移动失败，请重试');
     } finally {
       setIsBatchOperating(false);
     }
@@ -301,16 +277,12 @@ export function useRepoSelection({
 
     setIsSingleMoving(true);
     try {
-      const token = tokenManager.getAccessToken();
       const sourcePath = singleMoveFile.path;
 
       const res = await fetch(`/api/v1/repos/${username}/${repoName}/tree`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sourcePath,
           targetPath: singleMoveTarget,
@@ -320,16 +292,16 @@ export function useRepoSelection({
 
       const data = await res.json();
       if (data.code === 200) {
-        alert('移动成功');
+        toast.success('移动成功');
         setSingleMoveFile(null);
         setSingleMoveTarget('');
         await refreshFiles();
       } else {
-        alert(data.message || '移动失败');
+        toast.error(data.message || '移动失败');
       }
     } catch (err) {
       console.error('Failed to move:', err);
-      alert('移动失败，请重试');
+      toast.error('移动失败，请重试');
     } finally {
       setIsSingleMoving(false);
     }

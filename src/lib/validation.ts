@@ -9,7 +9,7 @@ export type ValidationRule<T = unknown> = {
   min?: number;
   max?: number;
   pattern?: RegExp;
-  custom?: (value: T) => boolean | string;
+  custom?: (value: T, formValues?: Record<string, unknown>) => boolean | string;
   message?: string;
 };
 
@@ -76,7 +76,8 @@ function getMessage(field: string, rule: keyof ValidationRule, value: unknown, c
 export function validateField<T extends object, K extends keyof T>(
   field: K,
   value: T[K],
-  rules: ValidationRules<T>
+  rules: ValidationRules<T>,
+  formValues?: Record<string, unknown>
 ): ValidationError | null {
   const fieldRules = rules[field];
   if (!fieldRules) return null;
@@ -142,7 +143,7 @@ export function validateField<T extends object, K extends keyof T>(
 
   // Custom validation
   if (fieldRules.custom) {
-    const result = fieldRules.custom(value);
+    const result = fieldRules.custom(value, formValues);
     if (result !== true) {
       return {
         field: field as string,
@@ -165,7 +166,7 @@ export function validateForm<T extends object>(
 
   for (const field of fields) {
     const value = values[field];
-    const error = validateField(field, value, rules);
+    const error = validateField(field, value, rules, values as Record<string, unknown>);
     if (error) {
       errors.push(error);
     }
@@ -297,9 +298,9 @@ export const profileSchema = {
 export const repoSchema = {
   name: {
     required: true,
-    pattern: /^[a-zA-Z0-9._-]+$/,
+    pattern: /^[a-zA-Z0-9._-\u4e00-\u9fa5]+$/,
     maxLength: 100,
-    message: '仓库名称只能包含字母、数字、破折号、下划线和点',
+    message: '仓库名称只能包含字母、数字、中文、破折号、下划线和点',
   },
   description: { maxLength: 500, message: '描述不能超过500个字符' },
 } as const;

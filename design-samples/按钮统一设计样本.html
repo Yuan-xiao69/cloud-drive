@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>卡片 / 按钮 / 弹窗 — 陶土暖色设计样本</title>
+<style>
+/* ============================================
+   Design Tokens
+   ============================================ */
+:root {
+  --ds-accent: #C15F3C;
+  --ds-accent-hover: #D47A4E;
+  --ds-accent-subtle: rgba(193,95,60,0.08);
+  --ds-accent-muted: rgba(193,95,60,0.15);
+  --ds-page-bg: #FAF9F5;
+  --ds-surface: #FFFFFF;
+  --ds-surface-subtle: #F5F2EC;
+  --ds-surface-inset: #F0EDE6;
+  --ds-border: #E8E3DA;
+  --ds-border-muted: #EEE9E2;
+  --ds-border-strong: #D9D2C7;
+  --ds-text: #3B3228;
+  --ds-text-secondary: #7A6E62;
+  --ds-text-tertiary: #A0958B;
+  --ds-text-inverse: #FFFFFF;
+  --ds-success: #4A8B5C;
+  --ds-success-subtle: rgba(74,139,92,0.10);
+  --ds-danger: #C8483C;
+  --ds-danger-subtle: rgba(200,72,60,0.08);
+  --ds-warning: #B8862D;
+  --ds-warning-subtle: rgba(184,134,45,0.12);
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 10px;
+  --ds-radius-lg: 14px;
+  --ds-radius-xl: 20px;
+  --ds-shadow-sm: 0 1px 3px rgba(59,50,40,0.04);
+  --ds-shadow-md: 0 4px 16px rgba(59,50,40,0.06);
+  --ds-shadow-lg: 0 8px 32px rgba(59,50,40,0.10);
+  --ds-shadow-xl: 0 12px 48px rgba(59,50,40,0.14);
+  --ds-space-1:4px; --ds-space-2:8px; --ds-space-3:12px;
+  --ds-space-4:16px; --ds-space-5:20px; --ds-space-6:24px;
+  --ds-space-8:32px;
+  --font-display: 'Georgia','Noto Serif SC',serif;
+  --font-body: 'Charter','Georgia','Noto Serif SC',serif;
+  --font-ui: system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+
+.dark {
+  --ds-page-bg:#1E1B18; --ds-surface:#272420;
+  --ds-surface-subtle:#2F2B27; --ds-surface-inset:#1A1714;
+  --ds-border:#3A3530; --ds-border-muted:#332F2B; --ds-border-strong:#4A4540;
+  --ds-text:#E8E0D8; --ds-text-secondary:#A0988E; --ds-text-tertiary:#706860;
+  --ds-accent:#D47A4E; --ds-accent-hover:#E08C64;
+  --ds-accent-subtle:rgba(193,95,60,0.15); --ds-accent-muted:rgba(193,95,60,0.25);
+  --ds-success:#5CA06E; --ds-success-subtle:rgba(74,139,92,0.18);
+  --ds-danger:#D46458; --ds-danger-subtle:rgba(200,72,60,0.15);
+  --ds-warning:#C99A3C; --ds-warning-subtle:rgba(184,134,45,0.18);
+  --ds-shadow-sm:0 1px 3px rgba(0,0,0,0.20);
+  --ds-shadow-md:0 4px 16px rgba(0,0,0,0.30);
+  --ds-shadow-lg:0 8px 32px rgba(0,0,0,0.40);
+  --ds-shadow-xl:0 12px 48px rgba(0,0,0,0.50);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--ds-page-bg);color:var(--ds-text);
+  line-height:1.6;transition:background .3s,color .3s;padding:40px}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
+.topbar h1{font-family:var(--font-display);font-size:26px;font-weight:700;color:var(--ds-text)}
+.theme-btn{padding:8px 16px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);
+  background:var(--ds-surface);color:var(--ds-text-secondary);cursor:pointer;
+  font-family:var(--font-ui);font-size:13px;font-weight:600;transition:all .2s}
+.theme-btn:hover{border-color:var(--ds-accent);color:var(--ds-accent)}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:48px}
+.section-title{font-family:var(--font-display);font-size:18px;font-weight:700;
+  color:var(--ds-text);margin-bottom:20px;padding-bottom:12px;
+  border-bottom:1px solid var(--ds-border-muted)}
+
+/* ============================================
+   Cards
+   ============================================ */
+.card{background:var(--ds-surface);border:1px solid var(--ds-border);
+  border-radius:var(--ds-radius-md);padding:var(--ds-space-4);transition:all .2s}
+.card:hover{border-color:var(--ds-border-strong)}
+.card-elevated{background:var(--ds-surface);border:1px solid var(--ds-border-muted);
+  border-radius:var(--ds-radius-md);padding:var(--ds-space-4);
+  box-shadow:var(--ds-shadow-sm)}
+.card-elevated:hover{border-color:var(--ds-border-strong);box-shadow:var(--ds-shadow-md)}
+.card-subtle{background:var(--ds-surface-subtle);border:1px solid var(--ds-border-muted);
+  border-radius:var(--ds-radius-md);padding:var(--ds-space-4)}
+
+.card-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--ds-space-3)}
+.card-label{font-family:var(--font-ui);font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.05em;color:var(--ds-text-tertiary);margin-bottom:4px}
+.card-title{font-family:var(--font-display);font-size:14px;font-weight:700;
+  color:var(--ds-text);margin-bottom:6px}
+.card-desc{font-size:14px;color:var(--ds-text-secondary);line-height:1.5}
+.card-meta{display:flex;align-items:center;gap:12px;margin-top:12px;
+  font-family:var(--font-ui);font-size:12px;color:var(--ds-text-tertiary)}
+
+/* Repo Card */
+.repo-card{display:flex;align-items:flex-start;gap:12px;padding:var(--ds-space-4)}
+.repo-card-icon{width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+  border-radius:var(--ds-radius-sm);background:var(--ds-accent-subtle);
+  color:var(--ds-accent);flex-shrink:0}
+.repo-card-body{flex:1;min-width:0}
+.repo-card-name{font-family:var(--font-ui);font-size:14px;font-weight:600;margin-bottom:4px}
+.repo-card-name a{color:var(--ds-accent);text-decoration:none}
+.repo-card-name a:hover{text-decoration:underline}
+.repo-card-name .sep{color:var(--ds-text-tertiary);margin:0 4px}
+.repo-card-name .owner{color:var(--ds-text-secondary);font-weight:400}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--ds-space-2);
+  font-family:var(--font-ui);font-weight:600;border-radius:var(--ds-radius-sm);
+  border:1px solid transparent;cursor:pointer;transition:all .15s;text-decoration:none}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-md{padding:6px 14px;font-size:14px}
+.btn-lg{padding:10px 20px;font-size:14px}
+.btn-primary{background:var(--ds-accent);color:var(--ds-text-inverse);border-color:var(--ds-accent)}
+.btn-primary:hover{background:var(--ds-accent-hover);border-color:var(--ds-accent-hover)}
+.btn-secondary{background:var(--ds-surface);color:var(--ds-text);border-color:var(--ds-border)}
+.btn-secondary:hover{background:var(--ds-surface-subtle);border-color:var(--ds-border-strong)}
+.btn-danger{background:var(--ds-danger);color:var(--ds-text-inverse);border-color:var(--ds-danger)}
+.btn-danger:hover{opacity:.9}
+.btn-ghost{background:transparent;color:var(--ds-text-secondary);border-color:transparent}
+.btn-ghost:hover{background:var(--ds-surface-subtle);color:var(--ds-text)}
+.btn-outline{background:transparent;color:var(--ds-text);border-color:var(--ds-border)}
+.btn-outline:hover{background:var(--ds-surface-subtle);border-color:var(--ds-border-strong)}
+.btn:disabled,.btn.loading{opacity:.5;cursor:not-allowed}
+
+.btn-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.btn-row-label{font-family:var(--font-ui);font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.05em;color:var(--ds-text-tertiary);margin-bottom:8px}
+
+/* Spinner */
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.25);
+  border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+.dark .spinner{border-color:rgba(255,255,255,.2)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ============================================
+   Modal
+   ============================================ */
+.modal-trigger{margin-top:20px}
+.modal-overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;
+  justify-content:center;background:rgba(30,27,24,.5);padding:24px}
+.modal{background:var(--ds-surface);border:1px solid var(--ds-border);
+  border-radius:var(--ds-radius-lg);box-shadow:var(--ds-shadow-lg);
+  width:100%;max-width:480px;max-height:85vh;overflow-y:auto;
+  animation:modalIn .2s ease-out}
+@keyframes modalIn{0%{opacity:0;transform:translateY(-12px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}
+.modal-header{display:flex;align-items:center;justify-content:space-between;
+  padding:var(--ds-space-5) var(--ds-space-6);border-bottom:1px solid var(--ds-border-muted)}
+.modal-header h3{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--ds-text)}
+.modal-close{width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--ds-text-tertiary);cursor:pointer;
+  border-radius:var(--ds-radius-sm);font-size:20px;transition:all .15s}
+.modal-close:hover{background:var(--ds-surface-subtle);color:var(--ds-text)}
+.modal-body{padding:var(--ds-space-6)}
+.modal-body p{font-size:14px;color:var(--ds-text-secondary);line-height:1.6;margin-bottom:16px}
+.modal-footer{display:flex;align-items:center;justify-content:flex-end;gap:var(--ds-space-2);
+  padding:var(--ds-space-4) var(--ds-space-6);border-top:1px solid var(--ds-border-muted)}
+
+/* Alert */
+.alert{padding:12px 16px;border-radius:var(--ds-radius-sm);font-family:var(--font-ui);
+  font-size:13px;margin-bottom:16px;line-height:1.5}
+.alert-info{background:var(--ds-accent-subtle);color:var(--ds-accent);border:1px solid var(--ds-accent-muted)}
+.alert-success{background:var(--ds-success-subtle);color:var(--ds-success);border:1px solid rgba(74,139,92,0.2)}
+.alert-danger{background:var(--ds-danger-subtle);color:var(--ds-danger);border:1px solid rgba(200,72,60,0.15)}
+.alert-warning{background:var(--ds-warning-subtle);color:var(--ds-warning);border:1px solid rgba(184,134,45,0.2)}
+
+/* Empty */
+.empty{text-align:center;padding:48px 24px;color:var(--ds-text-tertiary)}
+.empty-icon{font-size:40px;margin-bottom:12px;opacity:.6}
+.empty h4{font-family:var(--font-display);font-size:18px;color:var(--ds-text);margin-bottom:8px}
+.empty p{font-size:14px;margin-bottom:16px}
+
+/* Badge */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;font-family:var(--font-ui);
+  font-size:11px;font-weight:600;border-radius:10px}
+.badge-default{background:var(--ds-accent-subtle);color:var(--ds-accent)}
+.badge-success{background:var(--ds-success-subtle);color:var(--ds-success)}
+.badge-danger{background:var(--ds-danger-subtle);color:var(--ds-danger)}
+.badge-warning{background:var(--ds-warning-subtle);color:var(--ds-warning)}
+
+/* Input */
+.input{width:100%;padding:8px 12px;border:1px solid var(--ds-border);border-radius:var(--ds-radius-sm);
+  background:var(--ds-surface);font-family:var(--font-ui);font-size:14px;color:var(--ds-text);
+  outline:none;transition:border-color .2s}
+.input:focus{border-color:var(--ds-accent)}
+.input::placeholder{color:var(--ds-text-tertiary)}
+
+/* Demo Modal */
+#modal-demo{display:none}
+#modal-demo:target{display:block}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>卡片 · 按钮 · 弹窗 — 设计样本</h1>
+  <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">☀️ / 🌙 切换暗色模式</button>
+</div>
+
+<!-- 卡片 -->
+<div class="grid">
+  <div>
+    <h2 class="section-title">卡片变体</h2>
+
+    <div class="card-grid">
+      <div>
+        <div class="card-label">surface（默认）</div>
+        <div class="card">
+          <div class="card-title">标准卡片</div>
+          <div class="card-desc">白色背景，细暖灰边框。用于列表项、内容区。hover 时边框加深。</div>
+          <div class="card-meta">
+            <span class="badge badge-default">文档</span>
+            <span>⭐ 128</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card-label">elevated（阴影）</div>
+        <div class="card-elevated">
+          <div class="card-title">阴影卡片</div>
+          <div class="card-desc">带暖调微阴影。用于弹窗、重要区块。暖色调阴影不刺眼。</div>
+          <div class="card-meta">
+            <span class="badge badge-warning">Trending</span>
+            <span>更新于 2 小时前</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card-label">subtle（次级）</div>
+        <div class="card-subtle">
+          <div class="card-title">次级卡片</div>
+          <div class="card-desc">暖米色背景，细边框。用于侧边栏、信息提示区、表单预览。</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card-label">hover → 边框加深</div>
+        <div class="card" style="border-color:var(--ds-border-strong);box-shadow:var(--ds-shadow-md)">
+          <div class="card-title">悬停态</div>
+          <div class="card-desc">所有卡片 hover 时边框加深为 strong，可选阴影。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Repo Card -->
+    <div style="margin-top:20px">
+      <div class="card-label">文章卡片（列表项）</div>
+      <div class="card card-elevated">
+        <div class="repo-card" style="border-bottom:1px solid var(--ds-border-muted)">
+          <div class="repo-card-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/></svg>
+          </div>
+          <div class="repo-card-body">
+            <div class="repo-card-name"><a href="#">林知夏</a><span class="sep">/</span><a href="#">设计系统入门</a><span class="badge badge-default" style="margin-left:8px">热门</span></div>
+            <div class="card-desc">从零开始了解设计系统的核心概念，掌握令牌、组件与规范的基础知识。</div>
+            <div class="card-meta">📄 12 章节 · ⭐ 1.2k · 🍴 340 · 2 小时前</div>
+          </div>
+        </div>
+        <div class="repo-card">
+          <div class="repo-card-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/></svg>
+          </div>
+          <div class="repo-card-body">
+            <div class="repo-card-name"><a href="#">陈墨白</a><span class="sep">/</span><a href="#">组件化实践</a></div>
+            <div class="card-desc">以可访问性为核心的组件设计方法论，附完整实践案例。</div>
+            <div class="card-meta">📄 8 章节 · ⭐ 856 · 🍴 127 · 5 小时前</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2 class="section-title">按钮系统</h2>
+
+    <div class="btn-row-label">variant / size: sm</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-sm">Primary</button>
+      <button class="btn btn-secondary btn-sm">Secondary</button>
+      <button class="btn btn-danger btn-sm">Danger</button>
+      <button class="btn btn-ghost btn-sm">Ghost</button>
+      <button class="btn btn-outline btn-sm">Outline</button>
+    </div>
+
+    <div class="btn-row-label">variant / size: md（默认）</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-md">Primary</button>
+      <button class="btn btn-secondary btn-md">Secondary</button>
+      <button class="btn btn-danger btn-md">Danger</button>
+      <button class="btn btn-ghost btn-md">Ghost</button>
+      <button class="btn btn-outline btn-md">Outline</button>
+    </div>
+
+    <div class="btn-row-label">variant / size: lg</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-lg">新建项目</button>
+      <button class="btn btn-secondary btn-lg">浏览内容</button>
+      <button class="btn btn-danger btn-lg">删除</button>
+    </div>
+
+    <div class="btn-row-label">状态：loading</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-md loading"><span class="spinner"></span> 提交中...</button>
+      <button class="btn btn-secondary btn-md loading"><span class="spinner"></span> 加载...</button>
+      <button class="btn btn-danger btn-md loading"><span class="spinner"></span> 删除中...</button>
+    </div>
+
+    <div class="btn-row-label">状态：disabled</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-md" disabled>Primary</button>
+      <button class="btn btn-secondary btn-md" disabled>Secondary</button>
+      <button class="btn btn-ghost btn-md" disabled>Ghost</button>
+    </div>
+
+    <div class="btn-row-label">带图标</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-md"><span style="font-size:16px">+</span> 新建项目</button>
+      <button class="btn btn-outline btn-md"><span>🔗</span> 分享</button>
+      <button class="btn btn-ghost btn-sm"><span>⚙</span></button>
+    </div>
+
+    <!-- 徽章 -->
+    <div class="btn-row-label">徽章</div>
+    <div class="btn-row">
+      <span class="badge badge-default">文档</span>
+      <span class="badge badge-success">已完成</span>
+      <span class="badge badge-danger">高危</span>
+      <span class="badge badge-warning">待审核</span>
+    </div>
+
+    <!-- Alert -->
+    <div class="btn-row-label">提示条</div>
+    <div class="alert alert-info">项目已成功创建，现在可以添加内容了。</div>
+    <div class="alert alert-success">✅ 密码修改成功</div>
+    <div class="alert alert-danger">⚠ 删除操作不可恢复，请谨慎操作。</div>
+    <div class="alert alert-warning">⏳ 该操作正在审核中。</div>
+
+    <!-- Empty State -->
+    <div class="empty">
+      <div class="empty-icon">📭</div>
+      <h4>暂无内容</h4>
+      <p>还没有创建任何项目，开始你的第一个作品吧。</p>
+      <button class="btn btn-primary btn-md">新建项目</button>
+    </div>
+
+    <!-- Modal trigger -->
+    <button class="btn btn-primary btn-md modal-trigger" onclick="document.getElementById('modal-demo').style.display='flex'">
+      打开弹窗示例
+    </button>
+  </div>
+</div>
+
+<!-- Modal Demo -->
+<div id="modal-demo" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>确认删除项目</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-demo').style.display='none'">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-danger">此操作不可撤销。项目中的所有内容、评论、附件将被永久删除。</div>
+      <p>请输入项目名称 <strong style="color:var(--ds-text);font-family:var(--font-mono)">林知夏/设计系统入门</strong> 以确认删除：</p>
+      <input class="input" placeholder="林知夏/设计系统入门" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-md" onclick="document.getElementById('modal-demo').style.display='none'">取消</button>
+      <button class="btn btn-danger btn-md">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 显示弹窗
+document.getElementById('modal-demo').style.display='none'
+</script>
+</body>
+</html>

@@ -5,27 +5,23 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/security-events/related/[id] - 获取关联安全事件
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
 
 // GET /api/v1/admin/security-events/related/[id] - 获取关联安全事件
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return errors.forbidden('只有超级管理员可以查看关联安全事件');
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     // 获取当前事件
     const currentEvent = await prisma.securityEvent.findUnique({
@@ -87,7 +83,5 @@ export async function GET(
         sameUserCount,
       },
     });
-  } catch (err) {
-    return handlePrismaError(err, '查询关联安全事件失败');
-  }
-}
+  },
+});

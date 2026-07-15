@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SidePanel, ConfirmDialog, Toast } from './common/AdminCommon';
 import type { Announcement, AnnouncementFormData, ContextMenuConfig, ContextMenuItemConfig } from './AdminTypes';
+import { Button, Card, Modal, ModalFooter, Input, Field } from '@/components/design';
 
 // ============ 图标组件 ============
 const MegaphoneIcon = () => (
@@ -98,9 +99,9 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
     }
 
     return (
-      <div
+      <button
         key={index}
-        className={`context-menu-item ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
+        className={`context-menu-item border-0 bg-transparent w-full text-left ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
         onClick={() => !item.disabled && !item.submenu && item.action?.()}
       >
         <div className="context-menu-item-content">
@@ -113,21 +114,21 @@ function ContextMenu({ config, onClose }: ContextMenuProps) {
             <span className="context-menu-arrow">▶</span>
             <div className="context-submenu">
               {item.submenu.map((subItem: ContextMenuItemConfig, subIndex: number) => (
-                <div
+                <button
                   key={subIndex}
-                  className={`context-menu-item ${subItem.danger ? 'danger' : ''}`}
+                  className={`context-menu-item border-0 bg-transparent w-full text-left ${subItem.danger ? 'danger' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     subItem.action?.();
                   }}
                 >
                   <span className="context-menu-label">{subItem.label}</span>
-                </div>
+                </button>
               ))}
             </div>
           </>
         )}
-      </div>
+      </button>
     );
   };
 
@@ -158,36 +159,28 @@ interface AnnouncementPreviewProps {
 }
 
 function AnnouncementPreview({ announcement, mode = 'desktop' }: AnnouncementPreviewProps) {
-  const typeStyles = {
-    info: { bg: '#ddf4ff', border: '#0969da', icon: 'ℹ️' },
-    warning: { bg: '#fff8c5', border: '#bf8700', icon: '⚠️' },
-    urgent: { bg: '#ffebe9', border: '#cf222e', icon: '🚨' },
+  const typeStyles: Record<string, { bgClass: string; borderClass: string; icon: string }> = {
+    info: { bgClass: 'bg-[var(--ds-accent-subtle)]', borderClass: 'border-[var(--ds-accent-default)]', icon: 'ℹ️' },
+    warning: { bgClass: 'bg-[var(--ds-warning-subtle)]', borderClass: 'border-[var(--ds-warning-default)]', icon: '⚠️' },
+    urgent: { bgClass: 'bg-[var(--ds-danger-subtle)]', borderClass: 'border-[var(--ds-danger-default)]-emphasis', icon: '🚨' },
   };
 
-  const style = typeStyles[announcement.type as keyof typeof typeStyles] || typeStyles.info;
+  const s = typeStyles[announcement.type as keyof typeof typeStyles] || typeStyles.info;
 
   return (
     <div
-      className="announcement-preview"
-      style={{
-        width: mode === 'mobile' ? '320px' : '100%',
-        backgroundColor: style.bg,
-        borderLeft: `4px solid ${style.border}`,
-        padding: '12px 16px',
-        borderRadius: '6px',
-        fontSize: mode === 'mobile' ? '13px' : '14px',
-      }}
+      className={`${s.bgClass} border-l-4 ${s.borderClass} py-3 px-4 rounded-md ${mode === 'mobile' ? 'w-80' : 'w-full'} text-sm`}
     >
-      <div className="preview-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-        <span style={{ fontSize: '16px' }}>{style.icon}</span>
-        <span style={{ fontWeight: 600 }}>{announcement.title}</span>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-base">{s.icon}</span>
+        <span className="font-semibold">{announcement.title}</span>
         {announcement.isPinned && <PinIcon />}
         {announcement.priority === 'high' && <span className="label label-danger">置顶</span>}
       </div>
-      <div className="preview-content" style={{ color: '#24292f', lineHeight: 1.5 }}>
+      <div className="text-[var(--ds-text-primary)] leading-relaxed">
         {announcement.content}
       </div>
-      <div className="preview-footer" style={{ marginTop: '8px', fontSize: '12px', color: '#57606a' }}>
+      <div className="mt-2 text-xs text-[var(--ds-text-secondary)]">
         {new Date(announcement.createdAt).toLocaleDateString('zh-CN')}
       </div>
     </div>
@@ -200,6 +193,7 @@ interface AdminAnnouncementsEnhancedProps {
   announcementsTotal: number;
   announcementsPage: number;
   announcementsLoading: boolean;
+  announcementStats: { total: number; active: number; pinned: number; scheduled: number };
   onPageChange: (page: number) => void;
   onCreate: (data: AnnouncementFormData) => void;
   onUpdate: (id: string, data: Partial<AnnouncementFormData>) => void;
@@ -213,6 +207,7 @@ export default function AdminAnnouncementsEnhanced({
   announcementsTotal,
   announcementsPage,
   announcementsLoading,
+  announcementStats,
   onPageChange,
   onCreate,
   onUpdate,
@@ -246,13 +241,7 @@ export default function AdminAnnouncementsEnhanced({
   });
 
   // 统计数据
-  const stats = {
-    total: 15,
-    active: 8,
-    pinned: 3,
-    scheduled: 2,
-    totalViews: 12345,
-  };
+  const stats = announcementStats;
 
   // ============ 右键菜单处理 ============
   const handleContextMenu = useCallback((e: React.MouseEvent, announcement: Announcement) => {
@@ -404,58 +393,54 @@ export default function AdminAnnouncementsEnhanced({
   const totalPages = Math.ceil(announcementsTotal / 20);
 
   return (
-    <div className="tab-content">
+    <div className="p-4">
       {/* 页面头部 */}
-      <div className="page-header">
-        <h1 className="page-title">系统公告</h1>
-        <div className="page-actions">
-          <button className="btn btn-secondary" onClick={() => { setSelectedAnnouncement(null); setShowPreviewModal(true); }}>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-[var(--ds-text-primary)]">系统公告</h1>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" onClick={() => { setSelectedAnnouncement(null); setShowPreviewModal(true); }}>
             <EyeIcon /> 预览样式
-          </button>
-          <button className="btn btn-danger" onClick={handleOpenCreate}>
+          </Button>
+          <Button variant="danger" onClick={handleOpenCreate}>
             <MegaphoneIcon /> 创建公告
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* 统计卡片 */}
-      <div className="stats-grid announcement-stats">
-        <div className="stat-card">
-          <span className="stat-value">{stats.total}</span>
-          <span className="stat-label">总公告</span>
-        </div>
-        <div className="stat-card success">
-          <span className="stat-value">{stats.active}</span>
-          <span className="stat-label">生效中</span>
-        </div>
-        <div className="stat-card warning">
-          <span className="stat-value">{stats.pinned}</span>
-          <span className="stat-label">置顶</span>
-        </div>
-        <div className="stat-card info">
-          <span className="stat-value">{stats.scheduled}</span>
-          <span className="stat-label">待发布</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{stats.totalViews.toLocaleString()}</span>
-          <span className="stat-label">总浏览</span>
-        </div>
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        <Card padding="none" className="p-4">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{stats.total}</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">总公告</span>
+        </Card>
+        <Card padding="none" className="p-4 border-l-4 border-l-[var(--ds-success-default)]">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{stats.active}</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">生效中</span>
+        </Card>
+        <Card padding="none" className="p-4 border-l-4 border-l-amber-500">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{stats.pinned}</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">置顶</span>
+        </Card>
+        <Card padding="none" className="p-4 border-l-4 border-l-[var(--ds-accent-default)]">
+          <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">{stats.scheduled}</span>
+          <span className="text-xs text-[var(--ds-text-secondary)]">待发布</span>
+        </Card>
       </div>
 
       {/* 公告列表 */}
-      <div className="admin-table-container">
+      <Card padding="none" className="overflow-hidden">
         {announcementsLoading ? (
-          <div className="loading-state">
-            <div className="loading-spinner" />
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ds-border-default)] border-t-[var(--ds-accent-default)] mb-3" />
             <p>加载中...</p>
           </div>
         ) : announcements.length === 0 ? (
-          <div className="empty-state">
+          <div className="flex flex-col items-center justify-center py-16 text-[var(--ds-text-secondary)]">
             <MegaphoneIcon />
             <p>暂无公告</p>
-            <button className="btn btn-primary" onClick={handleOpenCreate}>
+            <Button variant="primary" onClick={handleOpenCreate}>
               创建第一个公告
-            </button>
+            </Button>
           </div>
         ) : (
           <>
@@ -513,8 +498,8 @@ export default function AdminAnnouncementsEnhanced({
                     </div>
                   </div>
                   <div className="announcement-actions">
-                    <button
-                      className="btn btn-ghost btn-xs"
+                    <Button
+                      variant="ghost"
                       onClick={() => {
                         setSelectedAnnouncement(announcement);
                         setShowPreviewModal(true);
@@ -522,9 +507,9 @@ export default function AdminAnnouncementsEnhanced({
                       title="预览"
                     >
                       预览
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-xs"
+                    </Button>
+                    <Button
+                      variant="ghost"
                       onClick={() => {
                         setFormData({
                           id: announcement.id,
@@ -540,9 +525,9 @@ export default function AdminAnnouncementsEnhanced({
                       title="编辑"
                     >
                       编辑
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-xs text-danger"
+                    </Button>
+                    <Button
+                      variant="danger"
                       onClick={() => {
                         setConfirmDialog({
                           isOpen: true,
@@ -558,36 +543,36 @@ export default function AdminAnnouncementsEnhanced({
                       title="删除"
                     >
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
             </div>
 
             {totalPages > 1 && (
-              <div className="pagination">
-                <button
-                  className="btn btn-default btn-sm"
+              <div className="flex items-center justify-between py-3">
+                <Button
+                  variant="secondary"
                   disabled={announcementsPage <= 1}
                   onClick={() => onPageChange(announcementsPage - 1)}
                 >
                   上一页
-                </button>
-                <span className="page-info">
+                </Button>
+                <span className="text-sm text-[var(--ds-text-secondary)]">
                   第 {announcementsPage} / {totalPages} 页，共 {announcementsTotal} 条
                 </span>
-                <button
-                  className="btn btn-default btn-sm"
+                <Button
+                  variant="secondary"
                   disabled={announcementsPage >= totalPages}
                   onClick={() => onPageChange(announcementsPage + 1)}
                 >
                   下一页
-                </button>
+                </Button>
               </div>
             )}
           </>
         )}
-      </div>
+      </Card>
 
       {/* 右键菜单 */}
       {contextMenu && (
@@ -595,164 +580,152 @@ export default function AdminAnnouncementsEnhanced({
       )}
 
       {/* 创建/编辑弹窗 */}
-      {showFormModal && (
-        <div className="modal-overlay" onClick={() => setShowFormModal(false)}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{formData.id ? '编辑公告' : '创建公告'}</h3>
-              <button className="modal-close" onClick={() => setShowFormModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>标题</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="输入公告标题"
-                />
-              </div>
-              <div className="form-group">
-                <label>内容</label>
-                <textarea
-                  className="form-control"
-                  rows={5}
-                  value={formData.content}
-                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                  placeholder="输入公告内容"
-                />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>类型</label>
-                  <select
-                    className="form-select"
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                  >
-                    <option value="info">信息</option>
-                    <option value="warning">警告</option>
-                    <option value="urgent">紧急</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>优先级</label>
-                  <select
-                    className="form-select"
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                  >
-                    <option value="low">低</option>
-                    <option value="normal">普通</option>
-                    <option value="high">高</option>
-                  </select>
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={formData.isActive}
-                      onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                    />
-                    立即发布
-                  </label>
-                </div>
-                <div className="form-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={formData.isPinned}
-                      onChange={(e) => setFormData({ ...formData, isPinned: e.target.checked })}
-                    />
-                    置顶
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowFormModal(false)}>取消</button>
-              <button
-                className="btn btn-primary"
-                onClick={handleSubmit}
-                disabled={!formData.title || !formData.content}
-              >
-                {formData.id ? '保存' : '创建'}
-              </button>
-            </div>
+      <Modal
+        isOpen={showFormModal}
+        onClose={() => setShowFormModal(false)}
+        title={formData.id ? '编辑公告' : '创建公告'}
+        maxWidth="448px"
+        footer={
+          <ModalFooter
+            onCancel={() => setShowFormModal(false)}
+            onConfirm={handleSubmit}
+            confirmLabel={formData.id ? '保存' : '创建'}
+          />
+        }
+      >
+        <div className="mb-4">
+          <label htmlFor="announcement-title" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1.5">标题</label>
+          <Input
+            id="announcement-title"
+            type="text"
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            placeholder="输入公告标题"
+          />
+        </div>
+        <div className="mb-4">
+          <label htmlFor="announcement-content" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1.5">内容</label>
+          <Input
+            id="announcement-content"
+            multiline
+            rows={5}
+            value={formData.content}
+            onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+            placeholder="输入公告内容"
+          />
+        </div>
+        <div className="flex gap-4">
+          <div className="mb-4 flex-1">
+            <label htmlFor="announcement-type" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1.5">类型</label>
+            <select
+              id="announcement-type"
+              className="w-full px-3 py-2 border border-[var(--ds-border-default)] bg-[var(--ds-surface-default)] text-[var(--ds-text-primary)] text-sm outline-none transition-all focus:border-[var(--ds-accent-default)] focus:ring-2 focus:ring-[var(--ds-accent-subtle)]"
+              value={formData.type}
+              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+            >
+              <option value="info">信息</option>
+              <option value="warning">警告</option>
+              <option value="urgent">紧急</option>
+            </select>
+          </div>
+          <div className="mb-4 flex-1">
+            <label htmlFor="announcement-priority" className="block text-sm font-medium text-[var(--ds-text-primary)] mb-1.5">优先级</label>
+            <select
+              id="announcement-priority"
+              className="w-full px-3 py-2 border border-[var(--ds-border-default)] bg-[var(--ds-surface-default)] text-[var(--ds-text-primary)] text-sm outline-none transition-all focus:border-[var(--ds-accent-default)] focus:ring-2 focus:ring-[var(--ds-accent-subtle)]"
+              value={formData.priority}
+              onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+            >
+              <option value="low">低</option>
+              <option value="normal">普通</option>
+              <option value="high">高</option>
+            </select>
           </div>
         </div>
-      )}
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 text-sm text-[var(--ds-text-secondary)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.isActive}
+              onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+            />
+            立即发布
+          </label>
+          <label className="flex items-center gap-2 text-sm text-[var(--ds-text-secondary)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.isPinned}
+              onChange={(e) => setFormData({ ...formData, isPinned: e.target.checked })}
+            />
+            置顶
+          </label>
+        </div>
+      </Modal>
 
       {/* 预览弹窗 */}
-      {showPreviewModal && (
-        <div className="modal-overlay" onClick={() => setShowPreviewModal(false)}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>公告预览</h3>
-              <div className="preview-mode-toggle">
-                <button
-                  className={`mode-btn ${previewMode === 'desktop' ? 'active' : ''}`}
-                  onClick={() => setPreviewMode('desktop')}
-                >
-                  桌面端
-                </button>
-                <button
-                  className={`mode-btn ${previewMode === 'mobile' ? 'active' : ''}`}
-                  onClick={() => setPreviewMode('mobile')}
-                >
-                  移动端
-                </button>
-              </div>
-              <button className="modal-close" onClick={() => setShowPreviewModal(false)}>×</button>
+      <Modal
+        isOpen={showPreviewModal}
+        onClose={() => setShowPreviewModal(false)}
+        title="公告预览"
+        maxWidth="448px"
+        footer={
+          <Button variant="secondary" onClick={() => setShowPreviewModal(false)}>关闭</Button>
+        }
+      >
+        <div className="flex gap-2 mb-4">
+          <Button
+            size="sm"
+            variant={previewMode === 'desktop' ? 'primary' : 'secondary'}
+            onClick={() => setPreviewMode('desktop')}
+          >
+            桌面端
+          </Button>
+          <Button
+            size="sm"
+            variant={previewMode === 'mobile' ? 'primary' : 'secondary'}
+            onClick={() => setPreviewMode('mobile')}
+          >
+            移动端
+          </Button>
+        </div>
+        <div className="preview-container">
+          {selectedAnnouncement ? (
+            <AnnouncementPreview announcement={selectedAnnouncement} mode={previewMode} />
+          ) : (
+            <AnnouncementPreview
+              announcement={{
+                id: 'preview',
+                title: formData.title || '示例公告标题',
+                content: formData.content || '这是公告的预览内容。预览将实时显示您编辑的公告样式。',
+                type: formData.type || 'info',
+                priority: formData.priority || 'normal',
+                isActive: formData.isActive,
+                isPinned: formData.isPinned,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }}
+              mode={previewMode}
+            />
+          )}
+        </div>
+        <div className="preview-stats mt-4">
+          <h4 className="text-sm font-semibold text-[var(--ds-text-primary)] mb-3">效果统计</h4>
+          <div className="flex justify-around">
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">1,234</span>
+              <span className="text-xs text-[var(--ds-text-secondary)]">浏览量</span>
             </div>
-            <div className="modal-body">
-              <div className="preview-container">
-                {selectedAnnouncement ? (
-                  <AnnouncementPreview announcement={selectedAnnouncement} mode={previewMode} />
-                ) : (
-                  <AnnouncementPreview
-                    announcement={{
-                      id: 'preview',
-                      title: formData.title || '示例公告标题',
-                      content: formData.content || '这是公告的预览内容。预览将实时显示您编辑的公告样式。',
-                      type: formData.type || 'info',
-                      priority: formData.priority || 'normal',
-                      isActive: formData.isActive,
-                      isPinned: formData.isPinned,
-                      createdAt: new Date().toISOString(),
-                      updatedAt: new Date().toISOString(),
-                    }}
-                    mode={previewMode}
-                  />
-                )}
-              </div>
-              <div className="preview-stats">
-                <h4>效果统计</h4>
-                <div className="stats-row">
-                  <div className="stat-box">
-                    <span className="stat-value">1,234</span>
-                    <span className="stat-label">浏览量</span>
-                  </div>
-                  <div className="stat-box">
-                    <span className="stat-value">567</span>
-                    <span className="stat-label">点击量</span>
-                  </div>
-                  <div className="stat-box">
-                    <span className="stat-value">46%</span>
-                    <span className="stat-label">点击率</span>
-                  </div>
-                </div>
-              </div>
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">567</span>
+              <span className="text-xs text-[var(--ds-text-secondary)]">点击量</span>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowPreviewModal(false)}>关闭</button>
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-semibold text-[var(--ds-text-primary)]">46%</span>
+              <span className="text-xs text-[var(--ds-text-secondary)]">点击率</span>
             </div>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* 确认对话框 */}
       {confirmDialog?.isOpen && (

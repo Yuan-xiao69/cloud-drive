@@ -7,17 +7,18 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/v1/admin/hidden - 删除隐藏记录
  */
 
-import { NextRequest } from 'next/server';
-import { success, paginated, handlePrismaError, errors, parsePagination, buildPaginationMeta } from '@/lib/api/v1';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, paginated, errors, parsePagination, buildPaginationMeta } from '@/lib/api/v1';
+import { recordAuditLog } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/v1/admin/hidden - 获取隐藏内容列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const sp = req.nextUrl.searchParams;
@@ -67,25 +68,23 @@ export async function GET(req: NextRequest): Promise<Response> {
 
     const pagination = buildPaginationMeta(total, page, size);
     return paginated(formattedItems, pagination);
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // POST /api/v1/admin/hidden - 隐藏内容
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    targetType: z.string(),
+    targetId: z.string(),
+    reason: z.string(),
+  }),
+  async handler({ req, user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { targetType, targetId, reason } = body;
-
-    if (!targetType || !targetId || !reason) {
-      return errors.badRequest('缺少必填字段：targetType, targetId, reason');
-    }
 
     const validTypes = ['repository', 'discussion', 'issue', 'pullrequest'];
     if (!validTypes.includes(targetType)) {
@@ -137,7 +136,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         targetType,
         targetId,
         reason,
-        hiddenBy: auth.userId,
+        hiddenBy: user!.id,
         isActive: true,
       },
     });
@@ -154,8 +153,9 @@ export async function POST(req: NextRequest): Promise<Response> {
         break;
     }
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'hide_content',
       targetType,
       targetId,
@@ -171,25 +171,22 @@ export async function POST(req: NextRequest): Promise<Response> {
       isActive: hidden.isActive,
       createdAt: hidden.createdAt.toISOString(),
     }, '内容已隐藏');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // PUT /api/v1/admin/hidden - 恢复内容
-export async function PUT(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const PUT = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    id: z.string(),
+    restoreReason: z.string(),
+  }),
+  async handler({ req, user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const body = await req.json();
     const { id, restoreReason } = body;
-
-    if (!id || !restoreReason) {
-      return errors.badRequest('缺少必填字段：id, restoreReason');
-    }
 
     const hidden = await prisma.hiddenContent.findUnique({
       where: { id },
@@ -208,7 +205,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
       data: {
         isActive: false,
         restoredAt: new Date(),
-        restoredBy: auth.userId,
+        restoredBy: user!.id,
         restoreReason,
       },
     });
@@ -234,8 +231,9 @@ export async function PUT(req: NextRequest): Promise<Response> {
         break;
     }
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'restore_content',
       targetType: hidden.targetType,
       targetId: hidden.targetId,
@@ -244,17 +242,15 @@ export async function PUT(req: NextRequest): Promise<Response> {
     });
 
     return success({ id }, '内容已恢复');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // DELETE /api/v1/admin/hidden - 删除隐藏记录
-export async function DELETE(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const DELETE = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
     const sp = req.nextUrl.searchParams;
@@ -299,8 +295,9 @@ export async function DELETE(req: NextRequest): Promise<Response> {
       where: { id },
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: 'delete_hidden_record',
       targetType: hidden.targetType,
       targetId: hidden.targetId,
@@ -309,7 +306,5 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     });
 
     return success({ id }, '隐藏记录已删除');
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

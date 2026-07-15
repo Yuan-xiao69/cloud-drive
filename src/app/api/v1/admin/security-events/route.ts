@@ -5,21 +5,19 @@ export const dynamic = 'force-dynamic';
  * GET /api/v1/admin/security-events - 获取安全事件列表
  */
 
-import { NextRequest } from 'next/server';
-import { success, handlePrismaError } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError } from '@/lib/auth';
 
 // GET /api/v1/admin/security-events - 获取安全事件列表
-export async function GET(req: NextRequest): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ req, user }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    // 只有超级管理员可以访问安全事件
-    if (auth.role !== 'super_admin') {
+    if (user!.role !== 'super_admin') {
       return success({ items: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
 
@@ -57,7 +55,5 @@ export async function GET(req: NextRequest): Promise<Response> {
         totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});

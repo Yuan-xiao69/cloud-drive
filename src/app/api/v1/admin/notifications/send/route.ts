@@ -4,35 +4,35 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/notifications/send - 发送系统通知（管理员专用）
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, handlePrismaError, errors } from '@/lib/api/v1';
-import { requireAdmin, isAuthError } from '@/lib/auth';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { created, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
 
 // POST /api/v1/admin/notifications/send - 发送系统通知
-export async function POST(req: NextRequest): Promise<Response> {
-  try {
-    const adminResult = await requireAdmin(req);
-    if (isAuthError(adminResult)) {
-      return adminResult.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    userIds: z.array(z.string()).min(1),
+    title: z.string().min(1),
+    content: z.string().min(1),
+    type: z.string().optional().default('system'),
+    linkUrl: z.string().nullable().optional(),
+  }),
+  async handler({ user, body }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { userIds, title, content, type, linkUrl } = await req.json();
+    const { userIds, title, content, type, linkUrl } = body;
 
-    if (!title || !content) {
-      return errors.badRequest('标题和内容不能为空');
-    }
-
-    if (!Array.isArray(userIds) || userIds.length === 0) {
-      return errors.badRequest('请选择要发送的用户');
-    }
-
+    // TODO: 迁移到 sendNotificationToUsers 或 AsyncJob.enqueue('send_notification', {...})
     const notifications = await Promise.all(
       userIds.map((userId: string) =>
         prisma.notification.create({
           data: {
             userId,
-            senderId: adminResult.userId,
+            senderId: user!.id,
             type: type || 'system',
             title,
             content,
@@ -46,8 +46,5 @@ export async function POST(req: NextRequest): Promise<Response> {
       message: `成功发送 ${notifications.length} 条通知`,
       count: notifications.length
     });
-  } catch (err) {
-    console.error('发送通知失败:', err);
-    return errors.internal('发送通知失败');
-  }
-}
+  },
+});

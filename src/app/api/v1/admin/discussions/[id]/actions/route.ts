@@ -5,25 +5,26 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/discussions/[id]/actions - 执行讨论操作
  */
 
-import { NextRequest } from 'next/server';
-import { success, error, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
-import { ErrorCodes } from '@/lib/api/v1';
+import { recordAuditLog } from '@/lib/auth';
 
 // POST /api/v1/admin/discussions/[id]/actions - 执行讨论操作
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    action: z.string(),
+    category: z.string().optional(),
+    reason: z.string().optional(),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id } = params;
     const { action, category, reason } = body;
 
     const existing = await prisma.discussion.findUnique({
@@ -31,7 +32,7 @@ export async function POST(
     });
 
     if (!existing) {
-      return error(ErrorCodes.NOT_FOUND, { message: '讨论不存在' });
+      return errors.notFound('讨论');
     }
 
     let updateData: Record<string, unknown> = {};
@@ -114,8 +115,9 @@ export async function POST(
       data: updateData,
     });
 
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       actionType: logAction,
       targetType: 'discussion',
       targetId: id,
@@ -123,7 +125,5 @@ export async function POST(
     });
 
     return success({ id, action }, '操作成功');
-  } catch (err) {
-    return handlePrismaError(err, '操作失败');
-  }
-}
+  },
+});

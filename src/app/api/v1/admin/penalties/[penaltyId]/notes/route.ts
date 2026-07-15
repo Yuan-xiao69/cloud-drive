@@ -6,25 +6,22 @@ export const dynamic = 'force-dynamic';
  * POST /api/v1/admin/penalties/[penaltyId]/notes - 添加备注
  */
 
-import { NextRequest } from 'next/server';
-import { success, created, handlePrismaError, errors } from '@/lib/api/v1';
+import { defineRoute } from '@/lib/framework/define-route';
+import { z } from 'zod';
+import { success, created, errors } from '@/lib/api/v1';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, isAuthError, recordAuditLog } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/auth';
 
 // GET /api/v1/admin/penalties/[penaltyId]/notes - 获取备注列表
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ penaltyId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const GET = defineRoute({
+  auth: 'required',
+  async handler({ user, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { penaltyId } = await params;
+    const { penaltyId } = params;
 
-    // 检查处罚是否存在
     const penalty = await prisma.userPenalty.findUnique({
       where: { id: penaltyId },
     });
@@ -39,31 +36,23 @@ export async function GET(
     });
 
     return success({ notes });
-  } catch (err) {
-    return handlePrismaError(err);
-  }
-}
+  },
+});
 
 // POST /api/v1/admin/penalties/[penaltyId]/notes - 添加备注
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ penaltyId: string }> }
-): Promise<Response> {
-  try {
-    const auth = await requireAdmin(req);
-    if (isAuthError(auth)) {
-      return auth.error;
+export const POST = defineRoute({
+  auth: 'required',
+  validation: z.object({
+    content: z.string().min(1, '备注内容不能为空'),
+  }),
+  async handler({ user, body, params }) {
+    if (user!.role !== 'admin' && user!.role !== 'super_admin') {
+      return errors.forbidden('无权限访问管理面板');
     }
 
-    const { penaltyId } = await params;
-    const body = await req.json();
+    const { penaltyId } = params;
     const { content } = body;
 
-    if (!content || content.trim().length === 0) {
-      return errors.badRequest('备注内容不能为空');
-    }
-
-    // 检查处罚是否存在
     const penalty = await prisma.userPenalty.findUnique({
       where: { id: penaltyId },
       include: {
@@ -79,13 +68,13 @@ export async function POST(
       data: {
         penaltyId,
         content: content.trim(),
-        createdBy: auth.userId,
+        createdBy: user!.id,
       },
     });
 
-    // 记录审计日志
+    // TODO: 将 recordAuditLog 迁移到 AsyncJob.enqueue('record_audit', {...})
     await recordAuditLog({
-      adminId: auth.userId,
+      adminId: user!.id,
       userId: penalty.userId,
       actionType: 'add_penalty_note',
       targetType: 'penalty',
@@ -94,7 +83,5 @@ export async function POST(
     });
 
     return created({ note }, '备注添加成功');
-  } catch (err) {
-    return handlePrismaError(err, '添加备注失败');
-  }
-}
+  },
+});

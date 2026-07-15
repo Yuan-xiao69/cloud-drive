@@ -29,6 +29,7 @@ export type ActivityAction =
   | 'watch'            // 关注
   | 'unwatch'          // 取消关注
   | 'create_discussion' // 创建讨论
+  | 'update_discussion' // 更新讨论
   | 'delete_discussion' // 删除讨论
   | 'reply_discussion'  // 回复讨论
   | 'comment_discussion' // 评论讨论
@@ -37,7 +38,7 @@ export type ActivityAction =
   | 'accept_comment'   // 采纳评论
   | 'create_issue'     // 创建 Issue
   | 'close_issue'      // 关闭 Issue
-  | 'create_pr'        // 创建 Pull Request
+  | 'create_pr'        // 创建合并请求
   | 'merge_pr'         // 合并 PR
   | 'close_pr'         // 关闭 PR
   | 'update_profile'   // 更新资料
@@ -115,7 +116,7 @@ export async function logActivity(params: {
         details: details ? JSON.parse(JSON.stringify(details)) : null,
         ipAddress: req ? getClientIP(req) : null,
         userAgent: req ? getUserAgent(req) : undefined,
-        fileSize: fileSize ? BigInt(fileSize) : null,
+        fileSize: fileSize != null ? BigInt(fileSize) : null,
         status,
         errorMsg: errorMsg || null,
       },
