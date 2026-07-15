@@ -44,6 +44,176 @@
 
 ---
 
+## 架构设计
+
+### 系统架构总览
+
+```mermaid
+graph TB
+    subgraph "客户端"
+        BROWSER["浏览器<br/>亮/暗主题 · 响应式 · 快捷键"]
+    end
+
+    subgraph "Next.js 14 App Router"
+        subgraph "前端层"
+            DESIGN["设计系统<br/>11 组件 · 120+ Token · 陶土暖色系"]
+            PAGES["23 页面路由<br/>(auth) / (main) / share"]
+            COMPONENTS["~110 业务组件<br/>admin · repo · discussion · settings · user"]
+        end
+
+        subgraph "API 层 (137 个 route.ts)"
+            FW["Framework 管道<br/>认证 → 限流 → CSRF → 验证 → Handler"]
+            V1["V1 统一响应<br/>success / error / paginated · 60+ 错误码"]
+        end
+
+        subgraph "服务层 (13 Services)"
+            SVC["User · Repo · Discussion · Issue · Pull<br/>Fork · Search · Share · Upload · Appeal<br/>Ban · Report · Session"]
+        end
+    end
+
+    subgraph "基础设施"
+        PG[("PostgreSQL<br/>Prisma ORM · 42 模型")]
+        REDIS[("Redis<br/>缓存 · 限流 · 队列")]
+        MINIO[("MinIO / S3<br/>文件存储 · 分片上传")]
+        EMAIL["Nodemailer<br/>邮件通知"]
+    end
+
+    subgraph "安全层"
+        SEC["JWT 双Token · MFA · DOMPurify · CSRF<br/>IP黑名单 · AES-256-GCM · 审计日志"]
+    end
+
+    BROWSER --> DESIGN
+    DESIGN --> PAGES
+    PAGES --> V1
+    V1 --> FW
+    FW --> SVC
+    SVC --> PG
+    SVC --> REDIS
+    SVC --> MINIO
+    SVC --> EMAIL
+    SEC -.-> FW
+    SEC -.-> SVC
+```
+
+### 业务架构：双业务线平级
+
+```mermaid
+flowchart LR
+    subgraph "① 文件仓库（独立闭环）"
+        REPO["仓库 CRUD"]
+        FILE["文件上传/预览/下载"]
+        FORK["拉入 Fork"]
+        ISSUE["文件问题 Issue"]
+        PULL["协作请求 Pull"]
+        COLLAB["协作者管理"]
+        SHARE["分享链接"]
+    end
+
+    subgraph "② 讨论社区（独立闭环）"
+        DISC["话题发帖"]
+        COMMENT["评论 · 点赞"]
+        ANSWER["采纳最佳答案"]
+        DISCOVER["发现 · 搜索"]
+    end
+
+    subgraph "桥接层（可选）"
+        BRIDGE1["仓库文件分享到讨论区"]
+        BRIDGE2["讨论区文件拉入仓库"]
+    end
+
+    REPO -.-> BRIDGE1 -.-> DISC
+    DISC -.-> BRIDGE2 -.-> FORK
+```
+
+| 规则 | 说明 |
+|------|------|
+| **公开仓库** | 所有人可见，可被搜索、拉入、分享 |
+| **私有仓库** | 仅所有者可见，不被搜索、不被拉入 |
+| **两条线各自独立** | 文件仓库和讨论区均可脱离对方独立运作 |
+
+### 页面布局体系：Compound Component 模式
+
+```mermaid
+flowchart TB
+    subgraph "PageLayout 容器"
+        direction LR
+        NARROW["单栏窄<br/>440px<br/>登录/注册"]
+        MEDIUM["单栏中<br/>800px<br/>搜索/通知"]
+        WIDE["单栏宽<br/>1200px<br/>用户主页"]
+        FULL["全宽<br/>100%<br/>管理后台/文件预览"]
+        TWOPANE["两栏<br/>Pane + Content<br/>首页/探索/讨论"]
+    end
+
+    subgraph "可插入插槽"
+        PANE["PageLayoutPane<br/>sidebar(240px)<br/>settings(200px)"]
+        CONTENT["PageLayoutContent<br/>自动填充剩余空间"]
+    end
+
+    TWOPANE --> PANE
+    TWOPANE --> CONTENT
+```
+
+### API 请求生命周期
+
+```mermaid
+sequenceDiagram
+    participant C as 客户端
+    participant DR as defineRoute
+    participant A as Auth Pipeline
+    participant RL as Rate Limit
+    participant CS as CSRF Guard
+    participant V as Validation
+    participant H as Handler
+    participant S as Service
+    participant D as Database
+
+    C->>DR: HTTP 请求
+    DR->>A: ① JWT 验证 (Access + Refresh)
+    A-->>DR: SessionUser
+    DR->>RL: ② 令牌桶限流
+    RL-->>DR: 放行
+    DR->>CS: ③ CSRF 防护 (写操作)
+    CS-->>DR: 放行
+    DR->>V: ④ Zod Schema 验证
+    V-->>DR: 校验通过
+    DR->>H: ⑤ 业务处理
+    H->>S: 调用 Service
+    S->>D: Prisma 查询
+    D-->>S: 数据
+    S-->>H: 结果
+    H-->>DR: 业务结果
+    DR-->>C: V1 统一响应格式
+```
+
+### 核心数据模型
+
+```mermaid
+erDiagram
+    User ||--o{ Repository : owns
+    User ||--o{ Discussion : creates
+    User ||--o{ Issue : reports
+    User ||--o{ Notification : receives
+    User ||--o{ UserFollow : follows
+    User ||--o{ UserBlock : blocks
+    User ||--o{ ApiKey : has
+    Repository ||--o{ RepoItem : contains
+    Repository ||--o{ Star : starred_by
+    Repository ||--o{ Watcher : watched_by
+    Repository ||--o{ ForkRequest : receives
+    Repository ||--o{ ShareLink : generates
+    RepoItem ||--o{ FileVersion : versions
+    Discussion ||--o{ DiscussionComment : comments
+    Discussion ||--o{ DiscussionLike : likes
+    Issue ||--o{ IssueComment : comments
+    Issue ||--o{ IssueLabel : labels
+    PullRequest ||--o{ PullRequestComment : comments
+    User ||--o{ UserBan : banned_by
+    User ||--o{ UserPenalty : penalized_by
+    User ||--o{ Appeal : appeals
+```
+
+---
+
 ## 技术栈
 
 | 层级 | 技术 | 说明 |
