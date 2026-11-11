@@ -1,5 +1,6 @@
 node_modules
 .next
+tsconfig.tsbuildinfo
 # 所有环境变量文件
 .env
 .env.*

@@ -7,7 +7,7 @@ import { invalidateAllTokens } from '@/lib/auth';
 export const POST = defineRoute({
   auth: 'optional',
   async handler({ user }) {
-    const isProd = process.env.NODE_ENV === 'production';
+    const secure = process.env.COOKIE_SECURE === 'true';
 
     // 如果用户已认证，使所有 Token 失效（最佳努力，不阻断登出流程）
     if (user) {
@@ -23,7 +23,7 @@ export const POST = defineRoute({
     // 清除 access_token cookie（HttpOnly，服务端清除）
     response.cookies.set('access_token', '', {
       httpOnly: true,
-      secure: isProd,
+      secure,
       sameSite: 'lax',
       path: '/',
       maxAge: 0, // 立即过期
@@ -32,7 +32,7 @@ export const POST = defineRoute({
     // 清除 refresh_token cookie
     response.cookies.set('refresh_token', '', {
       httpOnly: true,
-      secure: isProd,
+      secure,
       sameSite: 'lax',
       path: '/',
       maxAge: 0, // 立即过期

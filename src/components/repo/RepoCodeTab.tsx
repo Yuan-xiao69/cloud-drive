@@ -29,7 +29,7 @@ interface RepoCodeTabProps {
   isOwner: boolean;
   currentUser: { username: string } | null;
   repoStats: Record<string, unknown> | null;
-  repo: { id?: string; description: string | null; language: string | null; starCount?: number; forkCount?: number; watchCount?: number; defaultBranch?: string; owner?: { username: string } } | null;
+  repo: { id?: string; description: string | null; language: string | null; starCount?: number; forkCount?: number; watchCount?: number; defaultBranch?: string; owner?: { username: string } | null } | null;
   // === 从 page 传入的 state ===
   files: RepoItem[];
   readmeContent: string | null;

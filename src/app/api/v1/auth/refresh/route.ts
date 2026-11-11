@@ -38,17 +38,17 @@ export const POST = defineRoute({
 
     // 仅设置 HttpOnly Cookie，不在 JSON body 中返回 Token
     const response = success(null, 'Token 刷新成功');
-    const isProd = process.env.NODE_ENV === 'production';
+    const secure = process.env.COOKIE_SECURE === 'true';
     response.cookies.set('access_token', tokens.accessToken, {
       httpOnly: true,
-      secure: isProd,
+      secure,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 15,
     });
     response.cookies.set('refresh_token', tokens.refreshToken, {
       httpOnly: true,
-      secure: isProd,
+      secure,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 7,

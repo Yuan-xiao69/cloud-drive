@@ -3,6 +3,9 @@ import { auth } from '@/lib/auth/server';
 import { prisma } from '@/lib/prisma';
 import DiscussionsContent from './DiscussionsContent';
 
+// 讨论列表是实时数据，禁止 build 时静态预渲染（避免构建阶段访问数据库）
+export const dynamic = 'force-dynamic';
+
 export default async function DiscussionsPage() {
   const [discussions, user] = await Promise.all([
     prisma.discussion.findMany({

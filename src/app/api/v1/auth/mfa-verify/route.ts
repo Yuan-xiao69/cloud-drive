@@ -29,10 +29,12 @@ type MfaVerifyBody = z.infer<typeof mfaVerifySchema>;
 
 // ---- Cookie 配置 ----
 function getCookieOptions(maxAge: number) {
-  const isProd = process.env.NODE_ENV === 'production';
+  // 内网 HTTP 部署时 secure 必须为 false，否则浏览器会丢弃 cookie 导致登录失效；
+  // HTTPS 部署时在 .env 设置 COOKIE_SECURE=true 即可
+  const secure = process.env.COOKIE_SECURE === 'true';
   return {
     httpOnly: true,
-    secure: isProd,
+    secure,
     sameSite: 'strict' as const,
     path: '/',
     maxAge,
