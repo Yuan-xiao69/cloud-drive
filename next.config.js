@@ -37,10 +37,6 @@ const nextConfig = {
         hostname: 'api.dicebear.com',
       },
       {
-        protocol: 'http',
-        hostname: 'localhost',
-      },
-      {
         protocol: 'https',
         hostname: '*.s3.amazonaws.com',
       },

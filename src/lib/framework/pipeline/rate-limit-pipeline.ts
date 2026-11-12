@@ -23,7 +23,7 @@ export interface RateLimitResult {
 const TIER_MAP: Record<RateLimitTier, keyof typeof RATE_LIMITS> = {
   default: 'default',
   auth: 'auth',
-  strict: 'register',
+  strict: 'strict',
   upload: 'upload',
   search: 'search',
 };

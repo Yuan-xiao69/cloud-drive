@@ -36,9 +36,13 @@ export const POST = defineRoute({
     }
 
     // TODO: 接入邮件服务发送验证码
-    // 当前开发阶段验证码返回在响应中（生产环境需移除）
-    console.log(`[DEV] 邮箱验证码: ${code} → ${email}`);
+    // 生产环境严禁在响应/日志中回显验证码（安全加固），仅开发环境回显便于调试
+    const isProd = process.env.NODE_ENV === 'production';
 
-    return success({ devCode: code }, '验证码已发送');
+    if (!isProd) {
+      console.log(`[DEV] 邮箱验证码: ${code} → ${email}`);
+    }
+
+    return success(isProd ? null : { devCode: code }, '验证码已发送');
   },
 });

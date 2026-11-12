@@ -390,6 +390,7 @@ model PasswordReset {
   userId    String   @map("user_id") @db.VarChar(100)
   email     String   @db.VarChar(255)
   code      String   @db.VarChar(6)
+  attempts  Int      @default(0)
   expiresAt DateTime @map("expires_at")
   used      Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")

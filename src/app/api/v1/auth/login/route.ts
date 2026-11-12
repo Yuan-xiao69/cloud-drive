@@ -7,14 +7,14 @@
  * 新增：MFA 二次验证检查
  */
 import { z } from 'zod';
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { defineRoute } from '@/lib/framework/define-route';
 import { SessionService } from '@/services/session-service';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { success, errors, ErrorCodes, getRequestId } from '@/lib/api/v1';
-import { getClientIP } from '@/lib/auth';
+import { getClientIP, signMfaToken } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // ---- Zod 验证 Schema ----
 
@@ -40,14 +40,6 @@ function getCookieOptions(maxAge: number) {
   };
 }
 
-// ---- MFA 临时 Token ----
-
-/** 签发 MFA 临时 Token（5 分钟有效，仅用于 mfa-verify 接口） */
-function signMfaToken(userId: string): string {
-  const secret = process.env.JWT_SECRET || 'dev_secret_please_change_in_production';
-  return jwt.sign({ userId, purpose: 'mfa-verify' }, secret, { expiresIn: '5m' });
-}
-
 // ---- 路由定义 ----
 
 export const POST = defineRoute({
@@ -57,6 +49,12 @@ export const POST = defineRoute({
   handler: async ({ req, body }) => {
     const requestId = getRequestId(req) || crypto.randomUUID();
     const { account, password } = body as LoginBody;
+
+    // 账号维度限流：叠加在 IP 维度之上，防止分布式单账号爆破
+    const accountLimit = await checkRateLimit(req, 'auth', account.trim().toLowerCase());
+    if (!accountLimit.allowed) {
+      return errors.rateLimited();
+    }
 
     logger.info('auth/login', `登录尝试`, { account }, requestId);
 

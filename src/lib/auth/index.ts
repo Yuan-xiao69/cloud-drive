@@ -32,6 +32,39 @@ function buildV1ErrorResponse(code: number, message: string, httpStatus: number)
 // JWT Secret - 生产环境必须从环境变量读取
 const isProduction = process.env.NODE_ENV === 'production';
 
+// 已知的示例占位值 / 弱默认值，生产环境一旦命中即拒绝启动，
+// 防止部署时沿用模板默认密钥导致可离线伪造 Token（安全加固）。
+const PLACEHOLDER_SECRETS = new Set([
+  'your_access_token_secret_here_min_32_chars',
+  'your_refresh_token_secret_here_min_32_chars',
+  'dev_secret_please_change_in_production',
+  'dev_refresh_secret_please_change',
+  'dev-jwt-secret-change-in-production',
+  'dev-refresh-secret-change-in-production',
+]);
+
+function isPlaceholderSecret(secret: string): boolean {
+  return PLACEHOLDER_SECRETS.has(secret);
+}
+
+/** 校验生产环境密钥：拒绝缺失、示例占位值、长度不足。 */
+function assertProductionSecret(secret: string | undefined, name: string): string {
+  if (!secret) {
+    throw new Error(`FATAL: ${name} environment variable is required in production`);
+  }
+  if (isPlaceholderSecret(secret)) {
+    throw new Error(
+      `FATAL: ${name} 仍为示例占位值，存在伪造 Token 风险，请配置强随机密钥`
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error(
+      `FATAL: ${name} 长度不足 32 字符，请使用至少 32 字节的随机密钥`
+    );
+  }
+  return secret;
+}
+
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -40,6 +73,9 @@ function getJwtSecret(): string {
     }
     console.warn('[Auth] Using default JWT_SECRET in development mode. Set JWT_SECRET env var for production!');
     return 'dev_secret_please_change_in_production';
+  }
+  if (isProduction) {
+    return assertProductionSecret(secret, 'JWT_SECRET');
   }
   return secret;
 }
@@ -52,6 +88,9 @@ function getRefreshSecret(): string {
     }
     console.warn('[Auth] Using default JWT_REFRESH_SECRET in development mode. Set JWT_REFRESH_SECRET env var for production!');
     return 'dev_refresh_secret_please_change';
+  }
+  if (isProduction) {
+    return assertProductionSecret(secret, 'JWT_REFRESH_SECRET');
   }
   return secret;
 }
@@ -78,6 +117,14 @@ export function signAccessToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): strin
 
 export function signRefreshToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
   return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES });
+}
+
+/**
+ * 签发 MFA 临时 Token（5 分钟有效，仅用于 mfa-verify 接口）
+ * 复用统一 JWT_SECRET，避免各处硬编码 fallback 密钥。
+ */
+export function signMfaToken(userId: string): string {
+  return jwt.sign({ userId, purpose: 'mfa-verify' }, JWT_SECRET, { expiresIn: '5m' });
 }
 
 // ---- Token 验证 ----

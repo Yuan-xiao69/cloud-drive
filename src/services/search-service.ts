@@ -170,6 +170,8 @@ export class SearchService {
       ? {
           isBanned: false,
           deletedAt: null,
+          isSystem: false,
+          role: { notIn: ['admin', 'super_admin'] },
           OR: [
             { username: { contains: q, mode: 'insensitive' as const } },
             { bio: { contains: q, mode: 'insensitive' as const } },
@@ -178,6 +180,8 @@ export class SearchService {
       : {
           isBanned: false,
           deletedAt: null,
+          isSystem: false,
+          role: { notIn: ['admin', 'super_admin'] },
         };
 
     const [items, total] = await Promise.all([

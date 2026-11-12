@@ -338,7 +338,7 @@ export async function sendVerificationCode(to: string, code: string): Promise<{ 
     console.log('📧 [开发模式] 密码重置邮件（未真实发送）');
     console.log('========================================');
     console.log(`📮 收件人: ${maskedEmail}`);
-    console.log(`🔢 验证码: ${code.substring(0, 2)}***${code.slice(-1)}`);
+    console.log(`🔢 验证码: 已生成（不记录明文，防止泄露）`);
     console.log(`⏰ 有效期: 15分钟`);
     console.log('========================================');
     console.log('💡 请在管理面板中配置邮件服务以发送真实邮件');

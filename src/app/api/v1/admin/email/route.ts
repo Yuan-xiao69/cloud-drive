@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { defineRoute } from '@/lib/framework/define-route';
+import { randomInt } from 'crypto';
 import { z } from 'zod';
 import { success, errors } from '@/lib/api/v1';
 import { saveEmailConfig, getEmailConfigSafe } from '@/lib/email-service';
@@ -109,7 +110,7 @@ export const POST = defineRoute({
 
     const { to } = body;
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const code = randomInt(100000, 1000000).toString();
     const result = await sendVerificationCode(to, code);
 
     if (result.success) {

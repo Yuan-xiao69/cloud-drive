@@ -7,8 +7,11 @@ import { prisma } from '@/lib/prisma';
 import { getRedisClient } from '@/lib/redis-client';
 
 // POST /api/v1/me/email/verify — 验证验证码并更新邮箱
+const MAX_ATTEMPTS = 5;
+
 export const POST = defineRoute({
   auth: 'required',
+  rateLimit: 'strict',
   validation: z.object({
     email: z.string().email(),
     code: z.string().length(6, '验证码为 6 位数字'),
@@ -19,6 +22,7 @@ export const POST = defineRoute({
     // 从 Redis 获取验证码
     const redis = await getRedisClient();
     const key = `email_code:${user!.id}`;
+    const attemptsKey = `email_code_attempts:${user!.id}`;
     const stored = redis ? await redis.get(key) : null;
 
     if (!stored) {
@@ -27,8 +31,20 @@ export const POST = defineRoute({
 
     const data = JSON.parse(stored) as { email: string; code: string };
     if (data.email !== email.toLowerCase() || data.code !== code) {
+      // 记录失败尝试，达到上限后作废验证码（防止穷举 6 位验证码）
+      if (redis) {
+        const attempts = await redis.incr(attemptsKey);
+        if (attempts === 1) await redis.expire(attemptsKey, 300);
+        if (attempts >= MAX_ATTEMPTS) {
+          await redis.del(key);
+          await redis.del(attemptsKey);
+        }
+      }
       return errors.unauthorized('验证码错误');
     }
+
+    // 验证成功，清除尝试计数
+    if (redis) await redis.del(attemptsKey);
 
     // 再次检查邮箱是否已被占用
     const existing = await prisma.user.findFirst({

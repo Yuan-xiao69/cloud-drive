@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 import { TOTP, generateSecret, generateURI, verify } from 'otplib';
 import QRCode from 'qrcode';
+import { randomInt } from 'crypto';
 import { z } from 'zod';
 import { defineRoute } from '@/lib/framework/define-route';
 import { success, errors } from '@/lib/api/v1';
@@ -21,8 +22,8 @@ const totpOptions = {
 function generateRecoveryCodes(): string[] {
   const codes: string[] = [];
   for (let i = 0; i < 10; i++) {
-    const part1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const part2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const part1 = randomInt(0, 36 ** 4).toString(36).padStart(4, '0').toUpperCase();
+    const part2 = randomInt(0, 36 ** 4).toString(36).padStart(4, '0').toUpperCase();
     codes.push(`${part1}-${part2}`);
   }
   return codes;

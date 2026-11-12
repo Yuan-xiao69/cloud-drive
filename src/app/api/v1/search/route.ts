@@ -12,8 +12,9 @@ import { SearchService, SearchType, SearchRepoItem, SearchUserItem, SearchDiscus
 
 // GET /api/v1/search?q=&type=&page=&size=
 export const GET = defineRoute({
-  auth: 'none',
-  async handler({ req }) {
+  auth: 'optional',
+  rateLimit: 'search',
+  async handler({ req, user }) {
     const sp = req.nextUrl.searchParams;
     const q = sp.get('q')?.trim() || '';
     const type = (sp.get('type') || 'repos') as SearchType;
@@ -53,6 +54,10 @@ export const GET = defineRoute({
     }
 
     if (type === 'users') {
+      // 安全加固：用户搜索需登录，防止匿名枚举用户（含超管账号）
+      if (!user) {
+        return error(ErrorCodes.UNAUTHORIZED, { message: '请先登录' });
+      }
       const items = (result.items as SearchUserItem[]).map((u) => ({
         id: u.id,
         username: u.username,

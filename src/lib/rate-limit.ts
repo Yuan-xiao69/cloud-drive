@@ -3,6 +3,7 @@
  * 使用 Redis 或内存存储实现令牌桶算法
  */
 
+import { createHash } from 'crypto';
 import { RATE_LIMITS } from './security-config';
 
 /**
@@ -110,39 +111,32 @@ function getTrustedProxies(request: Request): string[] {
  * 获取客户端标识符
  * 安全性：仅在配置了可信代理时使用 X-Forwarded-For
  */
-function getClientId(request: Request): string {
+export function getClientId(request: Request): string {
   const trustedProxies = getTrustedProxies(request);
+
+  // 安全修复：未配置 TRUSTED_PROXIES 时，X-Forwarded-For / X-Real-IP /
+  // CF-Connecting-IP 等请求头均可被客户端任意伪造，不能作为限流身份标识。
+  // 此时直接回退到统一标识，防止攻击者通过轮换伪造头绕过限流。
+  if (trustedProxies.length === 0) {
+    return 'unknown';
+  }
+
+  // 仅在配置了可信代理（部署于反向代理之后）时，才信任代理注入的请求头。
+
+  // 1) X-Forwarded-For：标准格式 client, proxy1, proxy2, ...（客户端在最左，最近的代理在最右）
   const forwarded = request.headers.get('x-forwarded-for');
-  const realIp = request.headers.get('x-real-ip');
-  const cfIp = request.headers.get('cf-connecting-ip');
-
-  // 如果配置了可信代理且有 X-Forwarded-For
-  if (trustedProxies.length > 0 && forwarded) {
-    // X-Forwarded-For 格式: client, proxy1, proxy2, ...
+  if (forwarded) {
     const ips = forwarded.split(',').map(ip => ip.trim()).filter(ip => ip);
-
-    // 如果只有 1 个 IP 且未配置可信代理，不使用（防止伪造）
-    if (ips.length === 1 && trustedProxies.length === 0) {
-      // 只有一个 IP 时回退到其他方式
-    } else {
-      // 使用最右侧的可信代理后的第一个 IP 作为客户端 IP
-      for (let i = ips.length - 1; i >= 0; i--) {
-        const ip = ips[i];
-        if (trustedProxies.includes(ip)) {
-          // 找到了可信代理，使用它右边的 IP
-          if (i < ips.length - 1 && isValidIp(ips[i + 1])) {
-            return ips[i + 1];
-          }
-        }
-      }
-      // 没有找到可信代理，使用最右侧的 IP（fallback）
-      if (isValidIp(ips[ips.length - 1])) {
-        return ips[ips.length - 1];
+    // 从右往左跳过可信代理，第一个非可信代理即真实客户端 IP
+    for (let i = ips.length - 1; i >= 0; i--) {
+      if (!trustedProxies.includes(ips[i]) && isValidIp(ips[i])) {
+        return ips[i];
       }
     }
   }
 
-  // 使用 X-Real-IP（通常由 Nginx 设置，难以伪造）
+  // 2) X-Real-IP（由受信反向代理设置）
+  const realIp = request.headers.get('x-real-ip');
   if (realIp) {
     const trimmedIp = realIp.trim();
     if (isValidIp(trimmedIp)) {
@@ -150,7 +144,8 @@ function getClientId(request: Request): string {
     }
   }
 
-  // 使用 CF-Connecting-IP（Cloudflare 设置，难以伪造）
+  // 3) CF-Connecting-IP（由 Cloudflare 设置）
+  const cfIp = request.headers.get('cf-connecting-ip');
   if (cfIp) {
     const trimmedIp = cfIp.trim();
     if (isValidIp(trimmedIp)) {
@@ -158,7 +153,7 @@ function getClientId(request: Request): string {
     }
   }
 
-  // 回退到默认值
+  // 回退到统一标识
   return 'unknown';
 }
 
@@ -309,16 +304,28 @@ function checkRateLimitWithMemory(
 }
 
 /**
+ * 对账号/邮箱维度主体做不可逆哈希，避免把明文 PII 写入限流键。
+ */
+function hashSubject(subject: string): string {
+  return createHash('sha256').update(subject).digest('hex').slice(0, 24);
+}
+
+/**
  * 检查速率限制
- * 优先使用 Redis，Redis 不可用时回退到内存存储
+ * 优先使用 Redis，Redis 不可用时回退到内存存储。
+ * @param subject 可选的主体标识（账号/邮箱，调用方需先小写归一），
+ *                用于在 IP 维度之外叠加账号维度限流，防止分布式单账号爆破。
  */
 export async function checkRateLimit(
   request: Request,
-  type: keyof typeof RATE_LIMITS = 'default'
+  type: keyof typeof RATE_LIMITS = 'default',
+  subject?: string
 ): Promise<RateLimitResult> {
   const config = RATE_LIMITS[type];
   const clientId = getClientId(request);
-  const key = `${type}:${clientId}`;
+  const key = subject
+    ? `${type}:${clientId}:${hashSubject(subject)}`
+    : `${type}:${clientId}`;
 
   // 优先尝试 Redis
   const redisResult = await checkRateLimitWithRedis(key, config.max, config.windowMs);
